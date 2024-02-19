@@ -33,12 +33,14 @@ class CatalogCLI(Command, description='Memento Mori Catalog Manager', option_nam
 
 
 class Show(CatalogCLI, help='Show info'):
-    item = Positional(choices=('game_data',), help='The item to show')
+    item = Positional(choices=('game_data', 'uri_formats'), help='The item to show')
     sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
 
     def main(self):
         if self.item == 'game_data':
             self.print(self.client.game_data.data)
+        elif self.item == 'uri_formats':
+            self.print(self.client.game_data.uri_formats)
 
     def print(self, data):
         from mm.utils import PermissiveJSONEncoder
@@ -46,16 +48,9 @@ class Show(CatalogCLI, help='Show info'):
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=PermissiveJSONEncoder))
 
 
-# region Save Subcommands
-
-
-class Save(CatalogCLI, help='Save assets or metadata to a file'):
-    group = SubCommand()
-    output: Path = Option('-o', type=DIR, help='Output directory', required=True)
-
-
-class Metadata(Save, help='Save catalog metadata to a file'):
+class Save(CatalogCLI, help='Save catalog metadata to a file'):
     item = Positional(choices=('master', 'assets', 'asset_data'), help='The type of catalog/item to save')
+    output: Path = Option('-o', type=DIR, help='Output directory', required=True)
     split = Flag('-s', help='Split the specified catalog into separate files for each top-level key')
 
     def main(self):
@@ -85,25 +80,6 @@ class Metadata(Save, help='Save catalog metadata to a file'):
         else:
             with path.open('w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-
-
-# endregion
-
-
-class Assets(CatalogCLI, help='Show asset paths'):
-    path = Option('-p', help='Show assets relative to the specified path')
-    depth: int = Option('-d', help='Show assets up to the specified depth')
-
-    def main(self):
-        tree = self.client.asset_catalog.asset_tree
-        if self.path:
-            try:
-                tree = tree[self.path]
-            except KeyError as e:
-                raise KeyError(f'Invalid asset path: {self.path!r}') from e
-
-        for asset in tree.iter_flat(self.depth):
-            print(asset)
 
 
 if __name__ == '__main__':

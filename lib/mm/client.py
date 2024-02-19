@@ -16,7 +16,7 @@ from weakref import finalize
 import msgpack
 from requests import Session, Response
 
-from .assets import AssetCatalog
+from .assets import AssetCatalog, Asset
 from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss
 from .fs import FileCache
@@ -361,18 +361,21 @@ class DataClient(RequestsClient):
         url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
         return self.get(url, relative=False)
 
-    def get_asset(self, name: str) -> bytes:
+    def get_asset(self, name: str | Asset) -> bytes:
+        # TODO: This is not currently working for any request other than the asset catalog
+        if isinstance(name, Asset):
+            name = name.name
         return self._get_asset(name).content
 
-    def get_asset_bundle(self, name: str) -> bytes:
-        # This is incomplete / untested
-        if not name.startswith('0#/'):
-            raise ValueError(f'Invalid bundle {name=}')
-        return self.get_asset(name[3:])
+    # def get_asset_bundle(self, name: str) -> bytes:
+    #     # This is incomplete / untested
+    #     if not name.startswith('0#/'):
+    #         raise ValueError(f'Invalid bundle {name=}')
+    #     return self.get_asset(name[3:])
 
-    def get_asset_etag(self, name: str) -> str:
-        url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
-        return self.head(url, relative=False).headers['etag'].strip('"')
+    # def get_asset_etag(self, name: str) -> str:
+    #     url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
+    #     return self.head(url, relative=False).headers['etag'].strip('"')
 
     def get_master(self, name: str):
         url = self.game_data.master_uri_fmt.format(self.auth.ortega_info.master_version, name)

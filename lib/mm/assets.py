@@ -43,6 +43,12 @@ class AssetCatalog(DictWrapper):
             dir_nodes[int(num)].add_asset(name[1:])
         return root
 
+    def get_asset(self, name_or_path: str) -> AssetDir | Asset:
+        try:
+            return self.asset_tree[name_or_path]
+        except KeyError as e:
+            raise KeyError(f'Invalid asset path: {name_or_path!r}') from e
+
 
 class Asset:
     __slots__ = ('name', 'parent')
