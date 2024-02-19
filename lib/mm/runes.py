@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
+from typing import Type, Iterator
 
 from .enums import RuneRarity
 
@@ -22,6 +23,7 @@ _RARITY_LEVELS = {
 
 
 class Rune(ABC):
+    stat_cls_map = {}
     stat: str
     value: int
     values: list[int]
@@ -32,14 +34,27 @@ class Rune(ABC):
             raise TypeError('Missing required class attribute: values')
         if stat:
             cls.stat = stat
+            cls.stat_cls_map[stat.replace(' ', '')] = cls
         # Ideally, bases should be checked for ABC here if stat is not truthy
 
     def __init__(self, level: int):
         self.level = level
 
     @classmethod
+    def get_rune_class(cls, stat: str) -> Type[Rune]:
+        try:
+            return cls.stat_cls_map[stat.replace(' ', '').upper()]
+        except KeyError:
+            allowed = ', '.join(sorted(cls.stat_cls_map))
+            raise KeyError(f'Invalid rune {stat=} - pick from: {allowed}') from None
+
+    @classmethod
+    def get_rune_set(cls, *levels) -> RuneSet:
+        return RuneSet(*map(cls, levels))
+
+    @classmethod
     def get_total(cls, *levels) -> int:
-        return RuneSet(*map(cls, levels)).total
+        return cls.get_rune_set(*levels).total
 
     @property
     def level(self) -> int:
@@ -62,6 +77,10 @@ class Rune(ABC):
                 return rarity
         return RuneRarity.LR
 
+    @property
+    def ticket_cost(self) -> int:
+        return 2 ** self.level
+
     def __mul__(self, other: int) -> int:
         if not isinstance(other, int):
             raise TypeError(f'Runes may only be multiplied by integers; found type={other.__class__.__name__}')
@@ -73,8 +92,19 @@ class Rune(ABC):
             raise TypeError(f'{cls.__name__} objects may only be added to other {cls.__name__} objects')
         return self.value + other.value
 
+    def __eq__(self, other: Rune) -> bool:
+        return self.stat == other.stat and self.level == other.level
+
+    def __lt__(self, other: Rune) -> bool:
+        return (self.stat, self.level) < (other.stat, other.level)  # noqa
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__}({self.level})>'
+
 
 class RuneSet:
+    type: Type[Rune]
+
     def __init__(self, *runes: Rune):
         types = {r.__class__ for r in runes}
         if len(types) > 1:
@@ -93,6 +123,9 @@ class RuneSet:
             raise TypeError(f'{self.__class__.__name__} objects may only contain one type of Rune')
 
         self.runes.append(rune)
+
+    def __iter__(self) -> Iterator[Rune]:
+        yield from sorted(self.runes)
 
 
 class SpeedRune(Rune, stat='SPD'):
