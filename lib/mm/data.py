@@ -1,20 +1,16 @@
 """
-
+Classes that wrap API responses
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .enums import Region
 from .utils import DataProperty, parse_ms_epoch_ts
-
-# if TYPE_CHECKING:
-#     from datetime import datetime
 
 __all__ = ['OrtegaInfo', 'GameData', 'WorldInfo']
 log = logging.getLogger(__name__)
@@ -25,6 +21,9 @@ class DictWrapper:
 
     def __init__(self, data: dict[str, Any]):
         self.data = data
+
+
+# region Auth Client Responses
 
 
 class OrtegaInfo(DictWrapper):
@@ -139,3 +138,6 @@ class GameData(DictWrapper):
             'master': self.master_uri_fmt,
             'raw_data': self.raw_data_uri_fmt,
         }
+
+
+# endregion

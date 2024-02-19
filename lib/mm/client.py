@@ -16,6 +16,7 @@ from weakref import finalize
 import msgpack
 from requests import Session, Response
 
+from .assets import AssetCatalog
 from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss
 from .fs import FileCache
@@ -401,7 +402,7 @@ class DataClient(RequestsClient):
         return catalog
 
     @cached_property
-    def asset_catalog(self):
+    def asset_catalog(self) -> AssetCatalog:
         """
         Top-level keys:
             m_BucketDataString
@@ -461,11 +462,10 @@ class DataClient(RequestsClient):
                 ...
 
         """
-        # TODO: https://github.com/moonheart/mementomori-helper/blob/master/MementoMori/MementoNetworkManager.cs#L193-L203
         try:
             catalog = self.cache.get('asset-catalog.json')
         except CacheMiss:
             catalog = self._get_asset(f'{self.auth.ortega_info.asset_version}.json').json()
             self.cache.store(catalog, 'asset-catalog.json')
 
-        return catalog
+        return AssetCatalog(catalog)

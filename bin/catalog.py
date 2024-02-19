@@ -5,7 +5,7 @@ import logging
 from functools import cached_property
 from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, main
+from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, ParamGroup, main
 from cli_command_parser.inputs import Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
@@ -38,9 +38,9 @@ class Show(CatalogCLI, help='Show info'):
 
     def main(self):
         if self.item == 'game_data':
-            self._print(self.client.game_data.data)
+            self.print(self.client.game_data.data)
 
-    def _print(self, data):
+    def print(self, data):
         from mm.utils import PermissiveJSONEncoder
 
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=PermissiveJSONEncoder))
@@ -52,7 +52,7 @@ class Metadata(CatalogCLI, choices=('metadata', 'meta'), help='Save catalog meta
     split = Flag('-s', help='Split the specified catalog into separate files for each top-level key')
 
     def main(self):
-        catalog = self.client.asset_catalog if self.catalog == 'assets' else self.client.master_catalog
+        catalog = self.client.asset_catalog.data if self.catalog == 'assets' else self.client.master_catalog
         name = f'{self.catalog}-catalog'
         if self.split:
             for key, val in catalog.items():
@@ -66,6 +66,22 @@ class Metadata(CatalogCLI, choices=('metadata', 'meta'), help='Save catalog meta
         log.info(f'Saving {path_repr(path)}')
         with path.open('w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+class Assets(CatalogCLI, help='Show asset paths'):
+    path = Option('-p', help='Show assets relative to the specified path')
+    depth: int = Option('-d', help='Show assets up to the specified depth')
+
+    def main(self):
+        tree = self.client.asset_catalog.asset_tree
+        if self.path:
+            try:
+                tree = tree[self.path]
+            except KeyError as e:
+                raise KeyError(f'Invalid asset path: {self.path!r}') from e
+
+        for asset in tree.iter_flat(self.depth):
+            print(asset)
 
 
 if __name__ == '__main__':
