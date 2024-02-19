@@ -1,0 +1,9 @@
+-e .
+
+# QoL
+ipython
+rich
+
+# Testing
+testtools
+coverage
