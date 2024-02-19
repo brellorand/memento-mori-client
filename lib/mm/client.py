@@ -289,8 +289,6 @@ class RequestsClient:
 
 
 class AuthClient(RequestsClient):
-    _cache_path: Path | None
-
     def __init__(self, app_version: str = '2.8.1', *, ortega_uuid: str = None, use_cache: bool = True):
         headers = {
             'content-type': 'application/json; charset=UTF-8',
