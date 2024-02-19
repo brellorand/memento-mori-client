@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 DIR = IPath(type='dir')
 
 
-class CatalogCLI(Command, description='File Backup Tool', option_name_mode='*-'):
+class CatalogCLI(Command, description='Memento Mori Catalog Manager', option_name_mode='*-'):
     action = SubCommand()
     no_cache = Flag('-C', help='Do not read cached game/catalog data')
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
@@ -30,6 +30,20 @@ class CatalogCLI(Command, description='File Backup Tool', option_name_mode='*-')
     @cached_property
     def client(self) -> DataClient:
         return DataClient(use_cache=not self.no_cache)
+
+
+class Show(CatalogCLI, help='Show info'):
+    item = Positional(choices=('game_data',), help='The item to show')
+    sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
+
+    def main(self):
+        if self.item == 'game_data':
+            self._print(self.client.game_data.data)
+
+    def _print(self, data):
+        from mm.utils import PermissiveJSONEncoder
+
+        print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=PermissiveJSONEncoder))
 
 
 class Metadata(CatalogCLI, choices=('metadata', 'meta'), help='Save catalog metadata to a file'):

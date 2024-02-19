@@ -4,8 +4,10 @@ Misc utilities.
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime
+from collections.abc import Mapping, KeysView, ValuesView
+from datetime import datetime, date, timedelta
 from functools import wraps, partial
 from operator import attrgetter
 from threading import Lock
@@ -193,3 +195,25 @@ class DictAttrFieldNotFoundError(Exception):
 
 def parse_ms_epoch_ts(epoch_ts: str | int) -> datetime:
     return datetime.fromtimestamp(int(epoch_ts) / 1000)
+
+
+class PermissiveJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, (set, KeysView)):
+            return sorted(o)
+        elif isinstance(o, ValuesView):
+            return list(o)
+        elif isinstance(o, Mapping):
+            return dict(o)
+        elif isinstance(o, bytes):
+            try:
+                return o.decode('utf-8')
+            except UnicodeDecodeError:
+                return o.hex(' ', -4)
+        elif isinstance(o, datetime):
+            return o.isoformat(' ')
+        elif isinstance(o, date):
+            return o.strftime('%Y-%m-%d')
+        elif isinstance(o, (type, timedelta)):
+            return str(o)
+        return super().default(o)
