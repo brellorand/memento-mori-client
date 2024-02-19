@@ -5,7 +5,7 @@ import logging
 from functools import cached_property
 from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, ParamGroup, main
+from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, main
 from cli_command_parser.inputs import Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
@@ -46,26 +46,48 @@ class Show(CatalogCLI, help='Show info'):
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=PermissiveJSONEncoder))
 
 
-class Metadata(CatalogCLI, choices=('metadata', 'meta'), help='Save catalog metadata to a file'):
-    catalog = Positional(choices=('master', 'assets'), help='The type of catalog to save')
+# region Save Subcommands
+
+
+class Save(CatalogCLI, help='Save assets or metadata to a file'):
+    group = SubCommand()
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
+
+
+class Metadata(Save, help='Save catalog metadata to a file'):
+    item = Positional(choices=('master', 'assets', 'asset_data'), help='The type of catalog/item to save')
     split = Flag('-s', help='Split the specified catalog into separate files for each top-level key')
 
     def main(self):
-        catalog = self.client.asset_catalog.data if self.catalog == 'assets' else self.client.master_catalog
-        name = f'{self.catalog}-catalog'
-        if self.split:
-            for key, val in catalog.items():
-                self._save(val, name, f'{key}.json')
-        else:
-            self._save(catalog, f'{name}.json')
+        for name_parts, data, raw in self.iter_names_and_data():
+            self._save(data, *name_parts, raw=raw)
 
-    def _save(self, data, *name):
+    def iter_names_and_data(self):
+        if self.item in ('assets', 'master'):
+            name = f'{self.item}-catalog'
+            data = self.client.asset_catalog.data if self.item == 'assets' else self.client.master_catalog
+            if self.split:
+                for key, val in data.items():
+                    yield (name, f'{key}.json'), val, False
+            else:
+                yield (f'{name}.json',), data, False
+        elif self.item == 'asset_data':
+            asset_catalog = self.client.asset_catalog
+            for attr in ('key_data', 'bucket_data', 'entry_data', 'extra_data'):
+                yield (f'{attr}.dat',), getattr(asset_catalog, attr), True
+
+    def _save(self, data, *name, raw: bool = False):
         path = self.output.joinpath(*name)
         path.parent.mkdir(parents=True, exist_ok=True)
         log.info(f'Saving {path_repr(path)}')
-        with path.open('w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        if raw:
+            path.write_bytes(data)
+        else:
+            with path.open('w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+# endregion
 
 
 class Assets(CatalogCLI, help='Show asset paths'):
