@@ -9,8 +9,8 @@ from base64 import b64decode
 from functools import cached_property
 from typing import Any, Iterator, Sequence
 
-from .data import DictWrapper
-from .utils import DataProperty
+from mm.data import DictWrapper
+from mm.utils import DataProperty
 
 __all__ = ['AssetCatalog', 'Asset', 'AssetDir']
 log = logging.getLogger(__name__)
