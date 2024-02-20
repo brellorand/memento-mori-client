@@ -6,7 +6,7 @@ from functools import cached_property
 from pathlib import Path
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, Action, main
-from cli_command_parser.inputs import Path as IPath
+from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.assets import BundleExtractor
@@ -52,23 +52,47 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
     limit: int = Option('-L', help='Limit the number of bundle files to download')
     force = Flag('-F', help='Force bundles to be re-downloaded even if they already exist')
     # dry_run = Flag('-D', help='Print the actions that would be taken instead of taking them')
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
 
     @item(help='Download raw bundles')
     def bundles(self):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         out_dir = self.output.joinpath('bundles')
         out_dir.mkdir(parents=True, exist_ok=True)
-        downloaded = 0
-        for bundle_name in self.client.asset_catalog.bundle_names:
-            out_path = out_dir.joinpath(bundle_name)
-            if self.force or not out_path.exists():
+
+        with ThreadPoolExecutor(max_workers=self.parallel) as executor:
+            futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
+            log.info(f'Downloading {len(futures)} bundles')
+            for future in as_completed(futures):
+                bundle_name = futures[future]
+                out_path = out_dir.joinpath(bundle_name)
                 log.info(f'Saving {bundle_name}')
-                out_path.write_bytes(self.client.get_asset(bundle_name))
-                downloaded += 1
-                if self.limit and downloaded >= self.limit:
-                    log.info(f'Downloaded {downloaded} bundles - stopping')
-                    break
-            else:
-                log.debug(f'Skipping already downloaded {bundle_name}')
+                out_path.write_bytes(future.result())
+
+        # downloaded = 0
+        #
+        # for bundle_name in self.client.asset_catalog.bundle_names:
+        #     out_path = out_dir.joinpath(bundle_name)
+        #     if self.force or not out_path.exists():
+        #         log.info(f'Saving {bundle_name}')
+        #         out_path.write_bytes(self.client.get_asset(bundle_name))
+        #         downloaded += 1
+        #         if self.limit and downloaded >= self.limit:
+        #             log.info(f'Downloaded {downloaded} bundles - stopping')
+        #             break
+        #     else:
+        #         log.debug(f'Skipping already downloaded {bundle_name}')
+
+    def _get_bundle_names(self) -> list[str]:
+        out_dir = self.output.joinpath('bundles')
+        if self.force or not out_dir.exists():
+            return self.client.asset_catalog.bundle_names
+
+        to_download = [name for name in self.client.asset_catalog.bundle_names if not out_dir.joinpath(name).exists()]
+        if self.limit:
+            return to_download[:self.limit]
+        return to_download
 
     @item(help='Download bundles and extract the contents')
     def assets(self):
@@ -96,11 +120,23 @@ class Extract(AssetCLI, help='Extract assets from a .bundle file'):
         '-i', type=FILE_OR_DIR, help='Input .bundle file or dir containing .bundle files', required=True
     )
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
+    parallel: int = Option(
+        '-P', type=NumRange(min=1), default=4, help='Number of extraction processes to use in parallel'
+    )
 
     def main(self):
+        from concurrent.futures import ProcessPoolExecutor, wait
+
         extractor = BundleExtractor(self.output)
-        for src_path in self.iter_src_paths():
-            extractor.extract_bundle(src_path)
+        with ProcessPoolExecutor(max_workers=self.parallel) as executor:
+            # TODO: Fix logging to be initialized in each process
+            futures = {
+                executor.submit(extractor.extract_bundle, src_path): src_path for src_path in self.iter_src_paths()
+            }
+            wait(futures)
+
+        # for src_path in self.iter_src_paths():
+        #     extractor.extract_bundle(src_path)
 
     def iter_src_paths(self):
         if self.input.is_file():
