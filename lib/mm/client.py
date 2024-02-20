@@ -8,7 +8,7 @@ import logging
 import re
 from functools import cached_property
 from threading import Lock
-from typing import TYPE_CHECKING, Union, MutableMapping, Any, Mapping
+from typing import Union, MutableMapping, Any, Mapping
 from urllib.parse import urlencode, urlparse
 from uuid import uuid4
 from weakref import finalize
@@ -16,14 +16,11 @@ from weakref import finalize
 import msgpack
 from requests import Session, Response
 
-from .assets import AssetCatalog, Asset
+from .assets import AssetCatalog
 from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss
 from .fs import FileCache
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 __all__ = ['AuthClient', 'DataClient']
 log = logging.getLogger(__name__)
@@ -359,17 +356,17 @@ class DataClient(RequestsClient):
         url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
         return self.get(url, relative=False)
 
-    def get_asset(self, name: str | Asset) -> bytes:
-        # TODO: This is not currently working for any request other than the asset catalog
-        if isinstance(name, Asset):
-            name = name.name
-        return self._get_asset(name).content
+    def get_asset(self, name: str) -> bytes:
+        """
+        Download the asset catalog, or an asset bundle file.
 
-    # def get_asset_bundle(self, name: str) -> bytes:
-    #     # This is incomplete / untested
-    #     if not name.startswith('0#/'):
-    #         raise ValueError(f'Invalid bundle {name=}')
-    #     return self.get_asset(name[3:])
+        From the catalog, only ``.bundle`` entries in ``m_InternalIds`` that begin with ``0#/`` may be requested via
+        this method.
+
+        :param name: The name of the file/bundle to download
+        :return: The content of the specified file
+        """
+        return self._get_asset(name).content
 
     # def get_asset_etag(self, name: str) -> str:
     #     url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')

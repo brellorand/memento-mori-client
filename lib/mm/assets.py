@@ -49,6 +49,10 @@ class AssetCatalog(DictWrapper):
         except KeyError as e:
             raise KeyError(f'Invalid asset path: {name_or_path!r}') from e
 
+    @cached_property
+    def bundle_names(self) -> list[str]:
+        return [name[3:] for name in self.internal_ids if name.startswith('0#/')]
+
 
 class Asset:
     __slots__ = ('name', 'parent')
