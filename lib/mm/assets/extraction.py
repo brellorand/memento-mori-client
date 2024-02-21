@@ -1,5 +1,5 @@
 """
-Asset extraction logic using UnityPy (WIP)
+Asset extraction logic using UnityPy
 
 Based on: https://github.com/K0lb3/UnityPy/blob/master/UnityPy/tools/extractor.py
 """
@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from io import BytesIO, StringIO
+from functools import cached_property
+from io import BytesIO
 from pathlib import Path
-from typing import Generic, TypeVar, Iterator
+from typing import Generic, TypeVar
 
 import UnityPy
 from UnityPy.classes import (
@@ -31,10 +32,23 @@ from UnityPy.enums.ClassIDType import ClassIDType
 
 from mm.fs import path_repr
 
-__all__ = ['BundleExtractor', 'AssetExporter']
+__all__ = ['Bundle', 'BundleExtractor', 'AssetExporter']
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
+
+
+class Bundle:
+    def __init__(self, path: Path):
+        self.path = path
+
+    @cached_property
+    def env(self) -> UnityPy.environment.Environment:
+        return UnityPy.load(self.path.as_posix())  # UnityPy does not support Path objects
+
+    @property
+    def contents(self):
+        return self.env.container
 
 
 class BundleExtractor:
@@ -45,6 +59,7 @@ class BundleExtractor:
         self.exporters = AssetExporter.init_exporters(self)
 
     def extract_bundle(self, src_path: Path):
+        # TODO: Adjust log levels for these logs
         env = UnityPy.load(src_path.as_posix())  # UnityPy does not support Path objects
         log.info(f'Loaded {len(env.container)} file(s) from {path_repr(src_path)}')
         for obj_path, obj in env.container.items():
@@ -54,14 +69,13 @@ class BundleExtractor:
         if exporter := self.exporters.get(obj.type):
             self._save_asset(exporter, obj, obj_path)
         else:
+            # TODO: Add color to this line
             log.info(f'No exporter is configured for {obj=} with {obj.type=}')
 
     def _save_asset(self, exporter: AssetExporter, obj, obj_path: str):
         asset = obj.read()
         log.info(f'Extracting {asset.__class__.__name__} object to {obj_path}')
-        # log.info(f'Extracting {asset.__class__} object to {obj_path}')
         dst_path = self.dst_dir.joinpath(obj_path)
-        dst_path.parent.mkdir(parents=True, exist_ok=True)
         exporter.export_all(asset, dst_path)
 
 
@@ -86,10 +100,6 @@ class AssetExporter(ABC, Generic[T]):
     def init_exporters(cls, extractor: BundleExtractor) -> dict[ClassIDType, AssetExporter]:
         return {id_type: exp_cls(extractor) for id_type, exp_cls in cls._id_type_cls_map.items()}
 
-    # @abstractmethod
-    # def export(self, obj: T, dst_path: Path):
-    #     raise NotImplementedError
-
     @abstractmethod
     def export_bytes(self, obj: T) -> bytes:
         raise NotImplementedError
@@ -98,7 +108,6 @@ class AssetExporter(ABC, Generic[T]):
         self.exported.add((obj.assets_file, obj.path_id))
 
     def maybe_update_dst_path(self, obj: T, dst_path: Path) -> Path:
-        # TODO: This check probably isn't necessary...
         if dst_path.suffix:
             return dst_path
         return dst_path.parent.joinpath(f'{dst_path.name}{self.default_ext}')
@@ -118,6 +127,7 @@ class AssetExporter(ABC, Generic[T]):
             pass
         else:
             log.info(f'Saving {path_repr(dst_path)}')
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
             dst_path.write_bytes(data)
             self._register(obj)
 
@@ -125,11 +135,6 @@ class AssetExporter(ABC, Generic[T]):
 class TextExporter(AssetExporter[TextAsset], id_type=ClassIDType.TextAsset, ext='.txt'):
     def export_bytes(self, obj: TextAsset) -> bytes:
         return obj.script
-
-    # def export(self, obj: TextAsset, dst_path: Path):
-    #     dst_path = self.maybe_update_dst_path(obj, dst_path)
-    #     log.info(f'Saving {path_repr(dst_path)}')
-    #     dst_path.write_bytes(obj.script)
 
 
 class FontExporter(AssetExporter[Font], id_type=ClassIDType.Font, ext='.ttf'):
@@ -187,11 +192,16 @@ class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip,
             if not sample_name or sample_name.endswith(dst_path.suffix) or '.' not in sample_name:
                 return dst_path
             ext = '.' + sample_name.rsplit('.', 1)[1]
+            name = dst_path.stem
         else:
             ext = self.default_ext
-        return dst_path.parent.joinpath(f'{dst_path.name}{ext}')
+            name = dst_path.name
+
+        return dst_path.parent.joinpath(f'{name}{ext}')
 
     def export_bytes(self, obj: AudioClip) -> bytes:
+        # This method is not actually used since export_all is defined here
+        # return obj.m_AudioData
         return b''
 
     def export_all(self, obj: AudioClip, dst_path: Path):
@@ -202,12 +212,14 @@ class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip,
         elif len(samples) == 1:
             dst_path = self.maybe_update_dst_path(obj, dst_path, next(iter(samples)))
             log.info(f'Saving {path_repr(dst_path)}')
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
             dst_path.write_bytes(next(iter(samples.values())))
         else:
             dst_path.mkdir(parents=True, exist_ok=True)
             for name, clip_data in samples.items():
                 clip_path = self.maybe_update_dst_path(obj, dst_path.joinpath(name), name)
                 log.info(f'Saving {path_repr(clip_path)}')
+                clip_path.parent.mkdir(parents=True, exist_ok=True)
                 clip_path.write_bytes(clip_data)
 
 

@@ -17,10 +17,16 @@ from typing import TYPE_CHECKING, Optional, Callable, Any
 if TYPE_CHECKING:
     from .client import RequestsClient
 
-__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty']
+__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty', 'init_logging']
 log = logging.getLogger(__name__)
 
 _NotSet = object()
+
+
+def init_logging(verbose: int):
+    log_fmt = '%(asctime)s %(levelname)s %(name)s %(lineno)d %(message)s' if verbose > 1 else '%(message)s'
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(level=level, format=log_fmt)
 
 
 # region HTTP Client Utils

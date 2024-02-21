@@ -1,2 +1,2 @@
 from .catalog import AssetCatalog, Asset, AssetDir
-from .extraction import BundleExtractor, AssetExporter
+from .extraction import Bundle, BundleExtractor, AssetExporter
