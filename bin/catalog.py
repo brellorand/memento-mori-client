@@ -23,9 +23,9 @@ class CatalogCLI(Command, description='Memento Mori Catalog Manager', option_nam
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
 
     def _init_command_(self):
-        log_fmt = '%(asctime)s %(levelname)s %(name)s %(lineno)d %(message)s' if self.verbose > 1 else '%(message)s'
-        level = logging.DEBUG if self.verbose else logging.INFO
-        logging.basicConfig(level=level, format=log_fmt)
+        from mm.logging import init_logging
+
+        init_logging(self.verbose)
 
     @cached_property
     def client(self) -> DataClient:

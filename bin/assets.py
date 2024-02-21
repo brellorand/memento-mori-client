@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
+import json
 import logging
 import os
 from abc import ABC
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from functools import cached_property
 from pathlib import Path
 
@@ -13,12 +15,12 @@ from mm.__version__ import __author_email__, __version__  # noqa
 from mm.assets import BundleExtractor, Bundle
 from mm.client import DataClient
 from mm.fs import path_repr
-from mm.utils import init_logging
+from mm.logging import init_logging, log_initializer
 
 log = logging.getLogger(__name__)
 
 DIR = IPath(type='dir')
-FILE = IPath(type='file', exists=True)
+NEW_FILE = IPath(type='file', exists=False)
 FILE_OR_DIR = IPath(type='file|dir', exists=True)
 
 
@@ -55,25 +57,29 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
 
     @item(help='Download raw bundles')
     def bundles(self):
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        out_dir = self.output.joinpath('bundles')
-        out_dir.mkdir(parents=True, exist_ok=True)
+        self.output.mkdir(parents=True, exist_ok=True)
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
             futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
-            log.info(f'Downloading {len(futures)} bundles')
-            for future in as_completed(futures):
-                bundle_name = futures[future]
-                out_path = out_dir.joinpath(bundle_name)
-                log.info(f'Saving {bundle_name}')
-                out_path.write_bytes(future.result())
+            log.info(f'Downloading {len(futures):,d} bundles')
+            try:
+                for future in as_completed(futures):
+                    self._save_bundle(futures[future], future.result())
+            except BaseException:
+                executor.shutdown(cancel_futures=True)
+                raise
+
+    def _save_bundle(self, bundle_name: str, data: bytes):
+        out_path = self.output.joinpath(bundle_name)
+        log.info(f'Saving {bundle_name}')
+        out_path.write_bytes(data)
 
     def _get_bundle_names(self) -> list[str]:
-        out_dir = self.output.joinpath('bundles')
-        if self.force or not out_dir.exists():
+        if self.force or not self.output.exists():
             return self.client.asset_catalog.bundle_names
 
-        to_download = [name for name in self.client.asset_catalog.bundle_names if not out_dir.joinpath(name).exists()]
+        to_download = [
+            name for name in self.client.asset_catalog.bundle_names if not self.output.joinpath(name).exists()
+        ]
         if self.limit:
             return to_download[:self.limit]
         return to_download
@@ -95,6 +101,26 @@ class BundleCommand(AssetCLI, ABC):
             for root, dirs, files in os.walk(self.input):
                 for file in files:
                     yield Path(root, file)
+
+
+class Index(BundleCommand, help='Create a bundle index to facilitate bundle discovery for specific assets'):
+    output: Path = Option('-o', type=NEW_FILE, help='Output path', required=True)
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
+
+    def main(self):
+        bundles = (Bundle(src_path) for src_path in self.iter_src_paths())
+        with ProcessPoolExecutor(max_workers=self.parallel, initializer=log_initializer(self.verbose)) as executor:
+            futures = {executor.submit(bundle.get_content_paths): bundle for bundle in bundles}
+            log.info(f'Processing {len(futures):,d} bundles...')
+            try:
+                bundle_contents = {futures[future].path.name: future.result() for future in as_completed(futures)}
+            except BaseException:
+                executor.shutdown(cancel_futures=True)
+                raise
+
+        log.info(f'Saving {path_repr(self.output)}')
+        with self.output.open('w', encoding='utf-8') as f:
+            json.dump(bundle_contents, f, indent=4, sort_keys=True, ensure_ascii=False)
 
 
 class Find(BundleCommand, help='Find bundles containing the specified paths/files'):
@@ -132,16 +158,17 @@ class Extract(BundleCommand, help='Extract assets from a .bundle file'):
     )
 
     def main(self):
-        from concurrent.futures import ProcessPoolExecutor, wait
-
         extractor = BundleExtractor(self.output)
-        with ProcessPoolExecutor(
-            max_workers=self.parallel, initializer=init_logging, initargs=(self.verbose,)
-        ) as executor:
+        with ProcessPoolExecutor(max_workers=self.parallel, initializer=log_initializer(self.verbose)) as executor:
             futures = {
                 executor.submit(extractor.extract_bundle, src_path): src_path for src_path in self.iter_src_paths()
             }
-            wait(futures)
+            try:
+                for future in as_completed(futures):
+                    future.result()
+            except BaseException:
+                executor.shutdown(cancel_futures=True)
+                raise
 
 
 if __name__ == '__main__':

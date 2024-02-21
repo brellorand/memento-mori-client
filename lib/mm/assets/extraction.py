@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from io import BytesIO
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Type
 
 import UnityPy
 from UnityPy.classes import (
@@ -50,36 +50,53 @@ class Bundle:
     def contents(self):
         return self.env.container
 
+    def get_content_paths(self) -> list[str]:
+        return list(self.env.container)
+
+    def extract(self, dst_dir: Path, force: bool = False):
+        # TODO: Update extract_bundle to use env from this object
+        BundleExtractor(dst_dir, force).extract_bundle(self.path)
+
 
 class BundleExtractor:
+    __slots__ = ('dst_dir', 'force', 'exported', '_exporters')
+
     def __init__(self, dst_dir: Path, force: bool = False):
         self.dst_dir = dst_dir
         self.force = force
         self.exported = set()
-        self.exporters = AssetExporter.init_exporters(self)
+        self._exporters = {}
+
+    def _get_exporter(self, id_type: ClassIDType) -> AssetExporter:
+        if exporter := self._exporters.get(id_type):
+            return exporter
+        try:
+            exp_cls = AssetExporter.for_type(id_type)
+        except KeyError as e:
+            raise MissingExporter from e
+        self._exporters[id_type] = exporter = exp_cls(self)
+        return exporter
 
     def extract_bundle(self, src_path: Path):
-        # TODO: Adjust log levels for these logs
         env = UnityPy.load(src_path.as_posix())  # UnityPy does not support Path objects
-        log.info(f'Loaded {len(env.container)} file(s) from {path_repr(src_path)}')
+        log.debug(f'Loaded {len(env.container)} file(s) from {path_repr(src_path)}')
         for obj_path, obj in env.container.items():
-            self.save_asset(obj_path, obj)
+            try:
+                self.save_asset(obj_path, obj)
+            except MissingExporter:
+                log.warning(
+                    f'No exporter is configured for {obj=} with {obj.type=} from {path_repr(src_path)}',
+                    extra={'color': 'yellow'},
+                )
 
     def save_asset(self, obj_path: str, obj):
-        if exporter := self.exporters.get(obj.type):
-            self._save_asset(exporter, obj, obj_path)
-        else:
-            # TODO: Add color to this line
-            log.info(f'No exporter is configured for {obj=} with {obj.type=}')
-
-    def _save_asset(self, exporter: AssetExporter, obj, obj_path: str):
+        exporter = self._get_exporter(obj.type)
         asset = obj.read()
-        log.info(f'Extracting {asset.__class__.__name__} object to {obj_path}')
-        dst_path = self.dst_dir.joinpath(obj_path)
-        exporter.export_all(asset, dst_path)
+        exporter.export_all(asset, self.dst_dir.joinpath(obj_path))
 
 
 class AssetExporter(ABC, Generic[T]):
+    __slots__ = ('extractor', 'exported', 'force')
     _id_type_cls_map = {}
     id_type: ClassIDType
     default_ext: str | None = None
@@ -97,8 +114,8 @@ class AssetExporter(ABC, Generic[T]):
         self.force = extractor.force
 
     @classmethod
-    def init_exporters(cls, extractor: BundleExtractor) -> dict[ClassIDType, AssetExporter]:
-        return {id_type: exp_cls(extractor) for id_type, exp_cls in cls._id_type_cls_map.items()}
+    def for_type(cls, id_type: ClassIDType) -> Type[AssetExporter]:
+        return cls._id_type_cls_map[id_type]
 
     @abstractmethod
     def export_bytes(self, obj: T) -> bytes:
@@ -126,7 +143,7 @@ class AssetExporter(ABC, Generic[T]):
         except SkipExport:
             pass
         else:
-            log.info(f'Saving {path_repr(dst_path)}')
+            log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
             dst_path.parent.mkdir(parents=True, exist_ok=True)
             dst_path.write_bytes(data)
             self._register(obj)
@@ -187,6 +204,17 @@ class MonoBehaviorExporter(AssetExporter[MonoBehaviour | Object], id_type=ClassI
 
 
 class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip, ext='.wav'):
+    """
+    Exporter for audio clips.
+
+    The raw / original data is accessible via the :attr:`AudioClip.m_AudioData` property.
+
+    The raw data for some audio files in bundles that have a ``.ogg`` extension begins with ``FSB5``, which apparently
+    indicates that it is using an optimized format that is primarily used by Unity.  This format is apparently missing
+    some parts that general OggVorbis players expect to exist, so such files are converted (by UnityPy) to WAV for
+    compatibility.
+    """
+
     def maybe_update_dst_path(self, obj: T, dst_path: Path, sample_name: str = None) -> Path:
         if dst_path.suffix:
             if not sample_name or sample_name.endswith(dst_path.suffix) or '.' not in sample_name:
@@ -206,19 +234,21 @@ class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip,
 
     def export_all(self, obj: AudioClip, dst_path: Path):
         self._register(obj)
-        samples = obj.samples
+        samples = obj.samples  # This is a plain property - store the returned value to avoid re-computation
         if not samples:
-            log.info(f'No audio samples found for {dst_path.as_posix()}')
+            log.info(f'No audio samples found for {path_repr(dst_path)}', extra={'color': 'yellow'})
         elif len(samples) == 1:
-            dst_path = self.maybe_update_dst_path(obj, dst_path, next(iter(samples)))
-            log.info(f'Saving {path_repr(dst_path)}')
+            name, clip_data = samples.popitem()
+            dst_path = self.maybe_update_dst_path(obj, dst_path, name)
+            log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
             dst_path.parent.mkdir(parents=True, exist_ok=True)
-            dst_path.write_bytes(next(iter(samples.values())))
+            dst_path.write_bytes(clip_data)
         else:
+            # TODO: Handling for this case could probably use some improvement
             dst_path.mkdir(parents=True, exist_ok=True)
             for name, clip_data in samples.items():
                 clip_path = self.maybe_update_dst_path(obj, dst_path.joinpath(name), name)
-                log.info(f'Saving {path_repr(clip_path)}')
+                log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
                 clip_path.parent.mkdir(parents=True, exist_ok=True)
                 clip_path.write_bytes(clip_data)
 
@@ -308,3 +338,7 @@ class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObje
 
 class SkipExport(Exception):
     """Used internally to indicate there is nothing to export"""
+
+
+class MissingExporter(Exception):
+    """Used internally to indicate no exporter is configured for a given ClassIDType"""

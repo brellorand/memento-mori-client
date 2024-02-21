@@ -17,16 +17,10 @@ from typing import TYPE_CHECKING, Optional, Callable, Any
 if TYPE_CHECKING:
     from .client import RequestsClient
 
-__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty', 'init_logging']
+__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty']
 log = logging.getLogger(__name__)
 
 _NotSet = object()
-
-
-def init_logging(verbose: int):
-    log_fmt = '%(asctime)s %(levelname)s %(name)s %(lineno)d %(message)s' if verbose > 1 else '%(message)s'
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(level=level, format=log_fmt)
 
 
 # region HTTP Client Utils
@@ -93,8 +87,9 @@ def rate_limited(interval: float = 0, log_lvl: int = logging.DEBUG):
     def decorator(func):
         last_call = 0
         lock = Lock()
-        log_fmt = 'Rate limited {} {!r} is being delayed {{:,.3f}} seconds'.format(
-            'method' if is_attrgetter else 'function', func.__name__
+        log_fmt = (
+            f'Rate limited {"method" if is_attrgetter else "function"}'
+            f' {func.__name__!r} is being delayed {{:,.3f}} seconds'
         )
 
         @wraps(func)
