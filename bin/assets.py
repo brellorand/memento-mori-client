@@ -5,11 +5,13 @@ import logging
 import os
 from abc import ABC
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, Action, main
 from cli_command_parser.inputs import Path as IPath, NumRange
+from cli_command_parser.inputs.time import DateTime, DEFAULT_DATE_FMT, DEFAULT_DT_FMT
 from tqdm import tqdm
 
 from mm.__version__ import __author_email__, __version__  # noqa
@@ -23,6 +25,7 @@ log = logging.getLogger(__name__)
 DIR = IPath(type='dir')
 NEW_FILE = IPath(type='file', exists=False)
 FILE_OR_DIR = IPath(type='file|dir', exists=True)
+DATE_OR_DT = DateTime(DEFAULT_DATE_FMT, DEFAULT_DT_FMT)
 
 
 class AssetCLI(Command, description='Memento Mori Asset Manager', option_name_mode='*-'):
@@ -102,8 +105,18 @@ class BundleCommand(AssetCLI, ABC):
     input: Path = Option(
         '-i', type=FILE_OR_DIR, help='Input .bundle file or dir containing .bundle files', required=True
     )
+    earliest: datetime = Option('-e', type=DATE_OR_DT, help='Only include assets from bundles modified after this time')
 
     def iter_src_paths(self):
+        if self.earliest is None:
+            yield from self._iter_src_paths()
+        else:
+            earliest = self.earliest.timestamp()
+            for path in self._iter_src_paths():
+                if path.stat().st_mtime >= earliest:
+                    yield path
+
+    def _iter_src_paths(self):
         if self.input.is_file():
             yield self.input
         else:
@@ -133,10 +146,11 @@ class Index(BundleCommand, help='Create a bundle index to facilitate bundle disc
 
 
 class Find(BundleCommand, help='Find bundles containing the specified paths/files'):
-    pattern = Option('-p', help='Path pattern to find (supports glob-style wildcards)', required=True)
+    pattern = Option('-p', help='Path pattern to find (supports glob-style wildcards)')
 
     def main(self):
-        for src_path, content_path in self.iter_matching_contents():
+        matching_contents_iter = self.iter_matching_contents() if self.pattern else self.iter_bundle_contents()
+        for src_path, content_path in matching_contents_iter:
             print(f'Bundle {path_repr(src_path)} contains: {content_path}')
 
     def iter_bundle_contents(self):
