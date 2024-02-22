@@ -8,8 +8,8 @@ If you are using Windows, you should install `Git <https://git-scm.com/download/
 up with the latest updates.  It is strongly recommended to use the Bash shell that comes with Git ("Git Bash") when
 you run Git commands or these scripts.  All further instructions will assume you are using Bash.
 
-Clone the this repo and install its dependencies (
-`using a venv <https://realpython.com/python-virtual-environments-a-primer/>`__ is recommended)::
+Clone the this repo and install its dependencies (`using a venv
+<https://realpython.com/python-virtual-environments-a-primer/>`__ is recommended)::
 
     mkdir ~/git
     cd ~/git
