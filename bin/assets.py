@@ -10,6 +10,7 @@ from pathlib import Path
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, Action, main
 from cli_command_parser.inputs import Path as IPath, NumRange
+from tqdm import tqdm
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.assets import BundleExtractor, Bundle
@@ -58,19 +59,27 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
     @item(help='Download raw bundles')
     def bundles(self):
         self.output.mkdir(parents=True, exist_ok=True)
-        with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-            futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
-            log.info(f'Downloading {len(futures):,d} bundles')
-            try:
-                for future in as_completed(futures):
-                    self._save_bundle(futures[future], future.result())
-            except BaseException:
-                executor.shutdown(cancel_futures=True)
-                raise
+
+        bundle_names = self._get_bundle_names()
+        if not bundle_names:
+            log.info('All bundles have already been downloaded (use --force to force them to be re-downloaded)')
+            return
+
+        log.info(f'Downloading {len(bundle_names):,d} bundles')
+        with tqdm(total=len(bundle_names), unit=' bundles', maxinterval=1) as prog_bar:
+            with ThreadPoolExecutor(max_workers=self.parallel) as executor:
+                futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
+                try:
+                    for future in as_completed(futures):
+                        prog_bar.update()
+                        self._save_bundle(futures[future], future.result())
+                except BaseException:
+                    executor.shutdown(cancel_futures=True)
+                    raise
 
     def _save_bundle(self, bundle_name: str, data: bytes):
         out_path = self.output.joinpath(bundle_name)
-        log.info(f'Saving {bundle_name}')
+        log.debug(f'Saving {bundle_name}')
         out_path.write_bytes(data)
 
     def _get_bundle_names(self) -> list[str]:

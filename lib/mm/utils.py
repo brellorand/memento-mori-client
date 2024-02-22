@@ -9,6 +9,7 @@ import logging
 from collections.abc import Mapping, KeysView, ValuesView
 from datetime import datetime, date, timedelta
 from functools import wraps, partial
+from json.encoder import JSONEncoder, encode_basestring_ascii, encode_basestring  # noqa
 from operator import attrgetter
 from threading import Lock
 from time import sleep, monotonic
@@ -198,7 +199,7 @@ def parse_ms_epoch_ts(epoch_ts: str | int) -> datetime:
     return datetime.fromtimestamp(int(epoch_ts) / 1000)
 
 
-class PermissiveJSONEncoder(json.JSONEncoder):
+class PermissiveJSONEncoder(JSONEncoder):
     def default(self, o):
         if isinstance(o, (set, KeysView)):
             return sorted(o)
@@ -218,3 +219,109 @@ class PermissiveJSONEncoder(json.JSONEncoder):
         elif isinstance(o, (type, timedelta)):
             return str(o)
         return super().default(o)
+
+
+class CompactJSONEncoder(PermissiveJSONEncoder):
+    """A JSON Encoder that puts small containers on single lines."""
+
+    CONTAINER_TYPES = (list, tuple, dict)
+
+    def __init__(self, *args, indent: int = None, max_line_len: int = 100, max_line_items: int = 10, **kwargs):
+        # Using this class without indentation is pointless - force indent=4 if not specified
+        kwargs.setdefault('ensure_ascii', False)
+        super().__init__(*args, indent=indent or 4, **kwargs)
+        self._indentation_level = 0
+        self._max_line_len = max_line_len
+        self._max_line_items = max_line_items
+
+    def encode(self, o):
+        match o:
+            case list() | tuple():
+                return self._encode_list(o)
+            case dict():
+                return self._encode_object(o)
+            case float():
+                return self._encode_float(o)
+            case str():
+                return encode_basestring_ascii(o) if self.ensure_ascii else encode_basestring(o)
+            case _:
+                return json.dumps(
+                    o,
+                    skipkeys=self.skipkeys,
+                    ensure_ascii=self.ensure_ascii,
+                    check_circular=self.check_circular,
+                    allow_nan=self.allow_nan,
+                    sort_keys=self.sort_keys,
+                    indent=self.indent,
+                    separators=(self.item_separator, self.key_separator),
+                    default=self.__dict__.get('default'),  # Only set if a default func was provided
+                    cls=PermissiveJSONEncoder,
+                )
+
+    def _encode_float(self, o: float, _repr=float.__repr__, _inf=float('inf'), _neginf=-float('inf')):
+        # Mostly copied from the implementation in json.encoder.JSONEncoder.iterencode
+        if o != o:
+            text = 'NaN'
+        elif o == _inf:
+            text = 'Infinity'
+        elif o == _neginf:
+            text = '-Infinity'
+        else:
+            return _repr(o)  # noqa
+
+        if not self.allow_nan:
+            raise ValueError(f'Out of range float values are not JSON compliant: {o!r}')
+        return text
+
+    def _encode_list(self, obj: list) -> str:
+        if self._len_okay_and_not_nested(obj):
+            parts = [self.encode(v) for v in obj]
+            if self._str_len_is_below_max(parts):
+                return f'[{", ".join(parts)}]'
+
+        self._indentation_level += 1
+        content = ',\n'.join(self.indent_str + self.encode(v) for v in obj)
+        self._indentation_level -= 1
+        return f'[\n{content}\n{self.indent_str}]'
+
+    def _encode_object(self, obj: dict):
+        if not obj:
+            return '{}'
+
+        # ensure keys are converted to strings
+        obj = {str(k) if k is not None else 'null': v for k, v in obj.items()}
+        if self.sort_keys:
+            obj = dict(sorted(obj.items()))
+
+        dump_str = encode_basestring_ascii if self.ensure_ascii else encode_basestring
+        if self._len_okay_and_not_nested(obj):
+            parts = [f'{dump_str(k)}: {self.encode(v)}' for k, v in obj.items()]
+            if self._str_len_is_below_max(parts):
+                return f'{{{", ".join(parts)}}}'
+
+        self._indentation_level += 1
+        output = ',\n'.join(f'{self.indent_str}{dump_str(k)}: {self.encode(v)}' for k, v in obj.items())
+        self._indentation_level -= 1
+        return f'{{\n{output}\n{self.indent_str}}}'
+
+    def iterencode(self, o, **kwargs):
+        """Required to also work with `json.dump`."""
+        return self.encode(o)
+
+    def _len_okay_and_not_nested(self, obj: list | tuple | dict) -> bool:
+        return (
+            len(obj) <= self._max_line_items
+            and not any(isinstance(v, self.CONTAINER_TYPES) for v in (obj.values() if isinstance(obj, dict) else obj))
+        )
+
+    def _str_len_is_below_max(self, parts: list[str]) -> bool:
+        return (2 + sum(map(len, parts)) + (2 * len(parts))) <= self._max_line_len
+
+    @property
+    def indent_str(self) -> str:
+        if isinstance(self.indent, int):
+            return ' ' * (self._indentation_level * self.indent)
+        elif isinstance(self.indent, str):
+            return self._indentation_level * self.indent
+        else:
+            raise TypeError(f'indent must either be of type int or str (found: {self.indent.__class__.__name__})')

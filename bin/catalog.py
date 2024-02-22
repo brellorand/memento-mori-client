@@ -11,6 +11,7 @@ from cli_command_parser.inputs import Path as IPath
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.client import DataClient
 from mm.fs import path_repr
+from mm.utils import CompactJSONEncoder
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +44,7 @@ class Show(CatalogCLI, help='Show info'):
             self.print(self.client.game_data.uri_formats)
 
     def print(self, data):
-        from mm.utils import PermissiveJSONEncoder
-
-        print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=PermissiveJSONEncoder))
+        print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))
 
 
 class Save(CatalogCLI, help='Save catalog metadata to a file'):
@@ -79,7 +78,7 @@ class Save(CatalogCLI, help='Save catalog metadata to a file'):
             path.write_bytes(data)
         else:
             with path.open('w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
+                json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
 
 
 if __name__ == '__main__':
