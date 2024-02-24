@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, KeysView, ValuesView
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from datetime import datetime, date, timedelta
 from functools import wraps, partial
 from json.encoder import JSONEncoder, encode_basestring_ascii, encode_basestring  # noqa
@@ -15,10 +16,20 @@ from threading import Lock
 from time import sleep, monotonic
 from typing import TYPE_CHECKING, Optional, Callable, Any
 
+from tqdm import tqdm
+
 if TYPE_CHECKING:
     from .client import RequestsClient
 
-__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty']
+__all__ = [
+    'rate_limited',
+    'format_path_prefix',
+    'DataProperty',
+    'parse_ms_epoch_ts',
+    'PermissiveJSONEncoder',
+    'CompactJSONEncoder',
+    'FutureWaiter',
+]
 log = logging.getLogger(__name__)
 
 _NotSet = object()
@@ -121,6 +132,9 @@ def format_path_prefix(value: Optional[str]) -> str:
 # endregion
 
 
+# region Data Property
+
+
 class DataProperty:
     __slots__ = ('path', 'path_repr', 'type', 'name', 'default', 'default_factory')
 
@@ -195,8 +209,14 @@ class DictAttrFieldNotFoundError(Exception):
         )
 
 
+# endregion
+
+
 def parse_ms_epoch_ts(epoch_ts: str | int) -> datetime:
     return datetime.fromtimestamp(int(epoch_ts) / 1000)
+
+
+# region JSON
 
 
 class PermissiveJSONEncoder(JSONEncoder):
@@ -325,3 +345,73 @@ class CompactJSONEncoder(PermissiveJSONEncoder):
             return self._indentation_level * self.indent
         else:
             raise TypeError(f'indent must either be of type int or str (found: {self.indent.__class__.__name__})')
+
+
+# endregion
+
+
+class FutureWaiter:
+    __slots__ = ('executor', 'futures', 'tqdm', '_close_tqdm')
+
+    def __init__(self, executor: ProcessPoolExecutor | ThreadPoolExecutor):
+        self.executor = executor
+        self.futures = None
+        self.tqdm = None
+        self._close_tqdm = False
+
+    @classmethod
+    def wait_for(cls, executor: ProcessPoolExecutor | ThreadPoolExecutor, futures, **kwargs):
+        with cls(executor) as waiter:
+            waiter.wait(futures, **kwargs)
+
+    def __enter__(self) -> FutureWaiter:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            return
+        if self._close_tqdm:
+            try:
+                self.tqdm.close()
+            except Exception:  # noqa
+                log.error('Error closing tqdm during executor shutdown', exc_info=True)
+        self.executor.shutdown(cancel_futures=True)
+
+    def __call__(
+        self,
+        futures,
+        prog_bar: tqdm | None = None,
+        *,
+        add_bar: bool = False,
+        unit: str = ' bundles',
+        maxinterval: float = 1,
+    ):
+        if add_bar:
+            if prog_bar is not None:
+                raise ValueError('Invalid combination of prog_bar and add_bar - only one is allowed')
+            self.init_tqdm(total=len(futures), unit=unit, maxinterval=maxinterval)
+        elif prog_bar is not None:
+            self.tqdm = prog_bar
+
+        self.futures = futures
+        return self
+
+    def __iter__(self):
+        if not self.futures:
+            raise RuntimeError(f'It is only possible to iterate over {self.__class__.__name__} if called with futures')
+        elif (prog_bar := self.tqdm) is not None:
+            for future in as_completed(self.futures):
+                prog_bar.update()
+                yield future
+        else:
+            yield from as_completed(self.futures)
+
+    def init_tqdm(self, **kwargs):
+        self.tqdm = bar = tqdm(**kwargs)
+        self._close_tqdm = True
+        return bar
+
+    def wait(self, futures, prog_bar: tqdm | None = None, **kwargs):
+        self(futures, prog_bar, **kwargs)
+        for future in self:
+            future.result()

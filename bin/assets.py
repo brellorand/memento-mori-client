@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from abc import ABC
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
@@ -14,12 +14,12 @@ from pathlib import Path
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, Action, main
 from cli_command_parser.inputs import Path as IPath, NumRange
 from cli_command_parser.inputs.time import DateTime, DEFAULT_DATE_FMT, DEFAULT_DT_FMT
-from tqdm import tqdm
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.client import DataClient
 from mm.fs import path_repr
 from mm.logging import init_logging, log_initializer
+from mm.utils import FutureWaiter
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
     item = Action()
     # path = Option('-p', help='Save the specified asset, or all assets inside the specified path', required=True)
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
-    limit: int = Option('-L', help='Limit the number of bundle files to download')
+    limit: int = Option('-L', type=NumRange(min=1), help='Limit the number of bundle files to download')
     force = Flag('-F', help='Force bundles to be re-downloaded even if they already exist')
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
 
@@ -71,8 +71,8 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
 
         log.info(f'Downloading {len(bundle_names):,d} bundles')
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-            futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
-            with FutureWaiter(executor)(futures, add_bar=True) as waiter:
+            futures = {executor.submit(self.client.get_asset, name): name for name in bundle_names}
+            with FutureWaiter(executor)(futures, add_bar=not self.verbose) as waiter:
                 for future in waiter:
                     self._save_bundle(futures[future], future.result())
 
@@ -82,12 +82,9 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
         out_path.write_bytes(data)
 
     def _get_bundle_names(self) -> list[str]:
-        if self.force or not self.output.exists():
-            return self.client.asset_catalog.bundle_names
-
-        to_download = [
-            name for name in self.client.asset_catalog.bundle_names if not self.output.joinpath(name).exists()
-        ]
+        to_download = self.client.asset_catalog.bundle_names
+        if not (self.force or not self.output.exists()):
+            to_download = [name for name in to_download if not self.output.joinpath(name).exists()]
         if self.limit:
             return to_download[:self.limit]
         return to_download
@@ -179,73 +176,6 @@ class Extract(ParallelBundleCommand, help='Extract assets from a .bundle file'):
 
 
 # endregion
-
-
-class FutureWaiter:
-    __slots__ = ('executor', 'futures', 'tqdm', '_close_tqdm')
-
-    def __init__(self, executor: ProcessPoolExecutor | ThreadPoolExecutor):
-        self.executor = executor
-        self.futures = None
-        self.tqdm = None
-        self._close_tqdm = False
-
-    @classmethod
-    def wait_for(cls, executor: ProcessPoolExecutor | ThreadPoolExecutor, futures, **kwargs):
-        with cls(executor) as waiter:
-            waiter.wait(futures, **kwargs)
-
-    def __enter__(self) -> FutureWaiter:
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is None:
-            return
-        if self._close_tqdm:
-            try:
-                self.tqdm.close()
-            except Exception:  # noqa
-                log.error('Error closing tqdm during executor shutdown', exc_info=True)
-        self.executor.shutdown(cancel_futures=True)
-
-    def __call__(
-        self,
-        futures,
-        prog_bar: tqdm | None = None,
-        *,
-        add_bar: bool = False,
-        unit: str = ' bundles',
-        maxinterval: float = 1,
-    ):
-        if add_bar:
-            if prog_bar is not None:
-                raise ValueError('Invalid combination of prog_bar and add_bar - only one is allowed')
-            self.init_tqdm(total=len(futures), unit=unit, maxinterval=maxinterval)
-        elif prog_bar is not None:
-            self.tqdm = prog_bar
-
-        self.futures = futures
-        return self
-
-    def __iter__(self):
-        if not self.futures:
-            raise RuntimeError(f'It is only possible to iterate over {self.__class__.__name__} if called with futures')
-        elif (prog_bar := self.tqdm) is not None:
-            for future in as_completed(self.futures):
-                prog_bar.update()
-                yield future
-        else:
-            yield from as_completed(self.futures)
-
-    def init_tqdm(self, **kwargs):
-        self.tqdm = bar = tqdm(**kwargs)
-        self._close_tqdm = True
-        return bar
-
-    def wait(self, futures, prog_bar: tqdm | None = None, **kwargs):
-        self(futures, prog_bar, **kwargs)
-        for future in self:
-            future.result()
 
 
 if __name__ == '__main__':
