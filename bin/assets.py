@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -15,7 +17,6 @@ from cli_command_parser.inputs.time import DateTime, DEFAULT_DATE_FMT, DEFAULT_D
 from tqdm import tqdm
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.assets import BundleExtractor, Bundle
 from mm.client import DataClient
 from mm.fs import path_repr
 from mm.logging import init_logging, log_initializer
@@ -24,7 +25,7 @@ log = logging.getLogger(__name__)
 
 DIR = IPath(type='dir')
 NEW_FILE = IPath(type='file', exists=False)
-FILE_OR_DIR = IPath(type='file|dir', exists=True)
+FILES = IPath(type='file|dir', exists=True)
 DATE_OR_DT = DateTime(DEFAULT_DATE_FMT, DEFAULT_DT_FMT)
 
 
@@ -69,16 +70,11 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
             return
 
         log.info(f'Downloading {len(bundle_names):,d} bundles')
-        with tqdm(total=len(bundle_names), unit=' bundles', maxinterval=1) as prog_bar:
-            with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-                futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
-                try:
-                    for future in as_completed(futures):
-                        prog_bar.update()
-                        self._save_bundle(futures[future], future.result())
-                except BaseException:
-                    executor.shutdown(cancel_futures=True)
-                    raise
+        with ThreadPoolExecutor(max_workers=self.parallel) as executor:
+            futures = {executor.submit(self.client.get_asset, name): name for name in self._get_bundle_names()}
+            with FutureWaiter(executor)(futures, add_bar=True) as waiter:
+                for future in waiter:
+                    self._save_bundle(futures[future], future.result())
 
     def _save_bundle(self, bundle_name: str, data: bytes):
         out_path = self.output.joinpath(bundle_name)
@@ -101,44 +97,39 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
         raise RuntimeError('Not supported yet')
 
 
+# region Bundle Commands
+
+
 class BundleCommand(AssetCLI, ABC):
-    input: Path = Option(
-        '-i', type=FILE_OR_DIR, help='Input .bundle file or dir containing .bundle files', required=True
-    )
+    input = Option('-i', type=FILES, nargs='+', help='Bundle file(s) or dir(s) containing .bundle files', required=True)
     earliest: datetime = Option('-e', type=DATE_OR_DT, help='Only include assets from bundles modified after this time')
 
-    def iter_src_paths(self):
-        if self.earliest is None:
-            yield from self._iter_src_paths()
-        else:
-            earliest = self.earliest.timestamp()
-            for path in self._iter_src_paths():
-                if path.stat().st_mtime >= earliest:
-                    yield path
+    def find_bundles(self):
+        from mm.assets import find_bundles
 
-    def _iter_src_paths(self):
-        if self.input.is_file():
-            yield self.input
-        else:
-            for root, dirs, files in os.walk(self.input):
-                for file in files:
-                    yield Path(root, file)
+        yield from find_bundles(self.input, mod_after=self.earliest)
 
 
-class Index(BundleCommand, help='Create a bundle index to facilitate bundle discovery for specific assets'):
-    output: Path = Option('-o', type=NEW_FILE, help='Output path', required=True)
+class ParallelBundleCommand(BundleCommand, ABC):
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
+    debug = Flag('-d', help='Enable logging in bundle processing workers')
+
+    def executor(self) -> ProcessPoolExecutor:
+        return ProcessPoolExecutor(
+            max_workers=self.parallel,
+            initializer=log_initializer(self.verbose) if self.debug else None,
+        )
+
+
+class Index(ParallelBundleCommand, help='Create a bundle index to facilitate bundle discovery for specific assets'):
+    output: Path = Option('-o', type=NEW_FILE, help='Output path', required=True)
 
     def main(self):
-        bundles = (Bundle(src_path) for src_path in self.iter_src_paths())
-        with ProcessPoolExecutor(max_workers=self.parallel, initializer=log_initializer(self.verbose)) as executor:
-            futures = {executor.submit(bundle.get_content_paths): bundle for bundle in bundles}
+        with self.executor() as executor:
+            futures = {executor.submit(bundle.get_content_paths): bundle for bundle in self.find_bundles()}
             log.info(f'Processing {len(futures):,d} bundles...')
-            try:
-                bundle_contents = {futures[future].path.name: future.result() for future in as_completed(futures)}
-            except BaseException:
-                executor.shutdown(cancel_futures=True)
-                raise
+            with FutureWaiter(executor)(futures, add_bar=not self.debug) as waiter:
+                bundle_contents = {futures[future].path.name: future.result() for future in waiter}
 
         log.info(f'Saving {path_repr(self.output)}')
         with self.output.open('w', encoding='utf-8') as f:
@@ -154,9 +145,9 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
             print(f'Bundle {path_repr(src_path)} contains: {content_path}')
 
     def iter_bundle_contents(self):
-        for src_path in self.iter_src_paths():
-            for path in Bundle(src_path).contents:
-                yield src_path, path
+        for bundle in self.find_bundles():
+            for path in bundle.contents:
+                yield bundle.path, path
 
     def iter_matching_contents(self):
         import posixpath
@@ -174,24 +165,87 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
                     yield src_path, content_path
 
 
-class Extract(BundleCommand, help='Extract assets from a .bundle file'):
+class Extract(ParallelBundleCommand, help='Extract assets from a .bundle file'):
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
-    parallel: int = Option(
-        '-P', type=NumRange(min=1), default=4, help='Number of extraction processes to use in parallel'
-    )
+    force = Flag('-F', help='Force re-extraction even if output files already exist (default: skip existing files)')
+    allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
 
     def main(self):
-        extractor = BundleExtractor(self.output)
-        with ProcessPoolExecutor(max_workers=self.parallel, initializer=log_initializer(self.verbose)) as executor:
-            futures = {
-                executor.submit(extractor.extract_bundle, src_path): src_path for src_path in self.iter_src_paths()
-            }
+        dst_dir, force, allow_raw = self.output, self.force, self.allow_raw
+        with self.executor() as executor:
+            futures = [executor.submit(bundle.extract, dst_dir, force, allow_raw) for bundle in self.find_bundles()]
+            log.info(f'Extracting assets from {len(futures):,d} bundles...')
+            FutureWaiter.wait_for(executor, futures, add_bar=not self.debug)
+
+
+# endregion
+
+
+class FutureWaiter:
+    __slots__ = ('executor', 'futures', 'tqdm', '_close_tqdm')
+
+    def __init__(self, executor: ProcessPoolExecutor | ThreadPoolExecutor):
+        self.executor = executor
+        self.futures = None
+        self.tqdm = None
+        self._close_tqdm = False
+
+    @classmethod
+    def wait_for(cls, executor: ProcessPoolExecutor | ThreadPoolExecutor, futures, **kwargs):
+        with cls(executor) as waiter:
+            waiter.wait(futures, **kwargs)
+
+    def __enter__(self) -> FutureWaiter:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            return
+        if self._close_tqdm:
             try:
-                for future in as_completed(futures):
-                    future.result()
-            except BaseException:
-                executor.shutdown(cancel_futures=True)
-                raise
+                self.tqdm.close()
+            except Exception:  # noqa
+                log.error('Error closing tqdm during executor shutdown', exc_info=True)
+        self.executor.shutdown(cancel_futures=True)
+
+    def __call__(
+        self,
+        futures,
+        prog_bar: tqdm | None = None,
+        *,
+        add_bar: bool = False,
+        unit: str = ' bundles',
+        maxinterval: float = 1,
+    ):
+        if add_bar:
+            if prog_bar is not None:
+                raise ValueError('Invalid combination of prog_bar and add_bar - only one is allowed')
+            self.init_tqdm(total=len(futures), unit=unit, maxinterval=maxinterval)
+        elif prog_bar is not None:
+            self.tqdm = prog_bar
+
+        self.futures = futures
+        return self
+
+    def __iter__(self):
+        if not self.futures:
+            raise RuntimeError(f'It is only possible to iterate over {self.__class__.__name__} if called with futures')
+        elif (prog_bar := self.tqdm) is not None:
+            for future in as_completed(self.futures):
+                prog_bar.update()
+                yield future
+        else:
+            yield from as_completed(self.futures)
+
+    def init_tqdm(self, **kwargs):
+        self.tqdm = bar = tqdm(**kwargs)
+        self._close_tqdm = True
+        return bar
+
+    def wait(self, futures, prog_bar: tqdm | None = None, **kwargs):
+        self(futures, prog_bar, **kwargs)
+        for future in self:
+            future.result()
 
 
 if __name__ == '__main__':
