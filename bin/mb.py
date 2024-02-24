@@ -77,8 +77,10 @@ class File(Save, help='Download and save a single file'):
 
 
 class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
+    pattern = Option('-p', metavar='GLOB', help='If specified, only download files matching this glob pattern')
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
     limit: int = Option('-L', type=NumRange(min=1), help='Limit the number of files to download')
+    dry_run = Flag('-D', help='Print the names of the files that would be downloaded instead of downloading them')
 
     def main(self):
         paths = self._get_paths()
@@ -86,7 +88,16 @@ class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
             log.info('All files have already been downloaded (use --force to force them to be re-downloaded)')
             return
 
-        log.info(f'Downloading {len(paths):,d} files using {self.parallel} threads')
+        prefix = '[DRY RUN] Would download' if self.dry_run else 'Downloading'
+        log.info(f'{prefix} {len(paths):,d} files using {self.parallel} threads')
+        if self.dry_run:
+            log.info('Files that would be downloaded:')
+            for path in sorted(paths):
+                print(f' - {path}')
+        else:
+            self._download(paths)
+
+    def _download(self, paths: list[str]):
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
             futures = {executor.submit(self.client.get_raw_data, path): path for path in paths}
             with FutureWaiter(executor)(futures, add_bar=not self.verbose, unit=' files') as waiter:
@@ -99,6 +110,12 @@ class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
             to_download = [row['FilePath'] for row in rows]
         else:
             to_download = [row['FilePath'] for row in rows if not self.output.joinpath(row['FilePath']).exists()]
+
+        if self.pattern:
+            from fnmatch import filter
+
+            to_download = filter(to_download, self.pattern)
+
         if self.limit:
             return to_download[:self.limit]
         return to_download
