@@ -45,7 +45,8 @@ Scripts
 Scripts are in the ``bin`` directory.  The current scripts that are available:
 
 - ``assets.py``: Download bundle files and extract assets (images, audio, etc) from them
-- ``catalog.py``: Download basic master/asset catalog info
+- ``catalog.py``: Download basic MB/asset catalog info
+- ``mb.py``: Download raw data referenced by ``DownloadRawDataMB`` and view info from other MB files
 - ``runes.py``: (WIP / incomplete) Calculate rune stat totals and ticket costs
 
 Use ``--help`` to see more info about the options they support.  Example::
