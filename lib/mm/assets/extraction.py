@@ -2,6 +2,11 @@
 Asset extraction logic using UnityPy
 
 Based on: https://github.com/K0lb3/UnityPy/blob/master/UnityPy/tools/extractor.py
+
+Unhandled types (not a comprehensive list):
+No exporter is configured for obj=<PPtr <ObjectReader Material>> with obj.type=<ClassIDType.Material: 21>
+No exporter is configured for obj=<PPtr <ObjectReader SpriteAtlas>> with obj.type=<ClassIDType.SpriteAtlas: 687078895>
+No exporter is configured for obj=<PPtr <ObjectReader AnimationClip>> with obj.type=<ClassIDType.AnimationClip: 74>
 """
 
 from __future__ import annotations
@@ -9,63 +14,34 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from functools import cached_property
 from io import BytesIO
 from pathlib import Path
-from typing import Generic, TypeVar, Type
+from typing import TYPE_CHECKING, Generic, TypeVar, Type
 
-import UnityPy
-from UnityPy.classes import (
-    Object,
-    PPtr,
-    MonoBehaviour,
-    TextAsset,
-    Font,
-    Shader,
-    Mesh,
-    Sprite,
-    Texture2D,
-    AudioClip,
-    GameObject,
-)
+from UnityPy.classes import Object, PPtr, MonoBehaviour, TextAsset, Font, Shader, Mesh, Sprite, Texture2D, AudioClip
+from UnityPy.classes import GameObject
 from UnityPy.enums.ClassIDType import ClassIDType
 
 from mm.fs import path_repr
 
-__all__ = ['Bundle', 'BundleExtractor', 'AssetExporter']
+if TYPE_CHECKING:
+    from .bundles import Bundle
+
+__all__ = ['BundleExtractor', 'AssetExporter']
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
 
-class Bundle:
-    def __init__(self, path: Path):
-        self.path = path
-
-    @cached_property
-    def env(self) -> UnityPy.environment.Environment:
-        return UnityPy.load(self.path.as_posix())  # UnityPy does not support Path objects
-
-    @property
-    def contents(self):
-        return self.env.container
-
-    def get_content_paths(self) -> list[str]:
-        return list(self.env.container)
-
-    def extract(self, dst_dir: Path, force: bool = False):
-        # TODO: Update extract_bundle to use env from this object
-        BundleExtractor(dst_dir, force).extract_bundle(self.path)
-
-
 class BundleExtractor:
-    __slots__ = ('dst_dir', 'force', 'exported', '_exporters')
+    __slots__ = ('dst_dir', 'force', 'exported', '_exporters', 'unknown_as_raw')
 
-    def __init__(self, dst_dir: Path, force: bool = False):
+    def __init__(self, dst_dir: Path, force: bool = False, unknown_as_raw: bool = False):
         self.dst_dir = dst_dir
         self.force = force
         self.exported = set()
         self._exporters = {}
+        self.unknown_as_raw = unknown_as_raw
 
     def _get_exporter(self, id_type: ClassIDType) -> AssetExporter:
         if exporter := self._exporters.get(id_type):
@@ -73,38 +49,40 @@ class BundleExtractor:
         try:
             exp_cls = AssetExporter.for_type(id_type)
         except KeyError as e:
-            raise MissingExporter from e
+            if self.unknown_as_raw:
+                exp_cls = RawExporter
+            else:
+                raise MissingExporter from e
         self._exporters[id_type] = exporter = exp_cls(self)
         return exporter
 
-    def extract_bundle(self, src_path: Path):
-        env = UnityPy.load(src_path.as_posix())  # UnityPy does not support Path objects
-        log.debug(f'Loaded {len(env.container)} file(s) from {path_repr(src_path)}')
-        for obj_path, obj in env.container.items():
+    def extract_bundle(self, bundle: Bundle):
+        log.debug(f'Loaded {len(bundle)} file(s) from {bundle.path_str}')
+        for obj_path, obj in bundle.env.container.items():
             try:
                 self.save_asset(obj_path, obj)
             except MissingExporter:
                 log.warning(
-                    f'No exporter is configured for {obj=} with {obj.type=} from {path_repr(src_path)}',
+                    f'No exporter is configured for {obj=} with {obj.type=} from {bundle.path_str}',
                     extra={'color': 'yellow'},
                 )
 
     def save_asset(self, obj_path: str, obj):
         exporter = self._get_exporter(obj.type)
-        asset = obj.read()
-        exporter.export_all(asset, self.dst_dir.joinpath(obj_path))
+        exporter.export_all(obj.read(), self.dst_dir.joinpath(obj_path))
 
 
 class AssetExporter(ABC, Generic[T]):
     __slots__ = ('extractor', 'exported', 'force')
     _id_type_cls_map = {}
-    id_type: ClassIDType
+    id_type: ClassIDType = None
     default_ext: str | None = None
 
-    def __init_subclass__(cls, id_type: ClassIDType, ext: str = None, **kwargs):  # noqa
+    def __init_subclass__(cls, id_type: ClassIDType = None, ext: str = None, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.id_type = id_type
-        cls._id_type_cls_map[id_type] = cls
+        if id_type is not None:
+            cls.id_type = id_type
+            cls._id_type_cls_map[id_type] = cls
         if ext:
             cls.default_ext = ext
 
@@ -119,13 +97,18 @@ class AssetExporter(ABC, Generic[T]):
 
     @abstractmethod
     def export_bytes(self, obj: T) -> bytes:
+        """
+        Required because the majority of subclasses only need to implement this method, but overriding
+        :meth:`.export_all` can obviate the need for this method.
+        """
         raise NotImplementedError
 
     def _register(self, obj: T):
+        """Register an asset as having been exported to avoid duplicate work / problems caused by circular refs"""
         self.exported.add((obj.assets_file, obj.path_id))
 
     def maybe_update_dst_path(self, obj: T, dst_path: Path) -> Path:
-        if dst_path.suffix:
+        if dst_path.suffix or not self.default_ext:
             return dst_path
         return dst_path.parent.joinpath(f'{dst_path.name}{self.default_ext}')
 
@@ -135,6 +118,7 @@ class AssetExporter(ABC, Generic[T]):
     def _export(self, obj: T, dst_path: Path):
         dst_path = self.maybe_update_dst_path(obj, dst_path)
         if not self.force and dst_path.exists():
+            # TODO: Behavior control to skip / overwrite / check hash + create dated version on change?
             log.debug(f'Skipping {path_repr(dst_path)} - it already exists')
             return
 
@@ -143,10 +127,24 @@ class AssetExporter(ABC, Generic[T]):
         except SkipExport:
             pass
         else:
-            log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            dst_path.write_bytes(data)
-            self._register(obj)
+            self._save(obj, data, dst_path)
+
+    def _save(self, obj: T, data: bytes, dst_path: Path):
+        log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        dst_path.write_bytes(data)
+        self._register(obj)
+
+
+class RawExporter(AssetExporter[Object]):
+    def export_bytes(self, obj: Object) -> bytes:
+        return obj.get_raw_data()
+
+    def _save(self, obj: T, data: bytes, dst_path: Path):
+        log.info(f'Saving raw {obj.__class__.__name__} object to {path_repr(dst_path)}', extra={'color': 13})
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        dst_path.write_bytes(data)
+        self._register(obj)
 
 
 class TextExporter(AssetExporter[TextAsset], id_type=ClassIDType.TextAsset, ext='.txt'):
@@ -183,16 +181,31 @@ class ShaderExporter(AssetExporter[Shader], id_type=ClassIDType.Shader, ext='.tx
 
 
 class MonoBehaviorExporter(AssetExporter[MonoBehaviour | Object], id_type=ClassIDType.MonoBehaviour, ext='.bin'):
+    """
+    MonoBehaviour assets are usually used to save the class instances with their values. If a type tree exists, it
+    can be used to read the whole data, but if it doesn't exist, then it is usually necessary to investigate the
+    class that loads the specific MonoBehaviour to extract the data.
+    """
+
     def maybe_update_dst_path(self, obj: Font, dst_path: Path) -> Path:
-        if dst_path.suffix:
-            return dst_path
-        elif obj.serialized_type and obj.serialized_type.nodes:
+        use_json = obj.serialized_type and obj.serialized_type.nodes
+        if suffix := dst_path.suffix:
+            # if suffix != '.asset' or not use_json:
+            if not use_json:
+                return dst_path
+            # name = dst_path.stem
+            name = dst_path.name
+        else:
+            name = dst_path.name
+
+        if use_json:
             ext = '.json'
         # elif isinstance(obj, MonoBehaviour) and obj.m_Script:
         #     pass  # It's unclear what should be handled here, but the extension would be json in the extractor code
         else:
             ext = self.default_ext
-        return dst_path.parent.joinpath(f'{dst_path.name}{ext}')
+
+        return dst_path.parent.joinpath(f'{name}{ext}')
 
     def export_bytes(self, obj: MonoBehaviour | Object) -> bytes:
         if obj.serialized_type and obj.serialized_type.nodes:
@@ -234,7 +247,7 @@ class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip,
 
     def export_all(self, obj: AudioClip, dst_path: Path):
         self._register(obj)
-        samples = obj.samples  # This is a plain property - store the returned value to avoid re-computation
+        samples: dict[str, bytes] = obj.samples  # This is a plain property - stored here to avoid re-computation
         if not samples:
             log.info(f'No audio samples found for {path_repr(dst_path)}', extra={'color': 'yellow'})
         elif len(samples) == 1:

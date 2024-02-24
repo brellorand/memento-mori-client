@@ -1,2 +1,3 @@
+from .bundles import Bundle, find_bundles
 from .catalog import AssetCatalog, Asset, AssetDir
-from .extraction import Bundle, BundleExtractor, AssetExporter
+from .extraction import BundleExtractor, AssetExporter
