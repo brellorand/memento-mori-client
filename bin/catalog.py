@@ -47,8 +47,12 @@ class Show(CatalogCLI, help='Show info'):
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))
 
 
+# region Save Commands
+
+
 class Save(CatalogCLI, help='Save catalog metadata to a file'):
-    item = Positional(choices=('master', 'assets', 'asset_data'), help='The type of catalog/item to save')
+    _choices = {'master': 'The master catalog', 'assets': 'The full asset catalog'}
+    item = SubCommand(title='Items', local_choices=_choices, help='The type of catalog/item to save')
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
     split = Flag('-s', help='Split the specified catalog into separate files for each top-level key')
 
@@ -57,18 +61,13 @@ class Save(CatalogCLI, help='Save catalog metadata to a file'):
             self._save(data, *name_parts, raw=raw)
 
     def iter_names_and_data(self):
-        if self.item in ('assets', 'master'):
-            name = f'{self.item}-catalog'
-            data = self.client.asset_catalog.data if self.item == 'assets' else self.client.master_catalog
-            if self.split:
-                for key, val in data.items():
-                    yield (name, f'{key}.json'), val, False
-            else:
-                yield (f'{name}.json',), data, False
-        elif self.item == 'asset_data':
-            asset_catalog = self.client.asset_catalog
-            for attr in ('key_data', 'bucket_data', 'entry_data', 'extra_data'):
-                yield (f'{attr}.dat',), getattr(asset_catalog, attr), True
+        name = f'{self.item}-catalog'
+        data = self.client.asset_catalog.data if self.item == 'assets' else self.client.master_catalog
+        if self.split:
+            for key, val in data.items():
+                yield (name, f'{key}.json'), val, False
+        else:
+            yield (f'{name}.json',), data, False
 
     def _save(self, data, *name, raw: bool = False):
         path = self.output.joinpath(*name)
@@ -79,6 +78,16 @@ class Save(CatalogCLI, help='Save catalog metadata to a file'):
         else:
             with path.open('w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+
+
+class AssetData(Save, help='Decoded content from the asset catalog that was base64 encoded'):
+    def iter_names_and_data(self):
+        asset_catalog = self.client.asset_catalog
+        for attr in ('key_data', 'bucket_data', 'entry_data', 'extra_data'):
+            yield (f'{attr}.dat',), getattr(asset_catalog, attr), True
+
+
+# endregion
 
 
 if __name__ == '__main__':

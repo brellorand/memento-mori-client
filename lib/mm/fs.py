@@ -14,7 +14,7 @@ from tempfile import gettempdir
 
 import msgpack
 
-from .exceptions import CacheMiss
+from .exceptions import CacheError, CacheMiss
 
 __all__ = ['validate_or_make_dir', 'get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr']
 log = logging.getLogger(__name__)
@@ -43,15 +43,24 @@ class FileCache:
             raise CacheMiss
 
         try:
-            if path.suffix == '.json':
-                return json.loads(path.read_text('utf-8'))
-            elif path.suffix in ('.mpk', '.msgpack'):
-                return msgpack.unpackb(path.read_bytes(), timestamp=3)
+            value = self._get(path)
+        except CacheError:
+            raise
         except Exception as e:
             log.warning(f'Error reading or deserializing cached data from path={path.as_posix()}')
             raise CacheMiss from e
+        else:
+            log.debug(f'Loaded cached data from {path.relative_to(self.root).as_posix()}')
+            return value
 
-        raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
+    @classmethod
+    def _get(cls, path: Path):
+        if path.suffix == '.json':
+            return json.loads(path.read_text('utf-8'))
+        elif path.suffix in ('.mpk', '.msgpack'):
+            return msgpack.unpackb(path.read_bytes(), timestamp=3)
+        else:
+            raise CacheError(f'Unexpected extension for cache path={path.as_posix()}')
 
     def store(self, data, name: str, raw: bool = False):
         path = self.root.joinpath(name)
@@ -61,7 +70,7 @@ class FileCache:
             with path.open('w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
         elif path.suffix in ('.mpk', '.msgpack'):
-            path.write_bytes(msgpack.packb(data, timestamp=3))
+            path.write_bytes(msgpack.packb(data))
         else:
             raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
 
