@@ -30,9 +30,9 @@ class OrtegaInfo(DictWrapper):
     status_code: int = DataProperty('ortegastatuscode', int)
     next_access_token: str = DataProperty('orteganextaccesstoken')  # Usually an empty string
     asset_version: str = DataProperty('ortegaassetversion')
-    master_version: str = DataProperty('ortegamasterversion')
+    mb_version: str = DataProperty('ortegamasterversion')
     utc_now_timestamp: str = DataProperty('ortegautcnowtimestamp')
-    master_version_dt: datetime = DataProperty('ortegamasterversion', type=parse_ms_epoch_ts)
+    mb_version_dt: datetime = DataProperty('ortegamasterversion', type=parse_ms_epoch_ts)
     utc_now_timestamp_dt: datetime = DataProperty('ortegautcnowtimestamp', type=parse_ms_epoch_ts)
 
 
@@ -116,7 +116,7 @@ class GameData(DictWrapper):
 
     version: str = DataProperty('AppAssetVersionInfo.Version')
     asset_catalog_uri_fmt: str = DataProperty('AssetCatalogFixedUriFormat')
-    master_uri_fmt: str = DataProperty('MasterUriFormat')
+    mb_uri_fmt: str = DataProperty('MasterUriFormat')
     raw_data_uri_fmt: str = DataProperty('RawDataUriFormat')
 
     def __repr__(self) -> str:
@@ -131,11 +131,17 @@ class GameData(DictWrapper):
             region_world_map[world.region].append(world)
         return region_world_map
 
+    def get_world(self, world_id: int) -> WorldInfo:
+        worlds = self.region_world_map.get(Region.for_world(world_id), [])
+        if world := next((w for w in worlds if w.id == world_id), None):
+            return world
+        raise ValueError(f'Invalid {world_id=} - could not find matching world data')
+
     @cached_property
     def uri_formats(self) -> dict[str, str]:
         return {
             'asset_catalog': self.asset_catalog_uri_fmt,
-            'master': self.master_uri_fmt,
+            'mb_catalog': self.mb_uri_fmt,
             'raw_data': self.raw_data_uri_fmt,
         }
 
@@ -153,3 +159,41 @@ class FileInfo(DictWrapper):
     hash: str = DataProperty('Hash')
     name: str = DataProperty('Name')
     size: int = DataProperty('Size', int)
+
+
+def _parse_dt(dt_str: str) -> datetime:
+    return datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+
+
+class WorldGroup(DictWrapper):
+    """
+    Represents a row in WorldGroupMB
+
+    Example content:
+        "Id": 23,
+        "IsIgnore": null,
+        "Memo": "us",
+        "EndTime": "2100-01-01 00:00:00",
+        "EndLegendLeagueDateTime": "2100-01-01 00:00:00",
+        "TimeServerId": 4,
+        "StartTime": "2023-08-08 04:00:00",
+        "GrandBattleDateTimeList": [
+            {"EndTime": "2023-08-28 03:59:59", "StartTime": "2023-08-21 04:00:00"},
+            ...
+            {"EndTime": "2024-02-19 03:59:59", "StartTime": "2024-02-12 04:00:00"}
+        ],
+        "StartLegendLeagueDateTime": "2023-09-05 04:00:00",
+        "WorldIdList": [4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008]
+    """
+
+    id: int = DataProperty('Id')
+    region: Region = DataProperty('TimeServerId', type=Region)
+    first_legend_league_dt: datetime = DataProperty('StartLegendLeagueDateTime', type=_parse_dt)
+    world_ids: list[int] = DataProperty('WorldIdList')
+
+    @cached_property
+    def grand_battles(self) -> list[tuple[datetime, datetime]]:
+        return [
+            (_parse_dt(row['StartTime']), _parse_dt(row['EndTime']))
+            for row in self.data['GrandBattleDateTimeList']
+        ]

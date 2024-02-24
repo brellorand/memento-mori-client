@@ -54,7 +54,7 @@ class Show(CatalogCLI, help='Show info'):
 
 
 class Save(CatalogCLI, help='Save catalog metadata to a file'):
-    _choices = {'master': 'The master catalog', 'assets': 'The full asset catalog'}
+    _choices = {'mb': 'The MB catalog', 'assets': 'The full asset catalog'}
     item = SubCommand(title='Items', local_choices=_choices, help='The type of catalog/item to save')
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
     split = Flag('-s', help='Split the specified catalog into separate files for each top-level key')
@@ -65,7 +65,7 @@ class Save(CatalogCLI, help='Save catalog metadata to a file'):
 
     def iter_names_and_data(self):
         name = f'{self.item}-catalog'
-        catalog = self.client.asset_catalog if self.item == 'assets' else self.client.master_catalog
+        catalog = self.client.asset_catalog if self.item == 'assets' else self.client.mb_catalog
         if self.split:
             for key, val in catalog.data.items():
                 yield (name, f'{key}.json'), val, False
@@ -90,7 +90,7 @@ class AssetData(Save, help='Decoded content from the asset catalog that was base
             yield (f'{attr}.dat',), getattr(asset_catalog, attr), True
 
 
-class MasterContent(Save, help='Download all files listed in the master catalog'):
+class MBContent(Save, choice='mb_content', help='Download all files listed in the MB catalog'):
     force = Flag('-F', help='Force files to be re-downloaded even if they already exist and their hash matches')
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
     limit: int = Option('-L', type=NumRange(min=1), help='Limit the number of files to download')
@@ -102,19 +102,19 @@ class MasterContent(Save, help='Download all files listed in the master catalog'
             log.info('All files have already been downloaded (use --force to force them to be re-downloaded)')
             return
 
-        log.info(f'Downloading {len(file_names):,d} files')
+        log.info(f'Downloading {len(file_names):,d} files using {self.parallel} threads')
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-            futures = {executor.submit(self.client.get_master, name): name for name in file_names}
+            futures = {executor.submit(self.client.get_mb_data, name): name for name in file_names}  # noqa
             with FutureWaiter(executor)(futures, add_bar=not self.verbose, unit=' files') as waiter:
                 for future in waiter:
                     self._save_data(futures[future], future.result())
 
     def _get_names(self) -> list[str]:
         if self.force:
-            to_download = list(self.client.master_catalog.files)
+            to_download = list(self.client.mb_catalog.files)
         else:
             to_download = []
-            for name, info in self.client.master_catalog.files.items():
+            for name, info in self.client.mb_catalog.files.items():
                 if file_hash := self._get_hash(name):
                     if file_hash == info.hash:
                         log.debug(f'Skipping {name} - its hash matches: {file_hash}')
@@ -148,7 +148,7 @@ class MasterContent(Save, help='Download all files listed in the master catalog'
         out_path = self.output.joinpath(name + '.json')
         log.debug(f'Saving {path_repr(out_path)}')
         with out_path.open('w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+            json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder, max_line_len=119)
 
 
 # endregion

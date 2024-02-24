@@ -298,6 +298,20 @@ class AuthClient(RequestsClient):
             # 'User-Agent': 'UnityPlayer/2021.3.10f1 (UnityWebRequest/1.0, libcurl/7.80.0-DEV)',
             # 'X-Unity-Version': '2021.3.10f1',
         }
+        """
+        It appears that a different app version value may be expected for different platforms...
+
+        In AppVersionMB:
+        [
+            {"Id": 1, "IsIgnore": null, "Memo": null, "DeviceType": 1, "AppVersion": "2.8.1"},
+            {"Id": 2, "IsIgnore": null, "Memo": null, "DeviceType": 2, "AppVersion": "2.8.1"},
+            {"Id": 3, "IsIgnore": null, "Memo": null, "DeviceType": 3, "AppVersion": "2.8.1"},
+            {"Id": 4, "IsIgnore": null, "Memo": null, "DeviceType": 5, "AppVersion": "2.8.1"}
+        ]
+
+        In mementomori-helper, in MementoMori.Ortega/Share/Enums/DeviceType.cs, iOS is listed as 1, followed by
+        Android (2, I assume), UnityEditor, Win64, DmmGames (5, I assume), Steam, Apk
+        """
         super().__init__(AUTH_HOST, scheme='https', headers=headers)
         self.cache = FileCache('auth', use_cache=use_cache)
 
@@ -307,17 +321,6 @@ class AuthClient(RequestsClient):
 
     @cached_property
     def ortega_info(self) -> OrtegaInfo:
-        """
-        Example info::
-
-            {
-                'ortegastatuscode': '0',
-                'orteganextaccesstoken': '',
-                'ortegaassetversion': 'fd54f8ee7ec14a3f498fc7d31f7b4b1e1f5988fd',
-                'ortegamasterversion': '1707981566144',
-                'ortegautcnowtimestamp': '1708294191117',
-            }
-        """
         try:
             headers = self.cache.get('ortega-headers.json')
         except CacheMiss:
@@ -351,6 +354,7 @@ class DataClient(RequestsClient):
         }
         super().__init__(urlparse(self.game_data.asset_catalog_uri_fmt).hostname, scheme='https', headers=headers)
         self.cache = FileCache('data', use_cache=use_cache)
+        self._mb_cache = FileCache('mb')
 
     def _get_asset(self, name: str) -> Response:
         url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
@@ -372,29 +376,43 @@ class DataClient(RequestsClient):
     #     url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
     #     return self.head(url, relative=False).headers['etag'].strip('"')
 
-    def get_master(self, name: str):
-        url = self.game_data.master_uri_fmt.format(self.auth.ortega_info.master_version, name)
+    def get_mb_data(self, name: str, use_cached: bool = False):
+        if not use_cached:
+            return self._get_mb_data(name)
+
+        try:
+            return self._mb_cache.get(f'{name}.msgpack')
+        except CacheMiss:
+            data = self._get_mb_data(name)
+            self._mb_cache.store(data, f'{name}.msgpack')
+            return data
+
+    def _get_mb_data(self, name: str):
+        url = self.game_data.mb_uri_fmt.format(self.auth.ortega_info.mb_version, name)
         resp = self.get(url, relative=False)
         return msgpack.unpackb(resp.content, timestamp=3)
 
+    def get_raw_data(self, name: str):
+        url = self.game_data.raw_data_uri_fmt.format(name)
+        resp = self.get(url, relative=False)
+        return resp.content
+
     @cached_property
-    def master_catalog(self) -> MBFileMap:
+    def mb_catalog(self) -> MBFileMap:
         """
-        Example:
+        Example info map:
         {
-            'MasterBookInfoMap': {
-                'AchieveRankingRewardMB': {'Hash': 'fd9d21d514779c2e3758992907156420', 'Name': 'AchieveRankingRewardMB', 'Size': 47188},
-                'ActiveSkillMB': {'Hash': 'ae15826e4bd042d14a61dad219c91932', 'Name': 'ActiveSkillMB', 'Size': 372286},
-                ...
-                'VipMB': {'Hash': 'be0114a5a24b5350459cdba6eea6bbcf', 'Name': 'VipMB', 'Size': 16293},
-                'WorldGroupMB': {'Hash': '34afb2d419e8153a451d53b54d9829ae', 'Name': 'WorldGroupMB', 'Size': 20907}
-            }
+            'AchieveRankingRewardMB': {'Hash': 'fd9d21d514779c2e3758992907156420', 'Name': 'AchieveRankingRewardMB', 'Size': 47188},
+            'ActiveSkillMB': {'Hash': 'ae15826e4bd042d14a61dad219c91932', 'Name': 'ActiveSkillMB', 'Size': 372286},
+            ...
+            'VipMB': {'Hash': 'be0114a5a24b5350459cdba6eea6bbcf', 'Name': 'VipMB', 'Size': 16293},
+            'WorldGroupMB': {'Hash': '34afb2d419e8153a451d53b54d9829ae', 'Name': 'WorldGroupMB', 'Size': 20907}
         }
         """
         try:
             catalog = self.cache.get('master-catalog.msgpack')
         except CacheMiss:
-            catalog = self.get_master('master-catalog')
+            catalog = self.get_mb_data('master-catalog')
             self.cache.store(catalog, 'master-catalog.msgpack')
 
         return MBFileMap(catalog)

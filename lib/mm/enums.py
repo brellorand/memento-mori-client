@@ -44,3 +44,11 @@ class Region(IntEnum):
     NORTH_AMERICA = 4
     EUROPE = 5
     GLOBAL = 6
+
+    @classmethod
+    def for_world(cls, world_id: int) -> Region:
+        region = world_id // 1000
+        try:
+            return cls(region)
+        except ValueError as e:
+            raise ValueError(f'Invalid {region=} for {world_id=}') from e
