@@ -1,21 +1,21 @@
 #!/usr/bin/env python
 
-import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, main
+from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, main
 from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.client import DataClient
-from mm.data import WorldGroup
 from mm.enums import Region
 from mm.fs import path_repr
-from mm.utils import CompactJSONEncoder, FutureWaiter
+from mm.mb_models import MB, LOCALES, WorldGroup
+from mm.output import OUTPUT_FORMATS, YAML, CompactJSONEncoder, pprint
+from mm.utils import FutureWaiter
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
     no_client_cache = Flag('-C', help='Do not read cached game/catalog data')
     no_mb_cache = Flag('-M', help='Do not read cached MB data')
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
+    locale = Option('-L', choices=LOCALES, default='EnUs', help='Locale to use for text resources')
 
     def _init_command_(self):
         from mm.logging import init_logging
@@ -38,23 +39,24 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
     def client(self) -> DataClient:
         return DataClient(use_cache=not self.no_client_cache)
 
-    def _get_mb(self, name: str, json_path: Path | None = None):
-        if json_path:
-            return json.loads(json_path.read_text('utf-8'))
-        return self.client.get_mb_data(name, use_cached=not self.no_mb_cache)
+    def get_mb(self, json_cache_map=None) -> MB:
+        return self.client.get_mb(use_cached=not self.no_mb_cache, json_cache_map=json_cache_map, locale=self.locale)
+
 
 # region Save Commands
 
 
 class Save(MBDataCLI, help='Save data referenced by a MB file'):
     item = SubCommand()
-    metadata: Path = Option('-m', type=IN_FILE, help='JSON file containing downloadable file metadata')
+    mb_path: Path = Option(
+        '-m', type=IN_FILE, help='JSON file containing DownloadRawDataMB data (default: download latest)'
+    )
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
     force = Flag('-F', help='Force files to be re-downloaded even if they already exist')
 
     @cached_property
     def raw_data_info(self) -> list[dict[str, int | str | bool]]:
-        return self._get_mb('DownloadRawDataMB', self.metadata)
+        return self.get_mb({'DownloadRawDataMB': self.mb_path} if self.mb_path else None).get_data('DownloadRawDataMB')
 
     def _save(self, name: str, data: bytes, log_lvl: int = logging.DEBUG):
         path = self.output.joinpath(name)
@@ -126,6 +128,12 @@ class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
 
 class Show(MBDataCLI, help='Show info from MB files'):
     item = SubCommand()
+    format = Option(
+        '-f', choices=OUTPUT_FORMATS, default='json-pretty' if YAML is None else 'yaml', help='Output format'
+    )
+
+    def pprint(self, data):
+        pprint(self.format, data)
 
 
 class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
@@ -134,12 +142,12 @@ class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
     past = Flag('-p', help='Include past Grand Battle dates (default: only current/future dates)')
 
     def main(self):
-        groups = self.get_groups()
-        print(json.dumps(groups, indent=4, ensure_ascii=False, cls=CompactJSONEncoder))
+        self.pprint(self.get_groups())
 
     def get_groups(self):
+        mb = self.get_mb({'WorldGroupMB': self.mb_path} if self.mb_path else None)
         groups = []
-        for i, group in enumerate(map(WorldGroup, self._get_mb('WorldGroupMB', self.mb_path))):
+        for i, group in enumerate(mb.world_groups):
             if self.region and group.region != self.region:
                 log.debug(f'Skipping row {i} with region={group.region}')
                 continue
@@ -161,6 +169,20 @@ class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
             'worlds': ', '.join(map(str, sorted(game_data.get_world(wid).number for wid in group.world_ids))),
             'grand_battles': [f'{start.isoformat(" ")} ~ {end.isoformat(" ")}' for start, end in grand_battles],
         }
+
+
+class VIP(Show, choice='vip', help='Show daily VIP rewards by level'):
+    item = Action()
+
+    @item
+    def daily_rewards(self):
+        data = {
+            f'Level {level.level}': [
+                f'{item.display_name} x {count:,d}' for item, count in level.daily_rewards
+            ]
+            for level in self.get_mb().vip_levels
+        }
+        self.pprint(data)
 
 
 if __name__ == '__main__':

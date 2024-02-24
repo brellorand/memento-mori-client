@@ -8,7 +8,7 @@ import logging
 import re
 from functools import cached_property
 from threading import Lock
-from typing import Union, MutableMapping, Any, Mapping
+from typing import TYPE_CHECKING, Union, MutableMapping, Any, Mapping
 from urllib.parse import urlencode, urlparse
 from uuid import uuid4
 from weakref import finalize
@@ -17,10 +17,14 @@ import msgpack
 from requests import Session, Response
 
 from .assets import AssetCatalog
-from .data import GameData, OrtegaInfo, MBFileMap
+from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss
 from .fs import FileCache
+from .mb_models import MB, Locale
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 __all__ = ['AuthClient', 'DataClient']
 log = logging.getLogger(__name__)
@@ -397,25 +401,20 @@ class DataClient(RequestsClient):
         resp = self.get(url, relative=False)
         return resp.content
 
-    @cached_property
-    def mb_catalog(self) -> MBFileMap:
-        """
-        Example info map:
-        {
-            'AchieveRankingRewardMB': {'Hash': 'fd9d21d514779c2e3758992907156420', 'Name': 'AchieveRankingRewardMB', 'Size': 47188},
-            'ActiveSkillMB': {'Hash': 'ae15826e4bd042d14a61dad219c91932', 'Name': 'ActiveSkillMB', 'Size': 372286},
-            ...
-            'VipMB': {'Hash': 'be0114a5a24b5350459cdba6eea6bbcf', 'Name': 'VipMB', 'Size': 16293},
-            'WorldGroupMB': {'Hash': '34afb2d419e8153a451d53b54d9829ae', 'Name': 'WorldGroupMB', 'Size': 20907}
-        }
-        """
+    def _get_mb_catalog(self):
         try:
-            catalog = self.cache.get('master-catalog.msgpack')
+            return self.cache.get('master-catalog.msgpack')
         except CacheMiss:
             catalog = self.get_mb_data('master-catalog')
             self.cache.store(catalog, 'master-catalog.msgpack')
+            return catalog
 
-        return MBFileMap(catalog)
+    @cached_property
+    def mb_catalog(self) -> MB:
+        return MB(self, data=self._get_mb_catalog())
+
+    def get_mb(self, *, use_cached: bool = True, json_cache_map: dict[str, Path] = None, locale: Locale = 'EnUS') -> MB:
+        return MB(self, use_cached=use_cached, json_cache_map=json_cache_map, locale=locale)
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:

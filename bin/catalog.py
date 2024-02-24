@@ -14,7 +14,8 @@ from cli_command_parser.inputs import Path as IPath, NumRange
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.client import DataClient
 from mm.fs import path_repr
-from mm.utils import CompactJSONEncoder, FutureWaiter
+from mm.output import CompactJSONEncoder
+from mm.utils import FutureWaiter
 
 log = logging.getLogger(__name__)
 
@@ -111,10 +112,10 @@ class MBContent(Save, choice='mb_content', help='Download all files listed in th
 
     def _get_names(self) -> list[str]:
         if self.force:
-            to_download = list(self.client.mb_catalog.files)
+            to_download = list(self.client.mb_catalog.file_map)
         else:
             to_download = []
-            for name, info in self.client.mb_catalog.files.items():
+            for name, info in self.client.mb_catalog.file_map.items():
                 if file_hash := self._get_hash(name):
                     if file_hash == info.hash:
                         log.debug(f'Skipping {name} - its hash matches: {file_hash}')

@@ -12,7 +12,7 @@ from typing import Any
 from .enums import Region
 from .utils import DataProperty, parse_ms_epoch_ts
 
-__all__ = ['OrtegaInfo', 'GameData', 'WorldInfo', 'MBFileMap']
+__all__ = ['OrtegaInfo', 'GameData', 'WorldInfo']
 log = logging.getLogger(__name__)
 
 
@@ -147,53 +147,3 @@ class GameData(DictWrapper):
 
 
 # endregion
-
-
-class MBFileMap(DictWrapper):
-    @cached_property
-    def files(self) -> dict[str, FileInfo]:
-        return {name: FileInfo(data) for name, data in self.data['MasterBookInfoMap'].items()}
-
-
-class FileInfo(DictWrapper):
-    hash: str = DataProperty('Hash')
-    name: str = DataProperty('Name')
-    size: int = DataProperty('Size', int)
-
-
-def _parse_dt(dt_str: str) -> datetime:
-    return datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-
-
-class WorldGroup(DictWrapper):
-    """
-    Represents a row in WorldGroupMB
-
-    Example content:
-        "Id": 23,
-        "IsIgnore": null,
-        "Memo": "us",
-        "EndTime": "2100-01-01 00:00:00",
-        "EndLegendLeagueDateTime": "2100-01-01 00:00:00",
-        "TimeServerId": 4,
-        "StartTime": "2023-08-08 04:00:00",
-        "GrandBattleDateTimeList": [
-            {"EndTime": "2023-08-28 03:59:59", "StartTime": "2023-08-21 04:00:00"},
-            ...
-            {"EndTime": "2024-02-19 03:59:59", "StartTime": "2024-02-12 04:00:00"}
-        ],
-        "StartLegendLeagueDateTime": "2023-09-05 04:00:00",
-        "WorldIdList": [4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008]
-    """
-
-    id: int = DataProperty('Id')
-    region: Region = DataProperty('TimeServerId', type=Region)
-    first_legend_league_dt: datetime = DataProperty('StartLegendLeagueDateTime', type=_parse_dt)
-    world_ids: list[int] = DataProperty('WorldIdList')
-
-    @cached_property
-    def grand_battles(self) -> list[tuple[datetime, datetime]]:
-        return [
-            (_parse_dt(row['StartTime']), _parse_dt(row['EndTime']))
-            for row in self.data['GrandBattleDateTimeList']
-        ]
