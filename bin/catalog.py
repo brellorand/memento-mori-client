@@ -2,16 +2,19 @@
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
+from hashlib import md5
 from pathlib import Path
 
+import msgpack
 from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, main
-from cli_command_parser.inputs import Path as IPath
+from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.client import DataClient
 from mm.fs import path_repr
-from mm.utils import CompactJSONEncoder
+from mm.utils import CompactJSONEncoder, FutureWaiter
 
 log = logging.getLogger(__name__)
 
@@ -62,12 +65,12 @@ class Save(CatalogCLI, help='Save catalog metadata to a file'):
 
     def iter_names_and_data(self):
         name = f'{self.item}-catalog'
-        data = self.client.asset_catalog.data if self.item == 'assets' else self.client.master_catalog
+        catalog = self.client.asset_catalog if self.item == 'assets' else self.client.master_catalog
         if self.split:
-            for key, val in data.items():
+            for key, val in catalog.data.items():
                 yield (name, f'{key}.json'), val, False
         else:
-            yield (f'{name}.json',), data, False
+            yield (f'{name}.json',), catalog.data, False
 
     def _save(self, data, *name, raw: bool = False):
         path = self.output.joinpath(*name)
@@ -85,6 +88,67 @@ class AssetData(Save, help='Decoded content from the asset catalog that was base
         asset_catalog = self.client.asset_catalog
         for attr in ('key_data', 'bucket_data', 'entry_data', 'extra_data'):
             yield (f'{attr}.dat',), getattr(asset_catalog, attr), True
+
+
+class MasterContent(Save, help='Download all files listed in the master catalog'):
+    force = Flag('-F', help='Force files to be re-downloaded even if they already exist and their hash matches')
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
+    limit: int = Option('-L', type=NumRange(min=1), help='Limit the number of files to download')
+
+    def main(self):
+        self.output.mkdir(parents=True, exist_ok=True)
+        file_names = self._get_names()
+        if not file_names:
+            log.info('All files have already been downloaded (use --force to force them to be re-downloaded)')
+            return
+
+        log.info(f'Downloading {len(file_names):,d} files')
+        with ThreadPoolExecutor(max_workers=self.parallel) as executor:
+            futures = {executor.submit(self.client.get_master, name): name for name in file_names}
+            with FutureWaiter(executor)(futures, add_bar=not self.verbose, unit=' files') as waiter:
+                for future in waiter:
+                    self._save_data(futures[future], future.result())
+
+    def _get_names(self) -> list[str]:
+        if self.force:
+            to_download = list(self.client.master_catalog.files)
+        else:
+            to_download = []
+            for name, info in self.client.master_catalog.files.items():
+                if file_hash := self._get_hash(name):
+                    if file_hash == info.hash:
+                        log.debug(f'Skipping {name} - its hash matches: {file_hash}')
+                    else:
+                        log.debug(f'File {name} changed - hash={file_hash} expected={info.hash}')
+                        # TODO: Save/rename old version?
+                        to_download.append(name)
+                else:  # The file doesn't already exist or was corrupt
+                    to_download.append(name)
+
+        if self.limit:
+            return to_download[:self.limit]
+        return to_download
+
+    def _get_hash(self, name: str) -> str | None:
+        path = self.output.joinpath(name + '.json')
+        # TODO: Fix handling for files whose content changes (likely due to fuzzy type handling by CompactJSONEncoder)
+        #  examples: LimitedMissionMB, GuildRaidBossMB, GachaCaseUiMB, FriendCampaignMB, CharacterLiveModeMB
+        try:
+            with path.open('r', encoding='utf-8') as f:
+                data = msgpack.packb(json.load(f))
+        except FileNotFoundError:
+            return None
+        except json.JSONDecodeError as e:  # Possibly caused by interrupting the program while saving
+            log.debug(f'Will re-download {path_repr(path)} - error during decoding: {e}')
+            return None
+
+        return md5(data, usedforsecurity=False).hexdigest()
+
+    def _save_data(self, name: str, data: bytes):
+        out_path = self.output.joinpath(name + '.json')
+        log.debug(f'Saving {path_repr(out_path)}')
+        with out_path.open('w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
 
 
 # endregion

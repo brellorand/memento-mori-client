@@ -12,7 +12,7 @@ from typing import Any
 from .enums import Region
 from .utils import DataProperty, parse_ms_epoch_ts
 
-__all__ = ['OrtegaInfo', 'GameData', 'WorldInfo']
+__all__ = ['OrtegaInfo', 'GameData', 'WorldInfo', 'MBFileMap']
 log = logging.getLogger(__name__)
 
 
@@ -141,3 +141,15 @@ class GameData(DictWrapper):
 
 
 # endregion
+
+
+class MBFileMap(DictWrapper):
+    @cached_property
+    def files(self) -> dict[str, FileInfo]:
+        return {name: FileInfo(data) for name, data in self.data['MasterBookInfoMap'].items()}
+
+
+class FileInfo(DictWrapper):
+    hash: str = DataProperty('Hash')
+    name: str = DataProperty('Name')
+    size: int = DataProperty('Size', int)

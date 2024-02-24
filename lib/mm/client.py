@@ -17,7 +17,7 @@ import msgpack
 from requests import Session, Response
 
 from .assets import AssetCatalog
-from .data import GameData, OrtegaInfo
+from .data import GameData, OrtegaInfo, MBFileMap
 from .exceptions import CacheMiss
 from .fs import FileCache
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
@@ -378,7 +378,7 @@ class DataClient(RequestsClient):
         return msgpack.unpackb(resp.content, timestamp=3)
 
     @cached_property
-    def master_catalog(self):
+    def master_catalog(self) -> MBFileMap:
         """
         Example:
         {
@@ -397,7 +397,7 @@ class DataClient(RequestsClient):
             catalog = self.get_master('master-catalog')
             self.cache.store(catalog, 'master-catalog.msgpack')
 
-        return catalog
+        return MBFileMap(catalog)
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
