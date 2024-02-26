@@ -34,14 +34,21 @@ else:
 
 
 def pprint(out_fmt: str, data):
-    if out_fmt == 'json':
-        print(json.dumps(data, ensure_ascii=False))
-    elif out_fmt == 'json-pretty':
-        print(json.dumps(data, indent=4, ensure_ascii=False, cls=CompactJSONEncoder))
-    elif out_fmt == 'yaml':
-        print(yaml_dump(data, indent_nested_lists=True))
-    else:
-        raise ValueError(f'Invalid {out_fmt=} - choose from {OUTPUT_FORMATS}')
+    try:
+        if out_fmt == 'json':
+            print(json.dumps(data, ensure_ascii=False))
+        elif out_fmt == 'json-pretty':
+            print(json.dumps(data, indent=4, ensure_ascii=False, cls=CompactJSONEncoder))
+        elif out_fmt == 'yaml':
+            print(yaml_dump(data, indent_nested_lists=True))
+        else:
+            raise ValueError(f'Invalid {out_fmt=} - choose from {OUTPUT_FORMATS}')
+    except UnicodeEncodeError as e:
+        import os
+
+        if os.name == 'nt':
+            raise RuntimeError('When piping output, you may need to `export PYTHONIOENCODING=UTF-8`') from e
+        raise
 
 
 def prep_for_yaml(obj):

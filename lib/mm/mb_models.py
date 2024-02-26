@@ -10,7 +10,7 @@ from datetime import datetime
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Type, TypeVar, Literal, Iterator
 
-from .enums import Region
+from .enums import Region, Element, Job, CharacterRarity
 from .data import DictWrapper
 from .utils import DataProperty
 
@@ -112,6 +112,10 @@ class MB:
     @cached_property
     def player_ranks(self) -> dict[int, PlayerRank]:
         return self._get_mb_id_obj_map(PlayerRank, 'PlayerRankMB', key='Rank')
+
+    @cached_property
+    def characters(self) -> dict[int, Character]:
+        return self._get_mb_id_obj_map(Character, 'CharacterMB')
 
 
 class FileInfo(DictWrapper):
@@ -330,4 +334,74 @@ class PlayerRank(MBEntity):
             'HP %': self.hp_percent_bonus,
             'HP Drain': self.hp_drain_bonus,
             'SPD': self.speed_bonus,
+        }
+
+
+class Character(MBEntity):
+    """
+    Example:
+        "Id": 43,
+        "IsIgnore": null,
+        "Memo": "【雷啼の魔女】ケルベロス",
+        "ActiveSkillIds": [43001, 43002],
+        "BaseParameterCoefficient": {"Energy": 83, "Health": 69, "Intelligence": 86, "Muscle": 100},
+        "BaseParameterGrossCoefficient": 338,
+        "CharacterType": 1,
+        "ElementType": 5,
+        "InitialBattleParameter": {
+            "AttackPower": 0, "Avoidance": 0, "Critical": 0, "CriticalDamageEnhance": 0, "CriticalResist": 0,
+            "DamageEnhance": 0, "DamageReflect": 0, "DebuffHit": 0, "DebuffResist": 0, "Defense": 10,
+            "DefensePenetration": 0, "Hit": 0, "HP": 0, "HpDrain": 0, "MagicCriticalDamageRelax": 0,
+            "MagicDamageRelax": 0, "PhysicalCriticalDamageRelax": 0, "PhysicalDamageRelax": 0, "Speed": 3363
+        },
+        "ItemRarityFlags": 64,
+        "JobFlags": 1,
+        "Name2Key": "[CharacterSubName43]",
+        "NameKey": "[CharacterName43]",
+        "NormalSkillId": 101,
+        "PassiveSkillIds": [43003, 43004],
+        "RarityFlags": 8,
+        "RequireFragmentCount": 60,
+        "EndTimeFixJST": "2100-12-31 23:59:59",
+        "StartTimeFixJST": "2023-01-17 15:00:00"
+    """
+
+    name_key = DataProperty('NameKey')          # matches a TextResource.key (StringKey) value
+    sub_name_key = DataProperty('Name2Key')     # matches a TextResource.key (StringKey) value
+    type_id: int = DataProperty('CharacterType')  # 0 (56 matches), 1 (11), or 2 (7); not clear what this indicates
+    element: Element = DataProperty('ElementType', Element)
+
+    normal_skill_id: int = DataProperty('NormalSkillId')
+    active_skill_ids: list[int] = DataProperty('ActiveSkillIds')
+    passive_skill_ids: list[int] = DataProperty('PassiveSkillIds')
+
+    job: Job = DataProperty('JobFlags', Job)
+    rarity: CharacterRarity = DataProperty('RarityFlags', CharacterRarity)
+    item_rarity_flags: int = DataProperty('ItemRarityFlags')  # Seems to always correlate with rarity
+
+    @cached_property
+    def full_id(self) -> str:
+        return f'CHR_{self.id:06d}'
+
+    @cached_property
+    def name(self) -> str:
+        return self.mb.text_resource_map[self.name_key]
+
+    @cached_property
+    def sub_name(self) -> None:
+        return self.mb.text_resource_map.get(self.sub_name_key)
+
+    @cached_property
+    def full_name(self) -> str:
+        return f'{self.name} ({self.sub_name})' if self.sub_name else self.name
+
+    def get_summary(self) -> dict[str, Any]:
+        return {
+            # 'id': self.full_id,
+            'name': self.full_name,
+            'type': self.type_id,
+            'element': self.element.name.title(),
+            'job': self.job.name.title(),
+            'rarity': self.rarity.name,
+            # 'item_rarity': self.item_rarity_flags,
         }

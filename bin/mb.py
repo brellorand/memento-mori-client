@@ -222,5 +222,20 @@ class Rank(Show, help='Show player rank info'):
         self.pprint(output)
 
 
+class Character(Show, choices=('character', 'char'), help='Show character info'):
+    item = Action()
+
+    @item
+    def names(self):
+        for num, char in self.get_mb().characters.items():
+            # print(f'CHR_{num:06d}: {char.full_name}')
+            print(f'{char.full_id}: {char.full_name}')
+
+    @item
+    def summary(self):
+        data = {char.full_id: char.get_summary() for char in self.get_mb().characters.values()}
+        self.pprint(data)
+
+
 if __name__ == '__main__':
     main()

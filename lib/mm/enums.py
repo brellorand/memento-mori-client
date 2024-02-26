@@ -52,3 +52,24 @@ class Region(IntEnum):
             return cls(region)
         except ValueError as e:
             raise ValueError(f'Invalid {region=} for {world_id=}') from e
+
+
+class Element(IntEnum):
+    AZURE = 1
+    CRIMSON = 2
+    EMERALD = 3
+    AMBER = 4
+    RADIANCE = 5
+    CHAOS = 6
+
+
+class Job(IntEnum):
+    WARRIOR = 1
+    SNIPER = 2
+    SORCERER = 4
+
+
+class CharacterRarity(IntEnum):
+    N = 1
+    R = 2
+    SR = 8
