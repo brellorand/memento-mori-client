@@ -13,8 +13,8 @@ from mm.__version__ import __author_email__, __version__  # noqa
 from mm.client import DataClient
 from mm.enums import Region
 from mm.fs import path_repr
-from mm.mb_models import MB, LOCALES, WorldGroup
-from mm.output import OUTPUT_FORMATS, YAML, CompactJSONEncoder, pprint
+from mm.mb_models import MB, LOCALES, RANK_BONUS_STATS, WorldGroup
+from mm.output import OUTPUT_FORMATS, YAML, pprint
 from mm.utils import FutureWaiter
 
 log = logging.getLogger(__name__)
@@ -133,7 +133,10 @@ class Show(MBDataCLI, help='Show info from MB files'):
     )
 
     def pprint(self, data):
-        pprint(self.format, data)
+        if data:
+            pprint(self.format, data)
+        else:
+            print('No results')
 
 
 class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
@@ -183,6 +186,40 @@ class VIP(Show, choice='vip', help='Show daily VIP rewards by level'):
             for level in self.get_mb().vip_levels
         }
         self.pprint(data)
+
+
+class Rank(Show, help='Show player rank info'):
+    item = Action()
+    stat = Option('-s', nargs='+', choices=RANK_BONUS_STATS, help='Filter output to the specified stats (default: all)')
+    not_stat = Option('-S', nargs='+', choices=RANK_BONUS_STATS, help='Filter out the specified stats')
+
+    @item
+    def link_slots(self):
+        last = 0
+        for num, rank in self.get_mb().player_ranks.items():
+            if rank.level_link_slots > last:
+                print(f'Rank {num:>3d}: {rank.level_link_slots:>2d} link slots')
+                last = rank.level_link_slots
+
+    @item
+    def bonuses(self):
+        stats = set(self.stat or RANK_BONUS_STATS).difference(self.not_stat)
+        output = {}
+        last = {}
+        for num, rank in self.get_mb().player_ranks.items():
+            rank_stats = {
+                k: v
+                for k, v in rank.get_stat_bonuses().items()
+                if k in stats and v and v != last.get(k)
+            }
+            if rank_stats:
+                last |= rank_stats  # Update instead of replace so filtered out same values will be retained
+                output[f'Rank {num}'] = {
+                    k: f'{v}%' if '%' in k else f'{v:,d}' if v > 999 else v
+                    for k, v in rank_stats.items()
+                }
+
+        self.pprint(output)
 
 
 if __name__ == '__main__':

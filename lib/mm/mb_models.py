@@ -27,6 +27,11 @@ T = TypeVar('T')
 Locale = Literal['DeDe', 'EnUs', 'EsMx', 'FrFr', 'IdId', 'JaJp', 'KoKr', 'PtBr', 'RuRu', 'ThTh', 'ViVn', 'ZhCn', 'ZhTw']
 LOCALES = ['DeDe', 'EnUs', 'EsMx', 'FrFr', 'IdId', 'JaJp', 'KoKr', 'PtBr', 'RuRu', 'ThTh', 'ViVn', 'ZhCn', 'ZhTw']
 
+RANK_BONUS_STATS = [
+    'ACC', 'ACC %', 'ATK', 'Counter', 'CRIT', 'CRIT DMG Boost', 'Debuff ACC', 'DEF Break', 'DMG Boost',
+    'HP', 'HP %', 'HP Drain', 'SPD',
+]
+
 
 class MB:
     def __init__(
@@ -76,8 +81,8 @@ class MB:
     def _get_mb_objects(self, cls: Type[T], name: str) -> list[T]:
         return [cls(self, row) for row in self.get_data(name)]
 
-    def _get_mb_id_obj_map(self, cls: Type[T], name: str) -> dict[int, T]:
-        return {row['Id']: cls(self, row) for row in self.get_data(name)}
+    def _get_mb_id_obj_map(self, cls: Type[T], name: str, key: str = 'Id') -> dict[int, T]:
+        return {row[key]: cls(self, row) for row in self.get_data(name)}
 
     @cached_property
     def world_groups(self) -> list[WorldGroup]:
@@ -103,6 +108,10 @@ class MB:
     @cached_property
     def vip_levels(self) -> list[VipLevel]:
         return self._get_mb_objects(VipLevel, 'VipMB')
+
+    @cached_property
+    def player_ranks(self) -> dict[int, PlayerRank]:
+        return self._get_mb_id_obj_map(PlayerRank, 'PlayerRankMB', key='Rank')
 
 
 class FileInfo(DictWrapper):
@@ -211,6 +220,49 @@ class Item(MBEntity):
 
 
 class VipLevel(MBEntity):
+    """
+    Example:
+        "Id": 1,
+        "IsIgnore": null,
+        "Memo": null,
+        "AutoBattlePlayerExpBonus": 0,
+        "DailyRewardItemList": [
+            {"ItemCount": 1, "ItemId": 1, "ItemType": 19}, {"ItemCount": 5000, "ItemId": 1, "ItemType": 3}
+        ],
+        "DungeonBattleCoinBonus": 0,
+        "DungeonBattleGoldBonus": 0,
+        "DungeonBattleMissedCompensationCount": 0,
+        "IsDestinyGachaAvailable": false,
+        "IsDestinyGachaLogAvailable": false,
+        "IsStarsGuidanceGachaAvailable": false,
+        "IsStarsGuidanceGachaLogAvailable": false,
+        "IsLockEquipmentTrainingAvailable": false,
+        "IsMultipleBountyQuestAvailable": false,
+        "IsMultipleQuickStartGuildRaidAvailable": false,
+        "IsQuickBossBattleAvailable": false,
+        "IsQuickStartGuildRaidAvailable": false,
+        "IsRefundEquipmentMergeAvailable": false,
+        "LoginBonusMissedCompensationCount": 0,
+        "Lv": 0,
+        "MaxBossBattleUseCurrencyCount": 1,
+        "MaxCharacterBoxPlus": 0,
+        "MaxGuildRaidChallengeCount": 2,
+        "MaxQuickUseCurrencyCount": 2,
+        "MaxShopItemCountPlus": 0,
+        "MaxSoloQuestCount": 6,
+        "MaxTeamQuestCount": 1,
+        "QuickBattlePlayerExpBonus": 0,
+        "ReachRewardItemList": null,
+        "RequiredExp": 0,
+        "VipGiftInfoList": [
+            {
+                "GetItemList": [{"ItemCount": 10, "ItemId": 4, "ItemType": 13}],
+                "RequiredItemList": [{"ItemCount": 50, "ItemId": 1, "ItemType": 1}],
+                "VipGiftId": 0
+            }
+        ]
+    """
+
     _item_list: list[dict[str, int]] = DataProperty('DailyRewardItemList')
     level: int = DataProperty('Lv')
 
@@ -218,3 +270,64 @@ class VipLevel(MBEntity):
     def daily_rewards(self) -> list[tuple[Item, int]]:
         """List of daily item rewards and their quantities"""
         return [(self.mb.get_item(row['ItemType'], row['ItemId']), row['ItemCount']) for row in self._item_list]
+
+
+class PlayerRank(MBEntity):
+    """
+    Example:
+        "Id": 1,
+        "IsIgnore": null,
+        "Memo": null,
+        "AttackPowerBonus": 0,
+        "CriticalBonus": 0,
+        "CriticalDamageEnhanceBonus": 0,
+        "DamageEnhanceBonus": 0,
+        "DamageReflectBonus": 0,
+        "DebuffHitBonus": 0,
+        "DefensePenetrationBonus": 0,
+        "HitBonus": 0,
+        "HpBonus": 0,
+        "HpPercentBonus": 0,
+        "HpDrainBonus": 0,
+        "HitDirectPercentBonus": 0,
+        "LevelLinkMemberMaxCount": 0,
+        "Rank": 1,
+        "RequiredTotalExp": 0,
+        "StartTimeFixJST": "2020-01-01 00:00:00",
+        "SpeedBonus": 0
+    """
+
+    rank: int = DataProperty('Rank')
+    level_link_slots: int = DataProperty('LevelLinkMemberMaxCount')
+
+    accuracy_bonus: int = DataProperty('HitBonus')
+    accuracy_percent_bonus: int = DataProperty('HitDirectPercentBonus')  # Not sure about name; no present values > 0
+    attack_bonus: int = DataProperty('AttackPowerBonus')
+    counter_bonus: int = DataProperty('DamageReflectBonus')  # Not sure about name
+    crit_rate_bonus: int = DataProperty('CriticalBonus')
+    crit_damage_bonus: int = DataProperty('CriticalDamageEnhanceBonus')
+    damage_bonus: int = DataProperty('DamageEnhanceBonus')
+    debuff_accuracy_bonus: int = DataProperty('DebuffHitBonus')
+    def_break_bonus: int = DataProperty('DefensePenetrationBonus')
+    hp_bonus: int = DataProperty('HpBonus')
+    hp_percent_bonus: int = DataProperty('HpPercentBonus', type=lambda v: v // 100)
+    hp_drain_bonus: int = DataProperty('HpDrainBonus')
+    speed_bonus: int = DataProperty('SpeedBonus')
+
+    def get_stat_bonuses(self) -> dict[str, int]:
+        # As of 2024-02-26, only ATK, HP, and HP % bonuses have any non-zero values for any given rank
+        return {
+            'ACC': self.accuracy_bonus,
+            'ACC %': self.accuracy_percent_bonus,
+            'ATK': self.attack_bonus,
+            'Counter': self.counter_bonus,
+            'CRIT': self.crit_rate_bonus,
+            'CRIT DMG Boost': self.crit_damage_bonus,
+            'Debuff ACC': self.debuff_accuracy_bonus,
+            'DEF Break': self.def_break_bonus,
+            'DMG Boost': self.damage_bonus,  # Is this key accurate? This does stat not appear in help text
+            'HP': self.hp_bonus,
+            'HP %': self.hp_percent_bonus,
+            'HP Drain': self.hp_drain_bonus,
+            'SPD': self.speed_bonus,
+        }
