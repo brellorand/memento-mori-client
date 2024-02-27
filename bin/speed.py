@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from functools import cached_property
 
-from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, main
+from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, UsageError, main
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.runes import SpeedRune, RuneCalculator
@@ -70,7 +70,7 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
         try:
             return self._char_map[id_or_name.upper()]
         except KeyError as e:
-            raise ValueError(
+            raise UsageError(
                 f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
                 ' to find the correct ID to use here'
             ) from e
