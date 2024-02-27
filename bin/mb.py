@@ -177,7 +177,7 @@ class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
 class VIP(Show, choice='vip', help='Show daily VIP rewards by level'):
     item = Action()
 
-    @item
+    @item(help='Show the daily rewards unlocked at each VIP level')
     def daily_rewards(self):
         data = {
             f'Level {level.level}': [
@@ -193,7 +193,7 @@ class Rank(Show, help='Show player rank info'):
     stat = Option('-s', nargs='+', choices=RANK_BONUS_STATS, help='Filter output to the specified stats (default: all)')
     not_stat = Option('-S', nargs='+', choices=RANK_BONUS_STATS, help='Filter out the specified stats')
 
-    @item
+    @item(help='Show the ranks at which additional level link slots are unlocked')
     def link_slots(self):
         last = 0
         for num, rank in self.get_mb().player_ranks.items():
@@ -201,7 +201,7 @@ class Rank(Show, help='Show player rank info'):
                 print(f'Rank {num:>3d}: {rank.level_link_slots:>2d} link slots')
                 last = rank.level_link_slots
 
-    @item
+    @item(help='Show the stat bonuses unlocked at each rank')
     def bonuses(self):
         stats = set(self.stat or RANK_BONUS_STATS).difference(self.not_stat)
         output = {}
@@ -224,17 +224,22 @@ class Rank(Show, help='Show player rank info'):
 
 class Character(Show, choices=('character', 'char'), help='Show character info'):
     item = Action()
+    descending = Flag('-d', help='[speed only] Sort output in descending order (default: ascending)')
 
-    @item
+    @item(help='Show the name of each character with its ID')
     def names(self):
         for num, char in self.get_mb().characters.items():
-            # print(f'CHR_{num:06d}: {char.full_name}')
             print(f'{char.full_id}: {char.full_name}')
 
-    @item
+    @item(help='Show a basic, high-level character info summary')
     def summary(self):
-        data = {char.full_id: char.get_summary() for char in self.get_mb().characters.values()}
-        self.pprint(data)
+        self.pprint({char.full_id: char.get_summary() for char in self.get_mb().characters.values()})
+
+    @item(help='Show a sorted list of characters and their base speeds')
+    def speed(self):
+        speeds = ((char.speed, char.full_name) for char in self.get_mb().characters.values())
+        for speed, name in sorted(speeds, reverse=self.descending):
+            print(f'{speed:,d}  {name}')
 
 
 if __name__ == '__main__':

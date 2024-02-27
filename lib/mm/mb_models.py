@@ -138,6 +138,11 @@ class MBEntity:
         self.mb = mb
         self.data = data
 
+    def __repr__(self) -> str:
+        attrs = ('full_name', 'name', 'id')
+        key, val = next((attr, v) for attr in attrs if (v := getattr(self, attr, None)) is not None)
+        return f'<{self.__class__.__name__}[{key}={val!r}]>'
+
 
 class WorldGroup(MBEntity):
     """
@@ -371,13 +376,19 @@ class Character(MBEntity):
     type_id: int = DataProperty('CharacterType')  # 0 (56 matches), 1 (11), or 2 (7); not clear what this indicates
     element: Element = DataProperty('ElementType', Element)
 
+    job: Job = DataProperty('JobFlags', Job)
+    rarity: CharacterRarity = DataProperty('RarityFlags', CharacterRarity)
+    item_rarity_flags: int = DataProperty('ItemRarityFlags')  # Seems to always correlate with rarity
+
     normal_skill_id: int = DataProperty('NormalSkillId')
     active_skill_ids: list[int] = DataProperty('ActiveSkillIds')
     passive_skill_ids: list[int] = DataProperty('PassiveSkillIds')
 
-    job: Job = DataProperty('JobFlags', Job)
-    rarity: CharacterRarity = DataProperty('RarityFlags', CharacterRarity)
-    item_rarity_flags: int = DataProperty('ItemRarityFlags')  # Seems to always correlate with rarity
+    speed: int = DataProperty('InitialBattleParameter.Speed')
+
+    def __repr__(self) -> str:
+        name, element, job = self.full_name, self.element.name.title(), self.job.name.title()
+        return f'<{self.__class__.__name__}[id={self.full_id!r}, {name=}, {element=}, {job=}]>'
 
     @cached_property
     def full_id(self) -> str:

@@ -13,3 +13,7 @@ class CacheError(MementoMoriException):
 
 class CacheMiss(CacheError):
     """Used internally to signal that a file cache miss occurred"""
+
+
+class RuneError(MementoMoriException):
+    """Raised when an invalid combination of rune types, levels, or quantities is provided"""
