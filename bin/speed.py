@@ -40,8 +40,21 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
 
 
 class Tune(SpeedCLI, help='Speed tune the specified characters in the specified order'):
+    """
+    Speed tune the specified characters in the specified order.
+
+    To use base stats for the calculation, simply provide character names or ids, separated by spaces.
+
+    To provide existing rune levels for a given character, specify the name or id plus a comma-separated list of levels.
+    For example:
+        merlyn cordie+7,7,7 florence
+        merlyn florence+5,5
+    """
+
     characters = Positional(
-        metavar='ID|NAME', nargs=range(2, 6), help='The characters to speed tune, in descending turn order'
+        metavar='ID|NAME[+LEVEL[,LEVEL[,LEVEL]]]',
+        nargs=range(2, 6),
+        help='The characters to speed tune, in descending turn order',
     )
 
     @cached_property
@@ -63,9 +76,21 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
             ) from e
 
     def main(self):
-        # TODO: Add way to specify current/base runes or a speed override for the fastest/specific member(s)
-        for member in fix_speeds([PartyMember(self.get_character(c)) for c in self.characters]):
+        for member in fix_speeds(self.get_members()):
             print(f'{member.char.full_name}: {member.speed} => levels={member.levels}')
+
+    def get_members(self):
+        members = []
+        for char_info in self.characters:
+            try:
+                name_or_id, levels = map(str.strip, char_info.split('+', 1))
+            except ValueError:
+                members.append(PartyMember(self.get_character(char_info)))
+            else:
+                levels = list(map(int, map(str.strip, levels.split(','))))
+                members.append(PartyMember(self.get_character(name_or_id), levels))
+
+        return members
 
 
 class PartyMember:
