@@ -12,7 +12,7 @@ from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, O
 from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.client import DataClient
+from mm.client import AuthClient, DataClient
 from mm.fs import path_repr
 from mm.output import CompactJSONEncoder
 from mm.utils import FutureWaiter
@@ -33,8 +33,12 @@ class CatalogCLI(Command, description='Memento Mori Catalog Manager', option_nam
         init_logging(self.verbose)
 
     @cached_property
+    def auth_client(self) -> AuthClient:
+        return AuthClient(use_cache=not self.no_cache)
+
+    @cached_property
     def client(self) -> DataClient:
-        return DataClient(use_cache=not self.no_cache)
+        return DataClient(auth_client=self.auth_client, use_cache=not self.no_cache)
 
 
 class Show(CatalogCLI, help='Show info'):
@@ -43,9 +47,9 @@ class Show(CatalogCLI, help='Show info'):
 
     def main(self):
         if self.item == 'game_data':
-            self.print(self.client.game_data.data)
+            self.print(self.auth_client.game_data.data)
         elif self.item == 'uri_formats':
-            self.print(self.client.game_data.uri_formats)
+            self.print(self.auth_client.game_data.uri_formats)
 
     def print(self, data):
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))

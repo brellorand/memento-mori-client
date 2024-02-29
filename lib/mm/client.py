@@ -290,7 +290,8 @@ class RequestsClient:
 
 
 class AuthClient(RequestsClient):
-    def __init__(self, app_version: str = '2.8.1', *, ortega_uuid: str = None, use_cache: bool = True):
+    def __init__(self, app_version: str = '2.9.0', *, ortega_uuid: str = None, use_cache: bool = True):
+        # TODO: Automate app_version update
         headers = {
             'content-type': 'application/json; charset=UTF-8',
             'ortegaaccesstoken': '',
@@ -341,13 +342,15 @@ class AuthClient(RequestsClient):
             self.cache.store(self._get_data_resp.content, 'game-data.msgpack', raw=True)
             game_data = msgpack.unpackb(self._get_data_resp.content, timestamp=3)
 
+        # TODO: Detect error response since a 200 is still returned
+        # Example: {"ErrorCode": 103, "Message": "", "ErrorHandlingType": 0, "ErrorMessageId": 0, "MessageParams": null}
         return GameData(game_data)
 
 
 class DataClient(RequestsClient):
     def __init__(self, auth_client: AuthClient = None, system: str = 'Android', use_cache: bool = True, **kwargs):
         self.system = system
-        self.auth = auth_client or AuthClient(**kwargs)
+        self.auth = auth_client or AuthClient(use_cache=use_cache, **kwargs)
         self.game_data = self.auth.game_data
         headers = {
             'content-type': 'application/json; charset=UTF-8',
