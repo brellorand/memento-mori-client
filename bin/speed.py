@@ -8,7 +8,7 @@ from functools import cached_property
 from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, UsageError, main
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.runes import SpeedRune, RuneCalculator
+from mm.runes import PartyMember, speed_tune
 from mm.client import DataClient
 from mm.mb_models import MB, LOCALES, Character
 
@@ -76,8 +76,8 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
             ) from e
 
     def main(self):
-        for member in fix_speeds(self.get_members()):
-            print(f'{member.char.full_name}: {member.speed} => levels={member.levels}')
+        for member in speed_tune(self.get_members()):
+            print(f'{member.char.full_name}: {member.speed} => levels={member.speed_rune_levels}')
 
     def get_members(self):
         members = []
@@ -91,31 +91,6 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
                 members.append(PartyMember(self.get_character(name_or_id), levels))
 
         return members
-
-
-class PartyMember:
-    def __init__(self, char: Character, levels: list[int] = None):
-        self.char = char
-        self.levels = levels or [0, 0, 0]
-
-    @property
-    def speed(self) -> int:
-        return self.char.speed + SpeedRune.get_rune_set(*self.levels).total
-
-
-def fix_speeds(members: list[PartyMember]):
-    calculator = RuneCalculator(SpeedRune)
-    min_speed = members[-1].speed + 150
-    for member in members[-2::-1]:  # reverse order, starting from the 2nd to last element
-        if member.speed < min_speed:
-            log.debug(f'Updating runes for {member.char} because speed={member.speed} < {min_speed=}')
-            # Rune levels need to calculate from base delta to take current runes into account
-            rune_set = calculator.find_closest_min_ticket_set(min_speed - member.char.speed)
-            member.levels = sorted(rune_set.levels, reverse=True)
-
-        min_speed = member.speed + 150
-
-    return members
 
 
 if __name__ == '__main__':

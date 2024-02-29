@@ -48,6 +48,7 @@ Scripts are in the ``bin`` directory.  The current scripts that are available:
 - ``catalog.py``: Download basic MB/asset catalog info
 - ``mb.py``: Download raw data referenced by ``DownloadRawDataMB`` and view info from other MB files
 - ``runes.py``: (WIP / incomplete) Calculate rune stat totals and ticket costs
+- ``speed.py``: Calculate rune levels required to speed tune a given party
 
 Use ``--help`` to see more info about the options they support.  Example::
 

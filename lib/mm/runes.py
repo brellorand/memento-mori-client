@@ -8,12 +8,22 @@ import logging
 from abc import ABC
 from functools import cached_property
 from itertools import product
-from typing import Type, Iterator
+from typing import TYPE_CHECKING, Type, Iterator
 
 from .enums import RuneRarity
 from .exceptions import RuneError
 
-__all__ = []
+if TYPE_CHECKING:
+    from .mb_models import Character
+
+# fmt: off
+__all__ = [
+    'Rune', 'RuneSet', 'RuneCalculator', 'PartyMember', 'speed_tune',
+    'StrRune', 'DexRune', 'MagRune', 'StaRune',
+    'AccuracyRune', 'AttackRune', 'CritRune', 'DebuffAccuracyRune', 'PMDefBreakRune', 'SpeedRune',
+    'CritResistRune', 'DebuffResistanceRune', 'EvasionRune', 'HPRune', 'MagicDefenseRune', 'PhysicalDefenseRune',
+]
+# fmt: on
 log = logging.getLogger(__name__)
 
 RuneLevels = tuple[int] | tuple[int, int] | tuple[int, int, int]
@@ -173,39 +183,92 @@ class RuneSet:
 
 # region Stat-Specific Rune Classes
 
+_ACC_EVD_DEBUFF_VALUES = [
+    260, 500, 970, 1_900, 3_770,
+    7_500, 14_900, 29_700, 59_300, 118_000,
+    235_000, 463_000, 835_000, 1_380_000, 2_080_000,
+]
+_CRIT_VALUES = [60, 100, 190, 370, 730, 1_450, 2_890, 5_770, 11_500, 22_900, 45_700, 91_300, 167_000, 277_000, 416_000]
+_DEF_VALUES = [40, 60, 110, 200, 370, 680, 1_240, 2_270, 4_160, 7_600, 13_900, 25_400, 46_400, 84_900, 150_000]
+_OFFENSIVE_BASE_STAT_VALUES = [
+    60, 100, 180, 330, 620, 1_130, 2_070, 3_800, 6_930, 12_600, 23_100, 42_300, 77_400, 141_000, 250_000
+]
+
+
+# region Offensive (Left) Runes
+
+
+class AccuracyRune(Rune, stat='ACC'):
+    values = _ACC_EVD_DEBUFF_VALUES
+
+
+class AttackRune(Rune, stat='ATK'):
+    values = [
+        240, 440, 810, 1_480, 2_710,
+        4_950, 9_050, 16_500, 30_200, 55_300,
+        101_000, 184_000, 338_000, 617_000, 1_090_000,
+    ]
+
+
+class CritRune(Rune, stat='CRIT'):
+    values = _CRIT_VALUES
+
+
+class DebuffAccuracyRune(Rune, stat='Debuff ACC'):
+    values = _ACC_EVD_DEBUFF_VALUES
+
+
+class PMDefBreakRune(Rune, stat='PMDB'):
+    values = [25, 45, 80, 140, 250, 430, 750, 1_300, 2_200, 3_710, 6_250, 10_400, 15_900, 21_900, 26_900]
+
 
 class SpeedRune(Rune, stat='SPD'):
     values = [10, 18, 33, 53, 80, 110, 150, 195, 240, 300, 360, 425, 500, 575, 660]
 
 
-class PMDefBreakRune(Rune, stat='PMDB'):
-    values = [25, 45, 80, 140, 250, 430, 750, 1300, 2200, 3710, 6250, 10_400, 15_900, 21_900, 26_900]
+# endregion
 
 
-class CritRune(Rune, stat='CRIT'):
-    values = [60, 100, 190, 370, 730, 1450, 2890, 5770, 11_500, 22_900, 45_700, 91_300, 167_000, 277_000, 416_000]
+# region Defensive (Right) Runes
 
 
 class CritResistRune(Rune, stat='CRIT RES'):
-    values = [60, 100, 190, 370, 730, 1450, 2890, 5770, 11_500, 22_900, 45_700, 91_300, 167_000, 277_000, 416_000]
+    values = _CRIT_VALUES
+
+
+class DebuffResistanceRune(Rune, stat='Debuff RES'):
+    values = _ACC_EVD_DEBUFF_VALUES
 
 
 class EvasionRune(Rune, stat='EVD'):
+    values = _ACC_EVD_DEBUFF_VALUES
+
+
+class HPRune(Rune, stat='HP'):
     values = [
-        260, 500, 970, 1900, 3770,
-        7500, 14_900, 29_700, 59_300, 118_000,
-        235_000, 463_000, 835_000, 1_380_000, 2_080_000,
+        1_000, 1_830, 3_340, 6_110, 11_100,
+        20_400, 37_300, 68_300, 124_000, 228_000,
+        417_000, 762_000, 1_390_000, 2_540_000, 4_510_000,
     ]
+
+
+class MagicDefenseRune(Rune, stat='M.DEF'):
+    values = _DEF_VALUES
+
+
+class PhysicalDefenseRune(Rune, stat='P.DEF'):
+    values = _DEF_VALUES
+
+
+# endregion
 
 
 # region Base Stat Runes
 
 
-class OffensiveBaseStatRune(Rune, ABC):
-    values = [60, 100, 180, 330, 620, 1130, 2070, 3800, 6930, 12_600, 23_100, 42_300, 77_400, 141_000, 250_000]
+class DexRune(Rune, stat='DEX'):
+    values = _OFFENSIVE_BASE_STAT_VALUES
 
-
-class DexRune(OffensiveBaseStatRune, stat='DEX'):
     @property
     def crit(self) -> int:
         return self.value // 2
@@ -215,7 +278,9 @@ class DexRune(OffensiveBaseStatRune, stat='DEX'):
         return self.value // 2
 
 
-class MagRune(OffensiveBaseStatRune, stat='MAG'):
+class MagRune(Rune, stat='MAG'):
+    values = _OFFENSIVE_BASE_STAT_VALUES
+
     @property
     def m_def(self) -> int:
         return self.value
@@ -225,7 +290,9 @@ class MagRune(OffensiveBaseStatRune, stat='MAG'):
         return self.value // 2
 
 
-class StrRune(OffensiveBaseStatRune, stat='STR'):
+class StrRune(Rune, stat='STR'):
+    values = _OFFENSIVE_BASE_STAT_VALUES
+
     @property
     def p_def(self) -> int:
         return self.value
@@ -236,7 +303,7 @@ class StrRune(OffensiveBaseStatRune, stat='STR'):
 
 
 class StaRune(Rune, stat='STA'):
-    values = [35, 60, 90, 150, 270, 510, 930, 1700, 3120, 5700, 10_400, 19_000, 34_800, 63_700, 112_000]
+    values = [35, 60, 90, 150, 270, 510, 930, 1_700, 3_120, 5_700, 10_400, 19_000, 34_800, 63_700, 112_000]
 
     @property
     def hp(self) -> int:
@@ -311,3 +378,37 @@ class RuneCalculator:
         return closest, self.value_rune_sets_map[closest]
 
     # endregion
+
+
+class PartyMember:
+    __slots__ = ('char', 'speed_rune_levels')
+
+    def __init__(self, char: Character, speed_rune_levels: list[int] = None):
+        self.char = char
+        self.speed_rune_levels = speed_rune_levels or [0, 0, 0]
+
+    @property
+    def speed(self) -> int:
+        return self.char.speed + SpeedRune.get_rune_set(*self.speed_rune_levels).total
+
+
+def speed_tune(members: list[PartyMember | Character]) -> list[PartyMember]:
+    """
+    :param members: A list of :class:`PartyMember` or :class:`~.mb_models.Character` objects, in the order that
+      they should act.
+    :return: A list of :class:`PartyMember` objects with :attr:`PartyMember.speed_rune_levels` updated so that they act
+      in the specified order.
+    """
+    members = [m if isinstance(m, PartyMember) else PartyMember(m) for m in members]
+    calculator = RuneCalculator(SpeedRune)
+    min_speed = members[-1].speed + 150
+    for member in members[-2::-1]:  # reverse order, starting from the 2nd to last element
+        if member.speed < min_speed:
+            log.debug(f'Updating runes for {member.char} because speed={member.speed} < {min_speed=}')
+            # Rune levels need to calculate from base delta to take current runes into account
+            rune_set = calculator.find_closest_min_ticket_set(min_speed - member.char.speed)
+            member.speed_rune_levels = sorted(rune_set.levels, reverse=True)
+
+        min_speed = member.speed + 150
+
+    return members
