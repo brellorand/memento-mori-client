@@ -19,7 +19,7 @@ from requests import Session, Response
 from .assets import AssetCatalog
 from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss
-from .fs import FileCache
+from .fs import FileCache, ConfigFile, PathLike
 from .mb_models import MB, Locale
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
@@ -289,13 +289,47 @@ class RequestsClient:
     # endregion
 
 
+class AppVersionManager:
+    __slots__ = ('config',)
+
+    def __init__(self, config_path: PathLike = None):
+        self.config = ConfigFile(config_path)
+
+    def _get_latest_version(self) -> str:
+        log.debug('Retrieving latest app version from the Play store')
+        with RequestsClient('play.google.com', scheme='https') as client:
+            resp = client.get('store/apps/details', params={'id': 'jp.boi.mementomori.android'})
+        return max(re.findall(r'【v(\d+\.\d+\.\d+)】', resp.text))
+
+    def get_latest_version(self) -> str:
+        latest_version = self._get_latest_version()
+        self.set_version(latest_version)
+        return latest_version
+
+    def get_version(self) -> str:
+        if version := self.config.data.get('app_version'):
+            return version
+        return self.get_latest_version()
+
+    def set_version(self, app_version: str):
+        self.config.data['app_version'] = app_version
+        self.config.save()
+
+
 class AuthClient(RequestsClient):
-    def __init__(self, app_version: str = '2.9.0', *, ortega_uuid: str = None, use_cache: bool = True):
-        # TODO: Automate app_version update
+    def __init__(
+        self,
+        *,
+        app_version: str = None,
+        ortega_uuid: str = None,
+        use_cache: bool = True,
+        config_path: PathLike = None,
+    ):
+        self._version_manager = AppVersionManager(config_path)
         headers = {
             'content-type': 'application/json; charset=UTF-8',
             'ortegaaccesstoken': '',
-            'ortegaappversion': app_version,
+            'ortegaappversion': app_version or self._version_manager.get_version(),
             'ortegadevicetype': '2',
             'ortegauuid': ortega_uuid or str(uuid4()).replace('-', ''),
             'accept-encoding': 'gzip',
@@ -320,6 +354,15 @@ class AuthClient(RequestsClient):
         super().__init__(AUTH_HOST, scheme='https', headers=headers)
         self.cache = FileCache('auth', use_cache=use_cache)
 
+    def _update_app_version(self):
+        for key in ('_get_data_resp', 'ortega_info', 'game_data'):
+            try:
+                del self.__dict__[key]
+            except KeyError:
+                pass
+
+        self.session.headers['ortegaappversion'] = self._version_manager.get_latest_version()
+
     @cached_property
     def _get_data_resp(self) -> Response:
         return self.post('api/auth/getDataUri', data=msgpack.packb({}))
@@ -339,12 +382,18 @@ class AuthClient(RequestsClient):
         try:
             game_data = self.cache.get('game-data.msgpack')
         except CacheMiss:
-            self.cache.store(self._get_data_resp.content, 'game-data.msgpack', raw=True)
-            game_data = msgpack.unpackb(self._get_data_resp.content, timestamp=3)
+            game_data = self._get_game_data()
 
-        # TODO: Detect error response since a 200 is still returned
-        # Example: {"ErrorCode": 103, "Message": "", "ErrorHandlingType": 0, "ErrorMessageId": 0, "MessageParams": null}
+        if game_data.get('ErrorCode') == 103:  # app_version was out of date
+            # {"ErrorCode": 103, "Message": "", "ErrorHandlingType": 0, "ErrorMessageId": 0, "MessageParams": null}
+            self._update_app_version()
+            game_data = self._get_game_data()
+
         return GameData(game_data)
+
+    def _get_game_data(self):
+        self.cache.store(self._get_data_resp.content, 'game-data.msgpack', raw=True)
+        return msgpack.unpackb(self._get_data_resp.content, timestamp=3)
 
 
 class DataClient(RequestsClient):

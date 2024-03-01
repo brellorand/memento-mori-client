@@ -8,18 +8,21 @@ import json
 import logging
 import os
 from datetime import datetime
+from functools import cached_property
 from getpass import getuser
 from pathlib import Path
 from tempfile import gettempdir
+from typing import Any
 
 import msgpack
 
 from .exceptions import CacheError, CacheMiss
 
-__all__ = ['validate_or_make_dir', 'get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr']
+__all__ = ['get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr', 'get_config_dir', 'ConfigFile']
 log = logging.getLogger(__name__)
 
 ON_WINDOWS = os.name == 'nt'
+LIB_NAME = 'memento-mori-client'
 
 PathLike = str | Path
 
@@ -75,46 +78,48 @@ class FileCache:
             raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
 
 
-def validate_or_make_dir(
-    dir_path: PathLike, permissions: int = None, suppress_perm_change_exc: bool = True
-) -> Path:
-    """
-    Validate that the given path exists and is a directory.  If it does not exist, then create it and any intermediate
-    directories.
+class ConfigFile:
+    def __init__(self, path: PathLike = None):
+        if path:
+            self.path = Path(path).expanduser().resolve()
+        else:
+            self.path = get_config_dir().joinpath('config.json')
 
-    Example value for permissions: 0o1777
+    @cached_property
+    def data(self) -> dict[str, Any]:
+        try:
+            with self.path.open('r', encoding='utf-8') as f:
+                log.debug(f'Loading config from {path_repr(self.path)}')
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
 
-    :param dir_path: The path of a directory that exists or should be created if it doesn't
-    :param permissions: Permissions to set on the directory if it needs to be created (octal notation is suggested)
-    :param suppress_perm_change_exc: Suppress an OSError if the permission change is unsuccessful (default:
-      suppress/True)
-    :return: The path
-    """
-    path = Path(dir_path).expanduser()
-    if path.is_dir():
-        return path
-    elif path.exists():
-        raise ValueError(f'Invalid path - not a directory: {dir_path}')
-    else:
-        path.mkdir(parents=True)
-        if permissions is not None:
-            try:
-                path.chmod(permissions)
-            except OSError as e:
-                log.error(f'Error changing permissions of path {dir_path!r} to 0o{permissions:o}: {e}')
-                if not suppress_perm_change_exc:
-                    raise
+    def save(self):
+        if 'data' not in self.__dict__:
+            log.debug('No config data was loaded - skipping save')
+            return
+
+        log.debug(f'Saving config to {path_repr(self.path)}')
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open('w', encoding='utf-8') as f:
+            json.dump(self.data, f, ensure_ascii=False, sort_keys=True, indent=4)
+
+
+def get_config_dir(mode: int = 0o755) -> Path:
+    path = Path('~/.config', LIB_NAME).expanduser()
+    if not path.exists():
+        path.mkdir(mode, parents=True, exist_ok=True)
     return path
 
 
-def get_user_cache_dir(subdir: str = None, mode: int = 0o777) -> Path:
-    cache_dir = get_user_temp_dir(*filter(None, ('mememori', subdir)), mode=mode)
+def get_user_cache_dir(subdir: str = None, mode: int = 0o755) -> Path:
+    cache_dir = get_user_temp_dir(*filter(None, (LIB_NAME, subdir)), mode=mode)
     if not cache_dir.is_dir():
         raise ValueError(f'Invalid path - not a directory: {cache_dir.as_posix()}')
     return cache_dir
 
 
-def get_user_temp_dir(*sub_dirs, mode: int = 0o777) -> Path:
+def get_user_temp_dir(*sub_dirs, mode: int = 0o755) -> Path:
     """
     On Windows, returns `~/AppData/Local/Temp` or a sub-directory named after the current user of another temporary
     directory.  On Linux, returns a sub-directory named after the current user in `/tmp`, `/var/tmp`, or `/usr/tmp`.
