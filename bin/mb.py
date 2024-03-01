@@ -28,7 +28,7 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
     no_client_cache = Flag('-C', help='Do not read cached game/catalog data')
     no_mb_cache = Flag('-M', help='Do not read cached MB data')
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
-    locale = Option('-L', choices=LOCALES, default='EnUs', help='Locale to use for text resources')
+    locale = Option('-loc', choices=LOCALES, default='EnUs', help='Locale to use for text resources')
 
     def _init_command_(self):
         from mm.logging import init_logging
