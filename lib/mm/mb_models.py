@@ -16,7 +16,7 @@ from .utils import DataProperty
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from .client import DataClient
+    from .http_client import DataClient
 
 __all__ = []
 log = logging.getLogger(__name__)

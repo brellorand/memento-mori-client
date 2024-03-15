@@ -9,7 +9,7 @@ from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, O
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.runes import PartyMember, speed_tune
-from mm.client import DataClient
+from mm.http_client import DataClient
 from mm.mb_models import MB, LOCALES, Character
 
 log = logging.getLogger(__name__)
@@ -38,6 +38,34 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
     def all_characters(self) -> dict[int, Character]:
         return self.get_mb().characters
 
+    @cached_property
+    def _char_map(self) -> dict[str, Character]:
+        char_map = {}
+        for num, char in self.all_characters.items():
+            char_map[str(num)] = char
+            char_map[char.full_id.upper()] = char
+            char_map[char.full_name.upper()] = char
+        return char_map
+
+    def get_character(self, id_or_name: str) -> Character:
+        try:
+            return self._char_map[id_or_name.upper()]
+        except KeyError as e:
+            raise UsageError(
+                f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
+                ' to find the correct ID to use here'
+            ) from e
+
+
+# class Allocate(SpeedCLI, help='Speed tune the specified characters using the specified rune levels'):
+#     characters = Positional(
+#         metavar='ID|NAME', nargs=range(2, 6), help='The characters to speed tune, in descending turn order'
+#     )
+#     runes = Option('-r', nargs='+', type=int, required=True, help='Speed rune levels that should be allocated')
+#
+#     def main(self):
+#         members = [PartyMember(self.get_character(char_info)) for char_info in self.characters]
+
 
 class Tune(SpeedCLI, help='Speed tune the specified characters in the specified order'):
     """
@@ -56,24 +84,6 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
         nargs=range(2, 6),
         help='The characters to speed tune, in descending turn order',
     )
-
-    @cached_property
-    def _char_map(self) -> dict[str, Character]:
-        char_map = {}
-        for num, char in self.all_characters.items():
-            char_map[str(num)] = char
-            char_map[char.full_id.upper()] = char
-            char_map[char.full_name.upper()] = char
-        return char_map
-
-    def get_character(self, id_or_name: str) -> Character:
-        try:
-            return self._char_map[id_or_name.upper()]
-        except KeyError as e:
-            raise UsageError(
-                f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
-                ' to find the correct ID to use here'
-            ) from e
 
     def main(self):
         for member in speed_tune(self.get_members()):

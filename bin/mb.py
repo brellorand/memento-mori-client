@@ -10,9 +10,9 @@ from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, O
 from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.client import DataClient
 from mm.enums import Region
 from mm.fs import path_repr
+from mm.http_client import DataClient
 from mm.mb_models import MB, LOCALES, RANK_BONUS_STATS, WorldGroup
 from mm.output import OUTPUT_FORMATS, YAML, pprint
 from mm.utils import FutureWaiter

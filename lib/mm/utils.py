@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Optional, Callable, Any
 from tqdm import tqdm
 
 if TYPE_CHECKING:
-    from .client import RequestsClient
+    from .http_client import RequestsClient
 
 __all__ = ['rate_limited', 'format_path_prefix', 'DataProperty', 'parse_ms_epoch_ts', 'FutureWaiter']
 log = logging.getLogger(__name__)

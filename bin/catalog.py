@@ -12,8 +12,8 @@ from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, O
 from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.client import AuthClient, DataClient
 from mm.fs import path_repr
+from mm.http_client import AuthClient, DataClient
 from mm.output import CompactJSONEncoder
 from mm.utils import FutureWaiter
 
