@@ -298,7 +298,11 @@ class AppVersionManager:
     def _get_latest_version(self) -> str:
         log.debug('Retrieving latest app version from the Play store')
         with RequestsClient('play.google.com', scheme='https') as client:
+            # Using this instead of a plain Session / the plain URL just for the request logging
             resp = client.get('store/apps/details', params={'id': 'jp.boi.mementomori.android'})
+        # On 2024-03-01 there were 3 occurrences of the version number in the response, 2 of which had the following
+        # format...  One (with this format) was in html, the other two were in js.  Maybe there's a better way, but
+        # this was the easiest.
         return max(re.findall(r'【v(\d+\.\d+\.\d+)】', resp.text))
 
     def get_latest_version(self) -> str:
