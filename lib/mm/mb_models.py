@@ -8,9 +8,9 @@ import json
 import logging
 from datetime import datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Type, TypeVar, Literal, Iterator
+from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
-from .enums import Region, Element, Job, CharacterRarity
+from .enums import Region, Element, Job, CharacterRarity, Locale
 from .data import DictWrapper
 from .utils import DataProperty
 
@@ -22,10 +22,6 @@ __all__ = []
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
-
-# ls -1 temp/mb/TextResource* | sed 's#temp/mb/TextResource##g' | sed -E "s#(....)MB\.json#'\\1',#g" | paste -sd ' '
-Locale = Literal['DeDe', 'EnUs', 'EsMx', 'FrFr', 'IdId', 'JaJp', 'KoKr', 'PtBr', 'RuRu', 'ThTh', 'ViVn', 'ZhCn', 'ZhTw']
-LOCALES = ['DeDe', 'EnUs', 'EsMx', 'FrFr', 'IdId', 'JaJp', 'KoKr', 'PtBr', 'RuRu', 'ThTh', 'ViVn', 'ZhCn', 'ZhTw']
 
 RANK_BONUS_STATS = [
     'ACC', 'ACC %', 'ATK', 'Counter', 'CRIT', 'CRIT DMG Boost', 'Debuff ACC', 'DEF Break', 'DMG Boost',

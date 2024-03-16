@@ -8,17 +8,15 @@ import json
 import logging
 import os
 from datetime import datetime
-from functools import cached_property
 from getpass import getuser
 from pathlib import Path
 from tempfile import gettempdir
-from typing import Any
 
 import msgpack
 
 from .exceptions import CacheError, CacheMiss
 
-__all__ = ['get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr', 'get_config_dir', 'ConfigFile']
+__all__ = ['get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr', 'get_config_dir']
 log = logging.getLogger(__name__)
 
 ON_WINDOWS = os.name == 'nt'
@@ -76,33 +74,6 @@ class FileCache:
             path.write_bytes(msgpack.packb(data))
         else:
             raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
-
-
-class ConfigFile:
-    def __init__(self, path: PathLike = None):
-        if path:
-            self.path = Path(path).expanduser().resolve()
-        else:
-            self.path = get_config_dir().joinpath('config.json')
-
-    @cached_property
-    def data(self) -> dict[str, Any]:
-        try:
-            with self.path.open('r', encoding='utf-8') as f:
-                log.debug(f'Loading config from {path_repr(self.path)}')
-                return json.load(f)
-        except FileNotFoundError:
-            return {}
-
-    def save(self):
-        if 'data' not in self.__dict__:
-            log.debug('No config data was loaded - skipping save')
-            return
-
-        log.debug(f'Saving config to {path_repr(self.path)}')
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open('w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, sort_keys=True, indent=4)
 
 
 def get_config_dir(mode: int = 0o755) -> Path:

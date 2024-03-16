@@ -17,3 +17,11 @@ class CacheMiss(CacheError):
 
 class RuneError(MementoMoriException):
     """Raised when an invalid combination of rune types, levels, or quantities is provided"""
+
+
+class MissingClientKey(MementoMoriException):
+    """Raised when no client key is stored for a given account, and a password is required"""
+
+
+class ApiResponseError(MementoMoriException):
+    """Raised when the ortegastatuscode header value in a response is non-zero"""

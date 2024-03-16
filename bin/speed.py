@@ -8,9 +8,10 @@ from functools import cached_property
 from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, UsageError, main
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.runes import PartyMember, speed_tune
+from mm.enums import LOCALES
 from mm.http_client import DataClient
-from mm.mb_models import MB, LOCALES, Character
+from mm.mb_models import MB, Character
+from mm.runes import PartyMember, speed_tune
 
 log = logging.getLogger(__name__)
 

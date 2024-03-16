@@ -7,8 +7,41 @@ from __future__ import annotations
 import logging
 from enum import StrEnum, IntEnum
 
-__all__ = ['Rarity', 'RuneRarity', 'Region']
+__all__ = ['Rarity', 'RuneRarity', 'Region', 'Locale', 'LOCALES']
 log = logging.getLogger(__name__)
+
+
+class Locale(StrEnum):
+    # ls -1 temp/mb/TextResource* | sed 's#temp/mb/TextResource##g' | sed -E "s#(....)MB\.json#'\\1',#g" | paste -sd ' '
+
+    num: int
+
+    def __new__(cls, value, num: int):
+        obj = str.__new__(cls)
+        obj._value_ = value
+        obj.num = num
+        return obj
+
+    DeDe = 'DeDe', 13
+    EnUs = 'EnUs', 2
+    EsMx = 'EsMx', 7
+    FrFr = 'FrFr', 5
+    IdId = 'IdId', 10
+    JaJp = 'JaJp', 1
+    KoKr = 'KoKr', 3
+    PtBr = 'PtBr', 8
+    RuRu = 'RuRu', 12
+    ThTh = 'ThTh', 9
+    ViVn = 'ViVn', 11
+    ZhCn = 'ZhCn', 6
+    ZhTw = 'ZhTw', 4
+
+    @property
+    def country_code(self) -> str:
+        return self._value_[2:].upper()
+
+
+LOCALES = list(Locale)
 
 
 class Rarity(StrEnum):

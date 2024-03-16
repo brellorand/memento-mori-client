@@ -14,12 +14,13 @@ from uuid import uuid4
 from weakref import finalize
 
 import msgpack
-from requests import Session, Response
+from requests import Session, Response, HTTPError
 
 from .assets import AssetCatalog
+from .config import ConfigFile, Account
 from .data import GameData, OrtegaInfo
-from .exceptions import CacheMiss
-from .fs import FileCache, ConfigFile, PathLike
+from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
+from .fs import FileCache, PathLike
 from .mb_models import MB, Locale
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
@@ -290,10 +291,28 @@ class RequestsClient:
 
 
 class AppVersionManager:
+    """
+    It appears that a different app version value may be expected for different platforms...
+
+    In AppVersionMB:
+    [
+        {"Id": 1, "IsIgnore": null, "Memo": null, "DeviceType": 1, "AppVersion": "2.8.1"},
+        {"Id": 2, "IsIgnore": null, "Memo": null, "DeviceType": 2, "AppVersion": "2.8.1"},
+        {"Id": 3, "IsIgnore": null, "Memo": null, "DeviceType": 3, "AppVersion": "2.8.1"},
+        {"Id": 4, "IsIgnore": null, "Memo": null, "DeviceType": 5, "AppVersion": "2.8.1"}
+    ]
+
+    In mementomori-helper, in MementoMori.Ortega/Share/Enums/DeviceType.cs, iOS is listed as 1, followed by
+    Android (2, I assume), UnityEditor, Win64, DmmGames (5, I assume), Steam, Apk
+
+    This class handles caching the latest known version to a local file, and retrieving the latest version from the
+    Android Play store.
+    """
+
     __slots__ = ('config',)
 
-    def __init__(self, config_path: PathLike = None):
-        self.config = ConfigFile(config_path)
+    def __init__(self, config: ConfigFile):
+        self.config = config
 
     def _get_latest_version(self) -> str:
         log.debug('Retrieving latest app version from the Play store')
@@ -311,13 +330,17 @@ class AppVersionManager:
         return latest_version
 
     def get_version(self) -> str:
-        if version := self.config.data.get('app_version'):
+        if version := self.config.auth.app_version:
             return version
+        # if version := self.config.data.get('app_version'):
+        #     return version
         return self.get_latest_version()
 
     def set_version(self, app_version: str):
-        self.config.data['app_version'] = app_version
-        self.config.save()
+        self.config.auth.app_version = app_version
+        self.config.auth.save()
+        # self.config.data['app_version'] = app_version
+        # self.config.save()
 
 
 class AuthClient(RequestsClient):
@@ -329,33 +352,20 @@ class AuthClient(RequestsClient):
         use_cache: bool = True,
         config_path: PathLike = None,
     ):
-        self._version_manager = AppVersionManager(config_path)
+        self.config = ConfigFile(config_path)
+        self._version_manager = AppVersionManager(self.config)
+        if app_version:
+            self._version_manager.set_version(app_version)
         headers = {
             'content-type': 'application/json; charset=UTF-8',
             'ortegaaccesstoken': '',
-            'ortegaappversion': app_version or self._version_manager.get_version(),
+            'ortegaappversion': self._version_manager.get_version(),
             'ortegadevicetype': '2',
             'ortegauuid': ortega_uuid or str(uuid4()).replace('-', ''),
             'accept-encoding': 'gzip',
             'User-Agent': 'BestHTTP/2 v2.3.0',
-            # 'User-Agent': 'UnityPlayer/2021.3.10f1 (UnityWebRequest/1.0, libcurl/7.80.0-DEV)',
-            # 'X-Unity-Version': '2021.3.10f1',
         }
-        """
-        It appears that a different app version value may be expected for different platforms...
-
-        In AppVersionMB:
-        [
-            {"Id": 1, "IsIgnore": null, "Memo": null, "DeviceType": 1, "AppVersion": "2.8.1"},
-            {"Id": 2, "IsIgnore": null, "Memo": null, "DeviceType": 2, "AppVersion": "2.8.1"},
-            {"Id": 3, "IsIgnore": null, "Memo": null, "DeviceType": 3, "AppVersion": "2.8.1"},
-            {"Id": 4, "IsIgnore": null, "Memo": null, "DeviceType": 5, "AppVersion": "2.8.1"}
-        ]
-
-        In mementomori-helper, in MementoMori.Ortega/Share/Enums/DeviceType.cs, iOS is listed as 1, followed by
-        Android (2, I assume), UnityEditor, Win64, DmmGames (5, I assume), Steam, Apk
-        """
-        super().__init__(AUTH_HOST, scheme='https', headers=headers)
+        super().__init__(AUTH_HOST, scheme='https', headers=headers, path_prefix='api')
         self.cache = FileCache('auth', use_cache=use_cache)
 
     def _update_app_version(self):
@@ -367,9 +377,36 @@ class AuthClient(RequestsClient):
 
         self.session.headers['ortegaappversion'] = self._version_manager.get_latest_version()
 
+    def request(self, *args, **kwargs) -> Response:
+        try:
+            resp: Response = super().request(*args, **kwargs)
+        except HTTPError as e:
+            self._maybe_update_headers(e.response.headers)
+            raise
+        else:
+            self._maybe_update_headers(resp.headers)
+            return resp
+
+    def _maybe_update_headers(self, headers: dict[str, str] | None):
+        log.debug(f'Response {headers=}')
+        if headers and (next_token := headers.get('orteganextaccesstoken')):
+            log.debug(f'Updating ortegaaccesstoken=>{next_token!r}')
+            self.session.headers['ortegaaccesstoken'] = next_token
+
+    def _post_msg(self, uri_path: str, to_pack, **kwargs):
+        resp = self.post(uri_path, data=msgpack.packb(to_pack), **kwargs)
+        data = msgpack.unpackb(resp.content, timestamp=3)
+        if (status_code := resp.headers.get('ortegastatuscode')) and status_code != '0':
+            raise ApiResponseError(f'Error requesting {uri_path=}: {data}')
+        return data
+
+    # region getDataUri
+
     @cached_property
     def _get_data_resp(self) -> Response:
-        return self.post('api/auth/getDataUri', data=msgpack.packb({}))
+        # This request technically supports the following fields: CountryCode (str), UserId (long)
+        # This request may be made during maintenance
+        return self.post('auth/getDataUri', data=msgpack.packb({}))
 
     @cached_property
     def ortega_info(self) -> OrtegaInfo:
@@ -399,6 +436,84 @@ class AuthClient(RequestsClient):
         self.cache.store(self._get_data_resp.content, 'game-data.msgpack', raw=True)
         return msgpack.unpackb(self._get_data_resp.content, timestamp=3)
 
+    # endregion
+
+    # region Get Client Key
+
+    def get_client_key(self, account: Account, password: str) -> str:
+        """
+        Retrieve a reusable client key that may be stored and reused instead of storing the account password.
+
+        :param account: The Account object for which a client key should be obtained
+        :param password: The account's password
+        :return: The client key value
+        """
+        create_resp = self._create_user()
+        log.debug(f'Create user response={create_resp!r}')
+        cb_user_data = self._comeback_user_data(account.user_id, password, create_resp['UserId'])
+        log.debug(f'Get comeback user data response={cb_user_data!r}')
+        cb_resp = self._comeback_user(account.user_id, create_resp['UserId'], cb_user_data['OneTimeToken'])
+        log.debug(f'Get comeback user response={cb_resp!r}')
+        return cb_resp['ClientKey']
+
+    def _create_user(self):
+        # This request may NOT be made during maintenance
+        auth_config = self.config.auth
+        data = {
+            'AdverisementId': str(uuid4()),  # noqa  # Typo is intentional
+            'AppVersion': self._version_manager.get_version(),
+            'CountryCode': auth_config.locale.country_code,
+            'DeviceToken': '',
+            'ModelName': auth_config.model_name,
+            'DisplayLanguage': auth_config.locale.num,
+            'OSVersion': auth_config.os_version,
+            'SteamTicket': '',
+        }
+        log.debug(f'Sending createUser request with {data=}')
+        return self._post_msg('auth/createUser', data)
+
+    def _comeback_user_data(self, user_id: int, password: str, create_resp_id: int, ):
+        # This request may be made during maintenance
+        # From helper: public enum SnsType {None, OrtegaId, AppleId, Twitter, Facebook, GameCenter, GooglePlay}
+        data = {
+            'FromUserId': create_resp_id,
+            'Password': password,
+            'SnsType': 1,  # SnsType.OrtegaId
+            'UserId': user_id,
+        }
+        return self._post_msg('auth/getComebackUserData', data)
+
+    def _comeback_user(self, user_id: int, create_resp_id: int, token: str):
+        # This request may be made during maintenance
+        data = {'FromUserId': create_resp_id, 'OneTimeToken': token, 'ToUserId': user_id}
+        log.debug(f'Sending comebackUser request with {data=}')
+        return self._post_msg('auth/comebackUser', data)
+
+    # endregion
+
+    def login(self, account: Account):
+        """
+        Login to the specified account (not a world).
+
+        Note: the helper's logout method only de-registers locally scheduled jobs - no explicit logout appears to be
+        necessary.
+        """
+        # This request may be made during maintenance
+        if not account.client_key:
+            raise MissingClientKey(f'A password is required for {account}')
+
+        auth_config = self.config.auth
+        data = {
+            'ClientKey': account.client_key,
+            'DeviceToken': '',
+            'AppVersion': self._version_manager.get_version(),
+            'OSVersion': auth_config.os_version,
+            'ModelName': auth_config.model_name,
+            'AdverisementId': str(uuid4()),  # noqa  # Typo is intentional
+            'UserId': account.user_id,
+        }
+        return self._post_msg('auth/login', data)
+
 
 class DataClient(RequestsClient):
     def __init__(self, auth_client: AuthClient = None, system: str = 'Android', use_cache: bool = True, **kwargs):
@@ -408,7 +523,6 @@ class DataClient(RequestsClient):
         headers = {
             'content-type': 'application/json; charset=UTF-8',
             'accept-encoding': 'gzip',
-            # 'User-Agent': 'BestHTTP/2 v2.3.0',
             'User-Agent': 'UnityPlayer/2021.3.10f1 (UnityWebRequest/1.0, libcurl/7.80.0-DEV)',
             'X-Unity-Version': '2021.3.10f1',
         }
