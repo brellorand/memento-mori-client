@@ -6,21 +6,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from abc import ABC, abstractmethod
 from functools import cached_property
-from threading import Lock
-from typing import TYPE_CHECKING, Union, MutableMapping, Any, Mapping, Self
-from urllib.parse import urlencode, urlparse
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, Self
 
-from .assets import AssetCatalog
-from .data import GameData, OrtegaInfo
 from .enums import Locale
-from .exceptions import CacheMiss
-from .fs import FileCache, PathLike, get_config_dir, path_repr
-from .mb_models import MB
-from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
+from .fs import PathLike, get_config_dir, path_repr
 
 if TYPE_CHECKING:
     from pathlib import Path
