@@ -9,7 +9,7 @@ from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, O
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.config import ConfigFile, Account
+from mm.config import ConfigFile, AccountConfig
 from mm.http_client import AuthClient
 from mm.output import CompactJSONEncoder
 
@@ -35,7 +35,7 @@ class Login(GameCLI, help='Log in for the first time'):
     name = Option('-n', required=True, help='Friendly name to associate with the account (locally only)')
 
     def main(self):
-        account = Account(self.user_id, name=self.name, config_file=ConfigFile())
+        account = AccountConfig(self.user_id, name=self.name, config_file=ConfigFile())
         client_key = self.auth_client.get_client_key(account, password=getpass('Please enter the account password: '))
         log.debug(f'Received {client_key=}')
         account.client_key = client_key
@@ -55,7 +55,7 @@ class Show(GameCLI, help='Show info'):
             self.print(self.auth_client.login(self.account))
 
     @cached_property
-    def account(self) -> Account:
+    def account(self) -> AccountConfig:
         config = ConfigFile()
         if user_id := self.user_id:
             try:

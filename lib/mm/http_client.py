@@ -17,7 +17,7 @@ import msgpack
 from requests import Session, Response, HTTPError
 
 from .assets import AssetCatalog
-from .config import ConfigFile, Account
+from .config import ConfigFile, AccountConfig
 from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
 from .fs import FileCache, PathLike
@@ -332,15 +332,11 @@ class AppVersionManager:
     def get_version(self) -> str:
         if version := self.config.auth.app_version:
             return version
-        # if version := self.config.data.get('app_version'):
-        #     return version
         return self.get_latest_version()
 
     def set_version(self, app_version: str):
         self.config.auth.app_version = app_version
         self.config.auth.save()
-        # self.config.data['app_version'] = app_version
-        # self.config.save()
 
 
 class AuthClient(RequestsClient):
@@ -445,7 +441,7 @@ class AuthClient(RequestsClient):
 
     # region Get Client Key
 
-    def get_client_key(self, account: Account, password: str) -> str:
+    def get_client_key(self, account: AccountConfig, password: str) -> str:
         """
         Retrieve a reusable client key that may be stored and reused instead of storing the account password.
 
@@ -496,7 +492,7 @@ class AuthClient(RequestsClient):
 
     # endregion
 
-    def login(self, account: Account):
+    def login(self, account: AccountConfig):
         """
         Login to the specified account (not a world).
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Self
 
@@ -16,7 +17,7 @@ from .fs import PathLike, get_config_dir, path_repr
 if TYPE_CHECKING:
     from pathlib import Path
 
-__all__ = ['ConfigFile', 'Account']
+__all__ = ['ConfigFile', 'AccountConfig', 'AndroidModel', 'ANDROID_MODELS', 'DEFAULT_ANDROID_MODEL']
 log = logging.getLogger(__name__)
 
 
@@ -51,8 +52,8 @@ class ConfigFile:
         return AuthOptions._load(self)
 
     @cached_property
-    def accounts(self) -> dict[str, Account]:
-        return Account._load_all(self)
+    def accounts(self) -> dict[str, AccountConfig]:
+        return AccountConfig._load_all(self)
 
 
 class ConfigSection(ABC):
@@ -94,6 +95,54 @@ class ConfigSection(ABC):
         self._config.save()
 
 
+@dataclass
+class AndroidModel:
+    brand: str
+    model: str
+    version: int
+    api: int
+    build_id: str
+    build_ver: str
+
+    @property
+    def model_name(self) -> str:
+        """
+        The ModelName value to be used in API requests.
+
+        It appears that real values are from: https://docs.unity3d.com/ScriptReference/SystemInfo-deviceModel.html
+
+        The format is not documented, but it appears to be two build properties, available via ``getprop`` in ``adb``:
+            {ro.product.brand} {ro.product.model}
+
+        Example value: ``Xiaomi 2203121C``
+        """
+        return f'{self.brand} {self.model}'
+
+    @property
+    def os_version(self) -> str:
+        """
+        The OSVersion value to be used in API requests.
+
+        It appears that real values are from: https://docs.unity3d.com/ScriptReference/SystemInfo-operatingSystem.html
+
+        The format is not documented, but it appears to contain build properties, available via ``getprop`` in ``adb``:
+            Android OS {ro.build.version.release} / API-{ro.build.version.sdk} ({ro.build.id}/{ro.build.version.incremental})
+
+        Example value: ``Android OS 13 / API-33 (TKQ1.220829.002/V14.0.12.0.TLACNXM)``
+        """
+        return f'Android OS {self.version} / API-{self.api} ({self.build_id}/{self.build_ver})'
+
+
+ANDROID_MODELS = {
+    'Galaxy S22': AndroidModel('Samsung', 'SM-S901E', 12, 31, 'SP1A.210812.016', 'S901EXXU2AVF1'),
+    'Galaxy S21 Ultra': AndroidModel('Samsung', 'SM-G998B', 12, 31, 'SP1A.210812.016', 'G998BXXU4CVC4'),
+    'Galaxy S21 Ultra 5G': AndroidModel('Samsung', 'SM-G998B', 9, 28, 'SP1A.210812.016', 'G998BXXU4BULF'),  # bluestacks
+    'Pixel Tablet': AndroidModel('Google', 'Pixel Tablet', 14, 34, 'UQ1A.240205.002', '11224170'),
+    'Xiaomi 12S Ultra': AndroidModel('Xiaomi', '2203121C', 13, 33, 'TKQ1.220829.002', 'V14.0.12.0.TLACNXM'),
+}
+DEFAULT_ANDROID_MODEL = ANDROID_MODELS['Galaxy S22']
+
+
 class AuthOptions(ConfigSection, section='auth'):
     def __init__(
         self,
@@ -105,10 +154,9 @@ class AuthOptions(ConfigSection, section='auth'):
         config_file: ConfigFile = None,
     ):
         super().__init__(config_file)
-        # TODO: Find more appropriate values?
         self.app_version = app_version
-        self.os_version = os_version or 'Android OS 13 / API-33 (TKQ1.220829.002/V14.0.12.0.TLACNXM)'
-        self.model_name = model_name or 'Xiaomi 2203121C'
+        self.os_version = os_version or DEFAULT_ANDROID_MODEL.os_version
+        self.model_name = model_name or DEFAULT_ANDROID_MODEL.model_name
         self.locale = Locale(locale) if locale else Locale.EnUs
 
     def as_dict(self) -> dict[str, int | str | None]:
@@ -120,7 +168,7 @@ class AuthOptions(ConfigSection, section='auth'):
         }
 
 
-class Account(ConfigSection, section='accounts', id_attr='user_id'):
+class AccountConfig(ConfigSection, section='accounts', id_attr='user_id'):
     def __init__(self, user_id: int, client_key: str = None, name: str = None, config_file: ConfigFile = None):
         super().__init__(config_file)
         self.user_id = int(user_id)
