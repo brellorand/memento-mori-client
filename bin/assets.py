@@ -168,6 +168,7 @@ class Extract(ParallelBundleCommand, help='Extract assets from a .bundle file'):
     allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
 
     def main(self):
+        # TODO: Add --earliest arg and ignore bundle files older than the specified value
         dst_dir, force, allow_raw = self.output, self.force, self.allow_raw
         with self.executor() as executor:
             futures = [executor.submit(bundle.extract, dst_dir, force, allow_raw) for bundle in self.find_bundles()]

@@ -367,6 +367,7 @@ class AuthClient(RequestsClient):
         }
         super().__init__(AUTH_HOST, scheme='https', headers=headers, path_prefix='api')
         self.cache = FileCache('auth', use_cache=use_cache)
+        self.__made_first_req = False
 
     def _update_app_version(self):
         for key in ('_get_data_resp', 'ortega_info', 'game_data'):
@@ -384,6 +385,7 @@ class AuthClient(RequestsClient):
             self._maybe_update_headers(e.response.headers)
             raise
         else:
+            self.__made_first_req = True
             self._maybe_update_headers(resp.headers)
             return resp
 
@@ -394,8 +396,11 @@ class AuthClient(RequestsClient):
             self.session.headers['ortegaaccesstoken'] = next_token
 
     def _post_msg(self, uri_path: str, to_pack, **kwargs):
+        if not self.__made_first_req:
+            self._get_data_resp  # noqa  # Ensure the app version is up to date
+
         resp = self.post(uri_path, data=msgpack.packb(to_pack), **kwargs)
-        data = msgpack.unpackb(resp.content, timestamp=3)
+        data = msgpack.unpackb(resp.content, timestamp=3, strict_map_key=False)
         if (status_code := resp.headers.get('ortegastatuscode')) and status_code != '0':
             raise ApiResponseError(f'Error requesting {uri_path=}: {data}')
         return data
