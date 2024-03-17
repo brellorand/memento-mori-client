@@ -262,8 +262,9 @@ class ItemAndCount(MBEntity):
 
 class EquipmentUpgradeRequirements(MBEntity):
     """
-    Id=1 => weapons
-    Id=2 => armor
+    Represents a "row" (which contains many other rows of data) in ``EquipmentReinforcementMaterialMB``.  There are
+    only two rows/entries at the top level - Id=1 contains upgrade requirements for weapons, and Id=2 contains upgrade
+    requirements for armor.
     """
 
     @cached_property
