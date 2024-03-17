@@ -17,7 +17,7 @@ except ImportError:
 
 __all__ = ['OUTPUT_FORMATS', 'YAML', 'pprint', 'yaml_dump', 'PermissiveJSONEncoder', 'CompactJSONEncoder']
 
-OUTPUT_FORMATS = ['json', 'json-pretty', 'csv']
+OUTPUT_FORMATS = ['json', 'json-pretty', 'json-lines', 'csv']
 YAML = yaml is not None
 
 
@@ -41,6 +41,9 @@ def pprint(out_fmt: str, data):
             print(json.dumps(data, ensure_ascii=False))
         elif out_fmt == 'json-pretty':
             print(json.dumps(data, indent=4, ensure_ascii=False, cls=CompactJSONEncoder))
+        elif out_fmt == 'json-lines':
+            for row in data:
+                print(json.dumps(row, ensure_ascii=False))
         elif out_fmt == 'yaml':
             print(yaml_dump(data, indent_nested_lists=True))
         elif out_fmt == 'csv':

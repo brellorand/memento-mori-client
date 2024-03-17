@@ -2,14 +2,15 @@
 
 import logging
 from functools import cached_property
+from typing import Iterator
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, main
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.enums import LOCALES
 from mm.http_client import DataClient
-from mm.mb_models import MB
-from mm.output import OUTPUT_FORMATS, pprint
+from mm.mb_models import MB, Equipment as _Equipment
+from mm.output import OUTPUT_FORMATS, YAML, pprint
 
 log = logging.getLogger(__name__)
 
@@ -34,13 +35,29 @@ class GearCLI(Command, description='Memento Mori Gear Helper', option_name_mode=
         return self.client.get_mb(use_cached=not self.no_mb_cache, json_cache_map=json_cache_map, locale=self.locale)
 
 
-class UpgradeReqs(GearCLI, help='Calculate gear upgrade requirements'):
-    action = SubCommand()
+class List(GearCLI, help='List the specified items'):
+    item = SubCommand()
+    format = Option(
+        '-f', choices=OUTPUT_FORMATS, default_cb=lambda c: c._format_default(), cb_with_cmd=True, help='Output format'
+    )
+
+    @classmethod
+    def _format_default(cls) -> str:
+        return 'json-pretty' if YAML is None else 'yaml'
+
+    def pprint(self, data):
+        if data:
+            pprint(self.format, data)
+        else:
+            print('No results')
 
 
-class List(UpgradeReqs, help='List all upgrade requirements'):
+class UpgradeReqs(List, help='List all upgrade requirements'):
     type = Option('-t', choices=('weapon', 'armor'), required=True, help='The type of gear to be upgraded')
-    format = Option('-f', choices=OUTPUT_FORMATS, default='csv', help='Output format')
+
+    @classmethod
+    def _format_default(cls) -> str:
+        return 'csv'
 
     def main(self):
         data = self.get_csv_data() if self.format == 'csv' else self.get_data()
@@ -63,15 +80,59 @@ class List(UpgradeReqs, help='List all upgrade requirements'):
 
     def get_data(self):
         return {
-            f'Level {lv}': {f'{ic.item.display_name} x {ic.count:,d}' for ic in req_ics}
+            f'Level {lv}': [str(ic) for ic in req_ics]
             for lv, req_ics in self._get_requirements().level_required_items_map.items()
         }
 
-    def pprint(self, data):
-        if data:
-            pprint(self.format, data)
-        else:
-            print('No results')
+
+class Items(List, help='List all items'):
+    def main(self):
+        self.pprint(self.get_data())
+
+    def get_data(self):
+        return [
+            {
+                'name': getattr(item, 'name', '?'),
+                'display_name': getattr(item, 'display_name', '?'),
+                'description': getattr(item, 'description', '?'),
+                'type': item.item_type,
+                'id': item.id,
+            }
+            for type_item_map in self.get_mb().items.values()
+            for item in type_item_map.values()
+        ]
+
+
+class Equipment(List, help='List all equipment'):
+    # full = Flag('-F', help='Output full equipment info (default: only IDs and names)')
+    min_level: int = Option('-min', help='Filter to gear at or above the specified level')
+    max_level: int = Option('-max', help='Filter to gear at or below the specified level')
+
+    def main(self):
+        self.pprint(self.get_data())
+
+    def _iter_items(self) -> Iterator[_Equipment]:
+        items = self.get_mb().equipment.values()
+        if min_level := self.min_level:
+            items = (i for i in items if i.level >= min_level)
+        if max_level := self.max_level:
+            items = (i for i in items if i.level <= max_level)
+        yield from items
+
+    def get_data(self):
+        return [
+            {
+                'name': item.name,
+                'id': item.id,
+                'level': item.level,
+                'rarity': item.rarity_flags,
+                'quality': item.quality_level,
+                'enhance_reqs': (
+                    list(map(str, item.enhance_requirements.required_items)) if item.enhance_requirements else []
+                ),
+            }
+            for item in self._iter_items()
+        ]
 
 
 if __name__ == '__main__':

@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from datetime import datetime
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
 from .enums import Region, Element, Job, CharacterRarity, Locale
 from .data import DictWrapper
-from .utils import DataProperty
+from .utils import DataProperty, DictAttrFieldNotFoundError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -94,18 +95,58 @@ class MB:
 
     # region Items & Equipment
 
-    @cached_property
-    def items(self) -> dict[int, dict[int, Item]]:
+    def _get_typed_items(self, cls: Type[T], name: str) -> dict[int, dict[int, T]]:
         type_id_item_map = {}
-        for item in self._iter_mb_objects(Item, 'ItemMB'):
+        for item in self._iter_mb_objects(cls, name):
             try:
                 type_id_item_map[item.item_type][item.item_id] = item
             except KeyError:
                 type_id_item_map[item.item_type] = {item.item_id: item}
         return type_id_item_map
 
-    def get_item(self, item_type: int, item_id: int) -> Item:
-        return self.items[item_type][item_id]
+    @cached_property
+    def items(self) -> dict[int, dict[int, Item]]:
+        return self._get_typed_items(Item, 'ItemMB')
+
+    @cached_property
+    def change_items(self) -> dict[int, dict[int, ChangeItem]]:
+        return self._get_typed_items(ChangeItem, 'ChangeItemMB')
+
+    @cached_property
+    def adamantite(self) -> dict[int, EquipmentSetMaterial]:
+        return self._get_mb_id_obj_map(EquipmentSetMaterial, 'EquipmentSetMaterialMB')
+
+    def get_item(self, item_type: int, item_id: int) -> Item | EquipmentPart | EquipmentSetMaterial:
+        # ItemType=3: Gold
+        # ItemType=5: object parts for a given slot/set
+        # ItemType=9: Adamantite material for a given slot/level
+        if type_group := self.items.get(item_type):
+            return type_group[item_id]
+        elif item_type == 5:
+            return self.equipment_parts[item_id]
+        elif item_type == 9:
+            return self.adamantite[item_id]
+        raise KeyError(f'Unable to find item with {item_type=}, {item_id=}')
+
+    @cached_property
+    def equipment(self) -> dict[int, Equipment]:
+        return self._get_mb_id_obj_map(Equipment, 'EquipmentMB')
+
+    @cached_property
+    def equipment_parts(self) -> dict[int, EquipmentPart]:
+        part_id_items_map = defaultdict(list)
+        for item in self.equipment.values():
+            if item.part_id:
+                part_id_items_map[item.part_id].append(item)
+
+        return {
+            part_id: EquipmentPart(self, min(items, key=lambda i: i.level))
+            for part_id, items in part_id_items_map.items()
+        }
+
+    @cached_property
+    def equipment_enhance_requirements(self) -> dict[int, EquipmentEnhanceRequirements]:
+        return self._get_mb_id_obj_map(EquipmentEnhanceRequirements, 'EquipmentEvolutionMB')
 
     @cached_property
     def _equipment_upgrade_requirements(self) -> dict[int, EquipmentUpgradeRequirements]:
@@ -204,7 +245,34 @@ class TextResource(MBEntity):
     value = DataProperty('Text')
 
 
-class Item(MBEntity):
+class NamedEntity(MBEntity):
+    name_key = DataProperty('NameKey')  # matches a TextResource.key (StringKey) value
+
+    @cached_property
+    def name(self) -> str:
+        return self.mb.text_resource_map.get(self.name_key, self.name_key)
+
+
+class FullyNamedEntity(NamedEntity):
+    icon_id: int = DataProperty('IconId')
+    description_key = DataProperty('DescriptionKey')  # matches a TextResource.key (StringKey) value
+    display_name_key = DataProperty('DisplayName')  # matches a TextResource.key (StringKey) value
+
+    @cached_property
+    def display_name(self) -> str:
+        return self.mb.text_resource_map.get(self.display_name_key, self.display_name_key)
+
+    @cached_property
+    def description(self) -> str:
+        return self.mb.text_resource_map.get(self.description_key, self.description_key)
+
+
+class TypedItem:
+    item_id: int = DataProperty('ItemId')
+    item_type: int = DataProperty('ItemType')
+
+
+class Item(TypedItem, FullyNamedEntity):
     """
     Represents a row in ItemMB
 
@@ -228,25 +296,6 @@ class Item(MBEntity):
         "TransferSpotId": 0
     """
 
-    item_id: int = DataProperty('ItemId')
-    item_type: int = DataProperty('ItemType')
-    icon_id: int = DataProperty('IconId')
-    name_key = DataProperty('NameKey')                  # matches a TextResource.key (StringKey) value
-    description_key = DataProperty('DescriptionKey')    # matches a TextResource.key (StringKey) value
-    display_name_key = DataProperty('DisplayName')      # matches a TextResource.key (StringKey) value
-
-    @cached_property
-    def name(self) -> str:
-        return self.mb.text_resource_map[self.name_key]
-
-    @cached_property
-    def display_name(self) -> str:
-        return self.mb.text_resource_map[self.display_name_key]
-
-    @cached_property
-    def description(self) -> str:
-        return self.mb.text_resource_map[self.description_key]
-
 
 class ItemAndCount(MBEntity):
     """A row in a list of reward/required items"""
@@ -256,8 +305,132 @@ class ItemAndCount(MBEntity):
     count: int = DataProperty('ItemCount')
 
     @cached_property
-    def item(self) -> Item:
+    def item(self) -> Item | TypedItem:
         return self.mb.get_item(self.item_type, self.item_id)
+
+    def __str__(self) -> str:
+        item = self.item
+        try:
+            name = item.display_name
+        except (AttributeError, DictAttrFieldNotFoundError):
+            try:
+                name = item.name
+            except (AttributeError, DictAttrFieldNotFoundError):
+                name = f'item_type={item.item_type}, item_id={item.item_id}'
+
+        return f'{name} x {self.count:,d}'
+
+
+class EquipmentSetMaterial(FullyNamedEntity):
+    """
+    Represents an entry in ``EquipmentSetMaterialMB`` (an Adamantite material).
+
+    Example content:
+        "Id": 2,
+        "IsIgnore": null,
+        "Memo": "220剣",
+        "DescriptionKey": "[EquipmentSetMaterialDescription2]",
+        "IconId": 1,
+        "ItemRarityFlags": 64,
+        "Lv": 220,
+        "NameKey": "[EquipmentSetMaterialNameSword]",
+        "DisplayNameKey": "[EquipmentSlotTypeSword]",
+        "QuestIdList": [364, 365, 366, 367, 392, 393, 394, 395]
+    """
+
+    level: int = DataProperty('Lv')
+
+    @cached_property
+    def display_name(self) -> str:
+        return f'Lv {self.level} {self.name}'
+
+
+class ChangeItem(TypedItem, MBEntity):
+    """
+    Represents an entry in ``ChangeItemMB``.  Most entries appear to be related to Adamantite materials.
+    """
+
+    change_item_type: int = DataProperty('ChangeItemType')
+    need_count: int = DataProperty('NeedCount')
+
+    @cached_property
+    def change_items(self) -> list[ItemAndCount]:
+        return [ItemAndCount(self.mb, ic) for ic in self.data['ChangeItems']]
+
+
+class EquipmentPart(TypedItem, MBEntity):
+    """Pseudo MBEntity that represents parts of upgradable equipment."""
+
+    def __init__(self, mb: MB, equipment: Equipment):
+        super().__init__(mb, {'Id': equipment.part_id, 'ItemType': 5})
+        self.equipment = equipment
+        self.name = f'{equipment.name} Parts'
+
+
+class Equipment(NamedEntity):
+    """
+    Represents a row in EquipmentMB
+
+    Example content:
+        "Id": 529,
+        "IsIgnore": null,
+        "Memo": "R180_剣",
+        "AdditionalParameterTotal": 32603,
+        "AfterLevelEvolutionEquipmentId": 530,
+        "AfterRarityEvolutionEquipmentId": 0,
+        "BattleParameterChangeInfo": {"BattleParameterType": 2, "ChangeParameterType": 1, "Value": 26024.0},
+        "Category": 2,
+        "CompositeId": 1,
+        "EquipmentEvolutionId": 3,
+        "EquipmentExclusiveSkillDescriptionId": 0,
+        "EquipmentForgeId": 0,
+        "EquipmentLv": 180,
+        "EquipmentReinforcementMaterialId": 1,
+        "EquipmentSetId": 1,
+        "EquippedJobFlags": 1,
+        "ExclusiveEffectId": 0,
+        "GoldRequiredToOpeningFirstSphereSlot": 26000,
+        "GoldRequiredToTraining": 25000,
+        "IconId": 89,
+        "NameKey": "[EquipmentName89]",
+        "PerformancePoint": 133555,
+        "QualityLv": 1,
+        "RarityFlags": 32,
+        "SlotType": 1
+    """
+
+    level: int = DataProperty('EquipmentLv')
+    set_id: int = DataProperty('EquipmentSetId')
+    part_id: int = DataProperty('CompositeId')  # ID for this item's part (ItemType=5)
+    enhance_id: int = DataProperty('EquipmentEvolutionId')
+
+    slot_type: int = DataProperty('SlotType')
+    effect_id: int = DataProperty('ExclusiveEffectId')
+    icon_id: int = DataProperty('IconId')
+    quality_level: int = DataProperty('QualityLv')  # Likely enum for SR/SSR/UR/LR?
+    job_flags: int = DataProperty('EquippedJobFlags')
+    rarity_flags: int = DataProperty('RarityFlags')
+    after_level_enhance_id: int = DataProperty('AfterLevelEvolutionEquipmentId')
+    after_rarity_enhance_id: int = DataProperty('AfterRarityEvolutionEquipmentId')
+    category: int = DataProperty('Category')
+    exclusive_skill_desc_id: int = DataProperty('EquipmentExclusiveSkillDescriptionId')
+    forge_id: int = DataProperty('EquipmentForgeId')
+    reinforce_material_id: int = DataProperty('EquipmentReinforcementMaterialId')
+    additional_param_total: int = DataProperty('AdditionalParameterTotal')
+    performance_point: int = DataProperty('PerformancePoint')
+    first_rune_slot_cost: int = DataProperty('GoldRequiredToOpeningFirstSphereSlot')
+    subsequent_rune_slot_cost: int = DataProperty('GoldRequiredToTraining')  # This name is a guess
+
+    @cached_property
+    def enhance_requirements(self) -> EquipmentEnhancement | None:
+        try:
+            return self.mb.equipment_enhance_requirements[self.enhance_id].level_enhancement_map[self.level]
+        except KeyError:
+            return None
+
+    @cached_property
+    def upgrade_requirements(self) -> EquipmentUpgradeRequirements:
+        return self.mb.weapon_upgrade_requirements if self.slot_type == 1 else self.mb.armor_upgrade_requirements
 
 
 class EquipmentUpgradeRequirements(MBEntity):
@@ -272,6 +445,31 @@ class EquipmentUpgradeRequirements(MBEntity):
         return {
             row['Lv']: [ItemAndCount(self.mb, ic) for ic in row['RequiredItemList']]
             for row in self.data['ReinforcementMap']
+        }
+
+
+class EquipmentEnhancement(MBEntity):
+    """
+    Represents a row in the ``EquipmentEvolutionInfoList`` for a given :class:`EquipmentEnhanceRequirements` object.
+    """
+
+    rarity_flags: int = DataProperty('RarityFlags')
+    from_level: int = DataProperty('BeforeEquipmentLv')
+    to_level: int = DataProperty('AfterEquipmentLv')
+
+    @cached_property
+    def required_items(self) -> list[ItemAndCount]:
+        return [ItemAndCount(self.mb, ic) for ic in self.data['RequiredItemList']]
+
+
+class EquipmentEnhanceRequirements(MBEntity):
+    """Represents a row in ``EquipmentEvolutionMB``."""
+
+    @cached_property
+    def level_enhancement_map(self) -> dict[int, EquipmentEnhancement]:
+        return {
+            row['BeforeEquipmentLv']: EquipmentEnhancement(self.mb, row)
+            for row in self.data['EquipmentEvolutionInfoList']
         }
 
 
