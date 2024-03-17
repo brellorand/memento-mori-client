@@ -181,7 +181,7 @@ class VIP(Show, choice='vip', help='Show daily VIP rewards by level'):
     def daily_rewards(self):
         data = {
             f'Level {level.level}': [
-                f'{item.display_name} x {count:,d}' for item, count in level.daily_rewards
+                f'{ic.item.display_name} x {ic.count:,d}' for ic in level.daily_rewards
             ]
             for level in self.get_mb().vip_levels
         }

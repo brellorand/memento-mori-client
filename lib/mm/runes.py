@@ -144,7 +144,7 @@ class RuneSet:
 
     @cached_property
     def levels(self) -> RuneLevels:
-        return tuple(r.level for r in self._runes)
+        return tuple(r.level for r in self._runes)  # noqa
 
     def add(self, rune: Rune):
         if self.type is None:

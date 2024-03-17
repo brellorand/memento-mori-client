@@ -3,8 +3,10 @@ Helpers for serializing Python data structures to JSON or YAML
 """
 
 import json
+import sys
 from collections import UserDict
 from collections.abc import Mapping, KeysView, ValuesView
+from csv import DictWriter
 from datetime import datetime, date, timedelta
 from json.encoder import JSONEncoder, encode_basestring_ascii, encode_basestring  # noqa
 
@@ -15,7 +17,7 @@ except ImportError:
 
 __all__ = ['OUTPUT_FORMATS', 'YAML', 'pprint', 'yaml_dump', 'PermissiveJSONEncoder', 'CompactJSONEncoder']
 
-OUTPUT_FORMATS = ['json', 'json-pretty']
+OUTPUT_FORMATS = ['json', 'json-pretty', 'csv']
 YAML = yaml is not None
 
 
@@ -41,6 +43,8 @@ def pprint(out_fmt: str, data):
             print(json.dumps(data, indent=4, ensure_ascii=False, cls=CompactJSONEncoder))
         elif out_fmt == 'yaml':
             print(yaml_dump(data, indent_nested_lists=True))
+        elif out_fmt == 'csv':
+            _pprint_csv(data)
         else:
             raise ValueError(f'Invalid {out_fmt=} - choose from {OUTPUT_FORMATS}')
     except UnicodeEncodeError as e:
@@ -49,6 +53,15 @@ def pprint(out_fmt: str, data):
         if os.name == 'nt':
             raise RuntimeError('When piping output, you may need to `export PYTHONIOENCODING=UTF-8`') from e
         raise
+
+
+def _pprint_csv(data):
+    if not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
+        raise TypeError('Unable to output data as CSV because it is not a list of dicts')
+
+    writer = DictWriter(sys.stdout, list(data[0]), lineterminator='\n')
+    writer.writeheader()
+    writer.writerows(data)
 
 
 def prep_for_yaml(obj):

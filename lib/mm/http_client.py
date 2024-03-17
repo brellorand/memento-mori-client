@@ -366,6 +366,7 @@ class AuthClient(RequestsClient):
         self.__made_first_req = False
 
     def _update_app_version(self):
+        # Reset cached_property values
         for key in ('_get_data_resp', 'ortega_info', 'game_data'):
             try:
                 del self.__dict__[key]
@@ -386,7 +387,7 @@ class AuthClient(RequestsClient):
             return resp
 
     def _maybe_update_headers(self, headers: dict[str, str] | None):
-        log.debug(f'Response {headers=}')
+        log.debug(f'Response {headers=}')  # TODO: This can probably be removed once confident in handling
         if headers and (next_token := headers.get('orteganextaccesstoken')):
             log.debug(f'Updating ortegaaccesstoken=>{next_token!r}')
             self.session.headers['ortegaaccesstoken'] = next_token

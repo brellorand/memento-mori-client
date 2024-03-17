@@ -45,6 +45,8 @@ class MB:
         self._json_cache_map = json_cache_map or {}
         self.locale = locale
 
+    # region Base MB data
+
     @cached_property
     def _data(self) -> dict[str, Any]:
         if self.__data:
@@ -65,6 +67,10 @@ class MB:
         """
         return {name: FileInfo(data) for name, data in self._data['MasterBookInfoMap'].items()}
 
+    # endregion
+
+    # region File-Specific Helpers
+
     def get_data(self, name: str):
         if json_path := self._json_cache_map.get(name):
             return json.loads(json_path.read_text('utf-8'))
@@ -80,9 +86,13 @@ class MB:
     def _get_mb_id_obj_map(self, cls: Type[T], name: str, key: str = 'Id') -> dict[int, T]:
         return {row[key]: cls(self, row) for row in self.get_data(name)}
 
+    # endregion
+
     @cached_property
-    def world_groups(self) -> list[WorldGroup]:
-        return self._get_mb_objects(WorldGroup, 'WorldGroupMB')
+    def text_resource_map(self) -> dict[str, str]:
+        return {res.key: res.value for res in self._iter_mb_objects(TextResource, f'TextResource{self.locale}MB')}
+
+    # region Items & Equipment
 
     @cached_property
     def items(self) -> dict[int, dict[int, Item]]:
@@ -98,8 +108,22 @@ class MB:
         return self.items[item_type][item_id]
 
     @cached_property
-    def text_resource_map(self) -> dict[str, str]:
-        return {res.key: res.value for res in self._iter_mb_objects(TextResource, f'TextResource{self.locale}MB')}
+    def _equipment_upgrade_requirements(self) -> dict[int, EquipmentUpgradeRequirements]:
+        return self._get_mb_id_obj_map(EquipmentUpgradeRequirements, 'EquipmentReinforcementMaterialMB')
+
+    @cached_property
+    def weapon_upgrade_requirements(self) -> EquipmentUpgradeRequirements:
+        return self._equipment_upgrade_requirements[1]
+
+    @cached_property
+    def armor_upgrade_requirements(self) -> EquipmentUpgradeRequirements:
+        return self._equipment_upgrade_requirements[2]
+
+    # endregion
+
+    @cached_property
+    def world_groups(self) -> list[WorldGroup]:
+        return self._get_mb_objects(WorldGroup, 'WorldGroupMB')
 
     @cached_property
     def vip_levels(self) -> list[VipLevel]:
@@ -224,6 +248,32 @@ class Item(MBEntity):
         return self.mb.text_resource_map[self.description_key]
 
 
+class ItemAndCount(MBEntity):
+    """A row a list of reward/required items"""
+
+    item_type: int = DataProperty('ItemType')
+    item_id: int = DataProperty('ItemId')
+    count: int = DataProperty('ItemCount')
+
+    @cached_property
+    def item(self) -> Item:
+        return self.mb.get_item(self.item_type, self.item_id)
+
+
+class EquipmentUpgradeRequirements(MBEntity):
+    """
+    Id=1 => weapons
+    Id=2 => armor
+    """
+
+    @cached_property
+    def level_required_items_map(self) -> dict[int, list[ItemAndCount]]:
+        return {
+            row['Lv']: [ItemAndCount(self.mb, ic) for ic in row['RequiredItemList']]
+            for row in self.data['ReinforcementMap']
+        }
+
+
 class VipLevel(MBEntity):
     """
     Example:
@@ -268,13 +318,12 @@ class VipLevel(MBEntity):
         ]
     """
 
-    _item_list: list[dict[str, int]] = DataProperty('DailyRewardItemList')
     level: int = DataProperty('Lv')
 
     @cached_property
-    def daily_rewards(self) -> list[tuple[Item, int]]:
+    def daily_rewards(self) -> list[ItemAndCount]:
         """List of daily item rewards and their quantities"""
-        return [(self.mb.get_item(row['ItemType'], row['ItemId']), row['ItemCount']) for row in self._item_list]
+        return [ItemAndCount(self.mb, row) for row in self.data['DailyRewardItemList']]
 
 
 class PlayerRank(MBEntity):
