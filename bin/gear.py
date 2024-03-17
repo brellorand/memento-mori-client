@@ -1,26 +1,17 @@
 #!/usr/bin/env python
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from functools import cached_property
-from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, main
-from cli_command_parser.inputs import Path as IPath, NumRange
+from cli_command_parser import Command, SubCommand, Flag, Counter, Option, main
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.enums import Region, LOCALES
-from mm.fs import path_repr
+from mm.enums import LOCALES
 from mm.http_client import DataClient
-from mm.mb_models import MB, RANK_BONUS_STATS, WorldGroup
-from mm.output import OUTPUT_FORMATS, YAML, pprint
-from mm.utils import FutureWaiter
+from mm.mb_models import MB
+from mm.output import OUTPUT_FORMATS, pprint
 
 log = logging.getLogger(__name__)
-
-DIR = IPath(type='dir')
-IN_FILE = IPath(type='file', exists=True)
 
 
 class GearCLI(Command, description='Memento Mori Gear Helper', option_name_mode='*-'):
