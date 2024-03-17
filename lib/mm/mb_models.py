@@ -249,7 +249,7 @@ class Item(MBEntity):
 
 
 class ItemAndCount(MBEntity):
-    """A row a list of reward/required items"""
+    """A row in a list of reward/required items"""
 
     item_type: int = DataProperty('ItemType')
     item_id: int = DataProperty('ItemId')
