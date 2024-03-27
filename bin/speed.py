@@ -32,30 +32,9 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
     def client(self) -> DataClient:
         return DataClient(use_cache=not self.no_client_cache)
 
-    def get_mb(self) -> MB:
+    @cached_property
+    def mb(self) -> MB:
         return self.client.get_mb(use_cached=not self.no_mb_cache, locale=self.locale)
-
-    @cached_property
-    def all_characters(self) -> dict[int, Character]:
-        return self.get_mb().characters
-
-    @cached_property
-    def _char_map(self) -> dict[str, Character]:
-        char_map = {}
-        for num, char in self.all_characters.items():
-            char_map[str(num)] = char
-            char_map[char.full_id.upper()] = char
-            char_map[char.full_name.upper()] = char
-        return char_map
-
-    def get_character(self, id_or_name: str) -> Character:
-        try:
-            return self._char_map[id_or_name.upper()]
-        except KeyError as e:
-            raise UsageError(
-                f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
-                ' to find the correct ID to use here'
-            ) from e
 
 
 # class Allocate(SpeedCLI, help='Speed tune the specified characters using the specified rune levels'):
@@ -85,10 +64,14 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
         nargs=range(2, 6),
         help='The characters to speed tune, in descending turn order',
     )
+    multiplier: float = Option(
+        '-m', help='Multiplier to apply to output values (use 1.1 for Primavera < level 200, 1.15 for 201 or above)'
+    )
 
     def main(self):
         for member in speed_tune(self.get_members()):
-            print(f'{member.char.full_name}: {member.speed} => levels={member.speed_rune_levels}')
+            speed = int(member.speed * self.multiplier) if self.multiplier else member.speed
+            print(f'{member.char.full_name}: {speed} => levels={member.speed_rune_levels}')
 
     def get_members(self):
         members = []
@@ -96,10 +79,10 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
             try:
                 name_or_id, levels = map(str.strip, char_info.split('+', 1))
             except ValueError:
-                members.append(PartyMember(self.get_character(char_info)))
+                members.append(PartyMember(self.mb.get_character(char_info)))
             else:
                 levels = list(map(int, map(str.strip, levels.split(','))))
-                members.append(PartyMember(self.get_character(name_or_id), levels))
+                members.append(PartyMember(self.mb.get_character(name_or_id), levels))
 
         return members
 

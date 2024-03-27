@@ -152,7 +152,7 @@ class MBContent(Save, choice='mb_content', help='Download all files listed in th
     def _save_data(self, name: str, data: bytes):
         out_path = self.output.joinpath(name + '.json')
         log.debug(f'Saving {path_repr(out_path)}')
-        with out_path.open('w', encoding='utf-8') as f:
+        with out_path.open('w', encoding='utf-8', newline='\n') as f:
             json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder, max_line_len=119)
 
 

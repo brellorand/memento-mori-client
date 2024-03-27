@@ -38,7 +38,7 @@ class MB:
         data: dict[str, Any] = None,
         use_cached: bool = True,
         json_cache_map: dict[str, Path] = None,
-        locale: Locale = 'EnUS',
+        locale: Locale = 'EnUs',
     ):
         self._client = client
         self.__data = data
@@ -178,9 +178,39 @@ class MB:
 
     # endregion
 
+    # region Characters
+
     @cached_property
     def characters(self) -> dict[int, Character]:
         return self._get_mb_id_obj_map(Character, 'CharacterMB')
+
+    @cached_property
+    def _char_map(self) -> dict[str, Character]:
+        all_aliases = {8: ('FLO',), 46: ('LUNA',)}
+
+        char_map = {}
+        for num, char in self.characters.items():
+            char_map[str(num)] = char
+            char_map[char.full_id.upper()] = char
+            char_map[char.full_name.upper()] = char
+            char_map[char.name.upper()] = char
+
+            if aliases := all_aliases.get(num):
+                for alias in aliases:
+                    char_map[alias] = char
+
+        return char_map
+
+    def get_character(self, id_or_name: str) -> Character:
+        try:
+            return self._char_map[id_or_name.upper()]
+        except KeyError as e:
+            raise KeyError(
+                f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
+                ' to find the correct ID to use here'
+            ) from e
+
+    # endregion
 
 
 class FileInfo(DictWrapper):
