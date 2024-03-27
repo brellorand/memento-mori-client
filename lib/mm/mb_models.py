@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from .http_client import DataClient
 
-__all__ = []
+__all__ = ['MB', 'Character']
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
@@ -166,6 +166,8 @@ class MB:
     def world_groups(self) -> list[WorldGroup]:
         return self._get_mb_objects(WorldGroup, 'WorldGroupMB')
 
+    # region Player Attributes
+
     @cached_property
     def vip_levels(self) -> list[VipLevel]:
         return self._get_mb_objects(VipLevel, 'VipMB')
@@ -173,6 +175,8 @@ class MB:
     @cached_property
     def player_ranks(self) -> dict[int, PlayerRank]:
         return self._get_mb_id_obj_map(PlayerRank, 'PlayerRankMB', key='Rank')
+
+    # endregion
 
     @cached_property
     def characters(self) -> dict[int, Character]:
@@ -189,6 +193,9 @@ def _parse_dt(dt_str: str) -> datetime:
     return datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
 
 
+# region Generic / Base Entity Classes
+
+
 class MBEntity:
     __slots__ = ('data', 'mb')
 
@@ -203,39 +210,6 @@ class MBEntity:
         attrs = ('full_name', 'name', 'id')
         key, val = next((attr, v) for attr in attrs if (v := getattr(self, attr, None)) is not None)
         return f'<{self.__class__.__name__}[{key}={val!r}]>'
-
-
-class WorldGroup(MBEntity):
-    """
-    Represents a row in WorldGroupMB
-
-    Example content:
-        "Id": 23,
-        "IsIgnore": null,
-        "Memo": "us",
-        "EndTime": "2100-01-01 00:00:00",
-        "EndLegendLeagueDateTime": "2100-01-01 00:00:00",
-        "TimeServerId": 4,
-        "StartTime": "2023-08-08 04:00:00",
-        "GrandBattleDateTimeList": [
-            {"EndTime": "2023-08-28 03:59:59", "StartTime": "2023-08-21 04:00:00"},
-            ...
-            {"EndTime": "2024-02-19 03:59:59", "StartTime": "2024-02-12 04:00:00"}
-        ],
-        "StartLegendLeagueDateTime": "2023-09-05 04:00:00",
-        "WorldIdList": [4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008]
-    """
-
-    region: Region = DataProperty('TimeServerId', type=Region)
-    first_legend_league_dt: datetime = DataProperty('StartLegendLeagueDateTime', type=_parse_dt)
-    world_ids: list[int] = DataProperty('WorldIdList')
-
-    @cached_property
-    def grand_battles(self) -> list[tuple[datetime, datetime]]:
-        return [
-            (_parse_dt(row['StartTime']), _parse_dt(row['EndTime']))
-            for row in self.data['GrandBattleDateTimeList']
-        ]
 
 
 class TextResource(MBEntity):
@@ -265,6 +239,12 @@ class FullyNamedEntity(NamedEntity):
     @cached_property
     def description(self) -> str:
         return self.mb.text_resource_map.get(self.description_key, self.description_key)
+
+
+# endregion
+
+
+# region Items & Equipment
 
 
 class TypedItem:
@@ -473,6 +453,12 @@ class EquipmentEnhanceRequirements(MBEntity):
         }
 
 
+# endregion
+
+
+# region Player Attributes
+
+
 class VipLevel(MBEntity):
     """
     Example:
@@ -584,6 +570,48 @@ class PlayerRank(MBEntity):
             'HP Drain': self.hp_drain_bonus,
             'SPD': self.speed_bonus,
         }
+
+
+# endregion
+
+
+# region Misc
+
+
+class WorldGroup(MBEntity):
+    """
+    Represents a row in WorldGroupMB
+
+    Example content:
+        "Id": 23,
+        "IsIgnore": null,
+        "Memo": "us",
+        "EndTime": "2100-01-01 00:00:00",
+        "EndLegendLeagueDateTime": "2100-01-01 00:00:00",
+        "TimeServerId": 4,
+        "StartTime": "2023-08-08 04:00:00",
+        "GrandBattleDateTimeList": [
+            {"EndTime": "2023-08-28 03:59:59", "StartTime": "2023-08-21 04:00:00"},
+            ...
+            {"EndTime": "2024-02-19 03:59:59", "StartTime": "2024-02-12 04:00:00"}
+        ],
+        "StartLegendLeagueDateTime": "2023-09-05 04:00:00",
+        "WorldIdList": [4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008]
+    """
+
+    region: Region = DataProperty('TimeServerId', type=Region)
+    first_legend_league_dt: datetime = DataProperty('StartLegendLeagueDateTime', type=_parse_dt)
+    world_ids: list[int] = DataProperty('WorldIdList')
+
+    @cached_property
+    def grand_battles(self) -> list[tuple[datetime, datetime]]:
+        return [
+            (_parse_dt(row['StartTime']), _parse_dt(row['EndTime']))
+            for row in self.data['GrandBattleDateTimeList']
+        ]
+
+
+# endregion
 
 
 class Character(MBEntity):
