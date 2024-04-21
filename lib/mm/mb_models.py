@@ -193,7 +193,8 @@ class MB:
             char_map[str(num)] = char
             char_map[char.full_id.upper()] = char
             char_map[char.full_name.upper()] = char
-            char_map[char.name.upper()] = char
+            # Using setdefault here to prevent summer Cordie from conflicting with normal Cordie, for example
+            char_map.setdefault(char.name.upper(), char)
 
             if aliases := all_aliases.get(num):
                 for alias in aliases:
