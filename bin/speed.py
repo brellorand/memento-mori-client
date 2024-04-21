@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC
 from functools import cached_property
 
-from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, UsageError, main
+from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, main
 
-from mm.__version__ import __author_email__, __version__  # noqa
+# from mm.__version__ import __author_email__, __version__  # noqa
 from mm.enums import LOCALES
 from mm.http_client import DataClient
-from mm.mb_models import MB, Character
-from mm.runes import PartyMember, speed_tune
+from mm.mb_models import MB
+from mm.runes import PartyMember, Party, speed_tune
 
 log = logging.getLogger(__name__)
 
@@ -36,18 +37,71 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
     def mb(self) -> MB:
         return self.client.get_mb(use_cached=not self.no_mb_cache, locale=self.locale)
 
+    def print_members(self, members: list[PartyMember]):
+        from colored import stylize, fg
 
-# class Allocate(SpeedCLI, help='Speed tune the specified characters using the specified rune levels'):
-#     characters = Positional(
-#         metavar='ID|NAME', nargs=range(2, 6), help='The characters to speed tune, in descending turn order'
-#     )
-#     runes = Option('-r', nargs='+', type=int, required=True, help='Speed rune levels that should be allocated')
-#
-#     def main(self):
-#         members = [PartyMember(self.get_character(char_info)) for char_info in self.characters]
+        last = 0
+        for i, member in enumerate(members):
+            if i:
+                delta = last - member.speed
+                if delta > 150:
+                    color = 'green'
+                elif delta > 100:
+                    color = 'yellow'
+                else:
+                    color = 'red'
+
+                speed = stylize(str(member.speed), fg(color))
+            else:
+                speed = member.speed
+                delta = '-'
+
+            # print(f'{member.char.full_name}: {speed} ({delta=!s}) with levels={member.speed_rune_levels}')
+            print(f'{member.char.full_name}: {speed} ({delta=!s}) with levels={member.speed_rune_set.levels}')
+            last = member.speed
 
 
-class Tune(SpeedCLI, help='Speed tune the specified characters in the specified order'):
+class Allocate(SpeedCLI, help='Speed tune the specified characters using the specified rune levels'):
+    characters = Positional(
+        metavar='ID|NAME', nargs=range(2, 6), help='The characters to speed tune, in descending turn order'
+    )
+    runes = Option('-r', nargs='+', type=int, required=True, help='Speed rune levels that should be allocated')
+
+    def main(self):
+        party = Party([PartyMember(self.mb.get_character(char_info)) for char_info in self.characters])
+        new_party = party.allocate_speed_runes(self.runes)
+        self.print_members(new_party.members)
+
+
+class AugmentedMembers(SpeedCLI, ABC):
+    characters: list[str]
+
+    def get_members(self):
+        members = []
+        for char_info in self.characters:
+            try:
+                name_or_id, levels = map(str.strip, char_info.split('+', 1))
+            except ValueError:
+                members.append(PartyMember(self.mb.get_character(char_info)))
+            else:
+                levels = list(map(int, map(str.strip, levels.split(','))))
+                members.append(PartyMember(self.mb.get_character(name_or_id), levels))
+
+        return members
+
+
+class Order(AugmentedMembers, help='Show the order in which the specified characters with runes would attack'):
+    characters = Positional(
+        metavar='ID|NAME[+LEVEL[,LEVEL[,LEVEL]]]',
+        nargs=range(2, 6),
+        help='The characters to sort by speed',
+    )
+
+    def main(self):
+        self.print_members(sorted(self.get_members(), reverse=True))
+
+
+class Tune(AugmentedMembers, help='Speed tune the specified characters in the specified order'):
     """
     Speed tune the specified characters in the specified order.
 
@@ -71,20 +125,8 @@ class Tune(SpeedCLI, help='Speed tune the specified characters in the specified 
     def main(self):
         for member in speed_tune(self.get_members()):
             speed = int(member.speed * self.multiplier) if self.multiplier else member.speed
-            print(f'{member.char.full_name}: {speed} => levels={member.speed_rune_levels}')
-
-    def get_members(self):
-        members = []
-        for char_info in self.characters:
-            try:
-                name_or_id, levels = map(str.strip, char_info.split('+', 1))
-            except ValueError:
-                members.append(PartyMember(self.mb.get_character(char_info)))
-            else:
-                levels = list(map(int, map(str.strip, levels.split(','))))
-                members.append(PartyMember(self.mb.get_character(name_or_id), levels))
-
-        return members
+            # print(f'{member.char.full_name}: {speed} => levels={member.speed_rune_levels}')
+            print(f'{member.char.full_name}: {speed} => levels={member.speed_rune_set.levels}')
 
 
 if __name__ == '__main__':

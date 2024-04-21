@@ -6,9 +6,12 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
+from collections import Counter, deque
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import cached_property
-from itertools import product
-from typing import TYPE_CHECKING, Type, Iterator
+from itertools import product, combinations, chain, permutations
+from math import factorial
+from typing import TYPE_CHECKING, Type, Iterator, Collection, Iterable
 
 from .enums import RuneRarity
 from .exceptions import RuneError
@@ -27,6 +30,7 @@ __all__ = [
 log = logging.getLogger(__name__)
 
 RuneLevels = tuple[int] | tuple[int, int] | tuple[int, int, int]
+AnyRuneLevels = RuneLevels | list[int]
 
 _RARITY_LEVELS = {
     1: RuneRarity.R,
@@ -55,6 +59,8 @@ class Rune(ABC):
     def __init__(self, level: int):
         self.level = level
 
+    # region Class Methods
+
     @classmethod
     def get_rune_class(cls, stat: str) -> Type[Rune]:
         try:
@@ -70,6 +76,8 @@ class Rune(ABC):
     @classmethod
     def get_total(cls, *levels) -> int:
         return cls.get_rune_set(*levels).total
+
+    # endregion
 
     @property
     def level(self) -> int:
@@ -117,7 +125,7 @@ class Rune(ABC):
         return (self.stat, self.level) < (other.stat, other.level)  # noqa
 
     def __repr__(self) -> str:
-        return f'<{self.__class__.__name__}({self.level})>'
+        return f'{self.__class__.__name__}({self.level})'
 
 
 class RuneSet:
@@ -127,24 +135,43 @@ class RuneSet:
         types = {r.__class__ for r in runes}
         if len(types) > 1:
             raise RuneError(f'{self.__class__.__name__} objects may only contain one type of Rune')
-        self._runes = list(runes)
+        self._runes = tuple(runes)
         self.type = next(iter(types)) if types else None
 
-    @cached_property
+    @classmethod
+    def new(cls, rune_type: Type[Rune]):
+        self = cls.__new__(cls)
+        self.type = rune_type
+        self._runes = ()
+        return self
+
+    def __repr__(self) -> str:
+        rune_type = self.type.__name__ if self.type else None
+        return f'<{self.__class__.__name__}[type={rune_type}, total={self.total}, levels={self.levels}]>'
+
+    @property
     def runes(self) -> tuple[Rune, ...]:
-        return tuple(self._runes)
+        return self._runes
 
     @cached_property
     def total(self) -> int:
         return sum(r.value for r in self._runes) if self._runes else 0
 
     @cached_property
+    def levels(self) -> RuneLevels:
+        return tuple(r.level for r in self._runes)  # noqa
+
+    @property
     def total_ticket_cost(self) -> int:
         return sum(r.ticket_cost for r in self._runes) if self._runes else 0
 
-    @cached_property
-    def levels(self) -> RuneLevels:
-        return tuple(r.level for r in self._runes)  # noqa
+    def _reset_properties(self):
+        # Reset cached properties that are based on this set's runes
+        for key in ('total', 'levels'):
+            try:
+                del self.__dict__[key]
+            except KeyError:
+                pass
 
     def add(self, rune: Rune):
         if self.type is None:
@@ -154,14 +181,23 @@ class RuneSet:
         elif len(self._runes) >= 3:
             raise RuneError('Rune sets may only contain a maximum of 3 Runes')
 
-        # Reset cached properties that are based on this set's runes
-        for key in ('runes', 'total', 'total_ticket_cost', 'levels'):
-            try:
-                del self.__dict__[key]
-            except KeyError:
-                pass
+        self._reset_properties()
+        self._runes = (*self._runes, rune)
 
-        self._runes.append(rune)
+    def set_levels(self, levels: AnyRuneLevels, rune_type: Type[Rune] = None):
+        if len(levels) > 3:
+            raise RuneError('Rune sets may only contain a maximum of 3 Runes')
+        if rune_type is not None:
+            self.type = rune_type
+        elif (rune_type := self.type) is None:
+            raise RuneError('A Rune type is required')
+
+        self._reset_properties()
+        self._runes = tuple(rune_type(level) for level in levels)
+
+    def reset(self):
+        self._reset_properties()
+        self._runes = ()
 
     def __iter__(self) -> Iterator[Rune]:
         yield from sorted(self._runes)
@@ -179,6 +215,72 @@ class RuneSet:
             return self.total < other.total
         else:
             return self.total_ticket_cost < other.total_ticket_cost
+
+    def overlaps(self, other: RuneSet) -> bool:
+        """Returns True if this set contains any runes that are the exact same object as one in the other set"""
+        # if self.type != other.type or not set(self.levels).intersection(other.levels):
+        if self.type != other.type:
+            return False
+        return any(own_rune is other_rune for own_rune in self.runes for other_rune in other.runes)
+
+
+class RunePool:
+    __slots__ = ('_runes', '_counts')
+
+    def __init__(self, runes: Iterable[Rune] = ()):
+        self._runes = list(runes)
+        self._counts = Counter(self._runes)
+
+    @classmethod
+    def for_levels(cls, rune_cls: Type[Rune], levels: Iterable[int]) -> RunePool:
+        return cls(rune_cls(level) for level in levels)
+
+    def add(self, rune: Rune):
+        self._runes.append(rune)
+        self._counts[rune] += 1
+
+    def remove(self, rune: Rune):
+        if count := self._counts[rune]:
+            self._runes.remove(rune)
+            if count == 1:
+                del self._counts[rune]
+            else:
+                self._counts[rune] -= 1
+        else:
+            raise ValueError(f'Pool does not contain {rune=} so it cannot be removed')
+
+    def discard(self, rune: Rune):
+        try:
+            self.remove(rune)
+        except ValueError:
+            pass
+
+    def iter_groups(self) -> Iterator[RuneSet]:
+        """Iterate over possible groupings of the runes in this pool.  Assumes all runes are of the same type."""
+        # This is based on the powerset recipe here: https://docs.python.org/3/library/itertools.html#itertools-recipes
+        for group in chain.from_iterable(combinations(self._runes, n) for n in range(1, 4)):
+            yield RuneSet(*group)
+
+    def iter_set_groups(self) -> Iterator[list[RuneSet]]:
+        # Approximately O(n^3) brute-force implementation for discovering all possible groupings of RuneSets
+        rune_sets = list(self.iter_groups())[::-1]  # Begin by picking the largest sets instead of the smallest ones
+        # Ensure each RuneSet gets to be the first set in a group at least once
+        for i, rune_set in enumerate(rune_sets):
+            # The other sets to potentially include in each group should exclude the current set
+            other_sets = deque(rune_sets[:i] + rune_sets[i + 1:])
+            # Iterating only once over other_sets results in missing some potential combinations containing sets with
+            # fewer than 3 runes due to the order of the sets, so a group is created for every possible rotation of
+            # other_sets
+            for _ in range(len(other_sets)):
+                group = [rune_set]
+                for other_set in other_sets:
+                    if not any(other_set.overlaps(s) for s in group):
+                        group.append(other_set)
+                yield group
+                other_sets.rotate(1)
+
+    def unique_set_groups(self) -> set[tuple[RuneSet, ...]]:
+        return {tuple(sorted(group, reverse=True)) for group in self.iter_set_groups()}
 
 
 # region Stat-Specific Rune Classes
@@ -334,7 +436,7 @@ class RuneCalculator:
         val_set_map = {self.rune_cls(level).value: {self.rune_cls.get_rune_set(level)} for level in range(1, 16)}
         for repeat in (2, 3):
             for levels in product(range(1, 16), repeat=repeat):
-                rune_set = self.rune_cls.get_rune_set(*levels)
+                rune_set = self.rune_cls.get_rune_set(*sorted(levels, reverse=True))
                 val_set_map.setdefault(rune_set.total, set()).add(rune_set)
 
         return {value: sorted(sets) for value, sets in sorted(val_set_map.items())}
@@ -381,34 +483,204 @@ class RuneCalculator:
 
 
 class PartyMember:
-    __slots__ = ('char', 'speed_rune_levels')
+    __slots__ = ('char', '_speed_rune_set')
 
-    def __init__(self, char: Character, speed_rune_levels: list[int] = None):
+    _speed_rune_set: RuneSet
+
+    def __init__(self, char: Character, speed_rune_set: AnyRuneLevels | RuneSet = None):
         self.char = char
-        self.speed_rune_levels = speed_rune_levels or [0, 0, 0]
+        self.speed_rune_set = speed_rune_set
+
+    @property
+    def speed_rune_set(self) -> RuneSet:
+        return self._speed_rune_set
+
+    @speed_rune_set.setter
+    def speed_rune_set(self, value: AnyRuneLevels | None | RuneSet):
+        if isinstance(value, RuneSet):
+            self._speed_rune_set = value
+        elif not value:
+            self._speed_rune_set = RuneSet.new(SpeedRune)
+        else:
+            self._speed_rune_set.set_levels(value)
 
     @property
     def speed(self) -> int:
-        return self.char.speed + SpeedRune.get_rune_set(*self.speed_rune_levels).total
+        """
+        Note: the following bonuses are not currently considered here:
+        - Stella: 25%
+            - Start of Battle, 1T, Cannot be dispelled
+            - Metatron LR UW
+        - Liselotte: 20%
+            - Start of Battle, 1T, Cannot be dispelled
+            - Michael UR UW
+        - Primavera:
+            - 3% per ally alive for full team (up to 15%)
+                - Passive, Cannot be dispelled
+                - Level 201+
+        - Rusalka:
+            - 30%
+                - Start of Battle, 1T
+                - Metatron LR UW
+            - 30%
+                - Passive, On Death (Level 201+)
+        """
+        return self.char.speed + self._speed_rune_set.total
+
+    def reset_speed(self):
+        self._speed_rune_set.reset()
+
+    def copy(self) -> PartyMember:
+        return self.__class__(self.char, self._speed_rune_set)
+
+    def with_levels(self, levels: AnyRuneLevels | None) -> PartyMember:
+        return self.__class__(self.char, levels)
+
+    def __eq__(self, other: PartyMember) -> bool:
+        return self.char == other.char and self.speed == other.speed
+
+    def __lt__(self, other: PartyMember) -> bool:
+        return (self.speed, self.char) < (other.speed, other.char)  # noqa
 
 
-def speed_tune(members: list[PartyMember | Character]) -> list[PartyMember]:
+class Party:
+    __slots__ = ('members',)
+
+    def __init__(self, members: Iterable[PartyMember | Character]):
+        self.members = [m if isinstance(m, PartyMember) else PartyMember(m) for m in members]
+
+    def copy(self) -> Party:
+        clone = self.__class__.__new__(self.__class__)
+        clone.members = [m.copy() for m in self.members]
+        return clone
+        # return self.__class__(m.copy() for m in self.members)
+
+    def reset_speed(self):
+        for member in self.members:
+            member.reset_speed()
+
+    def assign_speed_runes(self, level_groups: Collection[AnyRuneLevels | RuneSet], reset: bool = False):
+        for member, levels in zip(self.members, level_groups):
+            member.speed_rune_set = levels
+
+        if reset:
+            for member in self.members[len(level_groups):]:
+                member.reset_speed()
+
+    @property
+    def is_speed_tuned(self) -> bool:
+        return self._is_speed_tuned(150)
+
+    @property
+    def is_speed_ordered(self) -> bool:
+        """Returns True if party members' speeds are in descending order, even if not perfectly tuned"""
+        return self._is_speed_tuned(0)
+
+    def _is_speed_tuned(self, min_offset: int) -> bool:
+        min_speed = 0
+        for member in self.members[::-1]:
+            if (speed := member.speed) >= min_speed:  # speed is stored since member.speed is a simple property
+                min_speed = speed + min_offset
+            else:
+                return False
+
+        return True
+
+    def speed_order_status(self) -> tuple[bool, bool]:
+        # returns tuple of (tuned, ordered)
+        min_tuned, min_ordered = 0, 0
+        tuned = True
+        for member in self.members[::-1]:
+            speed = member.speed
+            if speed < min_ordered:
+                return False, False
+            elif speed < min_tuned:
+                tuned = False
+
+            min_tuned = speed + 150
+            min_ordered = speed
+
+        return tuned, True
+
+    def tune_speed(self):
+        calculator = RuneCalculator(SpeedRune)
+        min_speed = 0
+        for member in self.members[::-1]:
+            if member.speed < min_speed:
+                log.debug(f'Updating runes for {member.char} because speed={member.speed} < {min_speed=}')
+                # Rune levels need to calculate from base delta to take current runes into account
+                rune_set = calculator.find_closest_min_ticket_set(min_speed - member.char.speed)
+                member.speed_rune_set = rune_set
+                # member.speed_rune_levels = sorted(rune_set.levels, reverse=True)
+
+            min_speed = member.speed + 150
+
+    def allocate_speed_runes(self, levels: Collection[int]) -> Party:
+        """
+        Allocate speed runes with the specified levels such that this party is speed tuned in the order that the
+        members were provided when this Party was initialized.
+        """
+        if len(levels) >= 10:
+            log_lvl = logging.INFO
+            log.warning(
+                'Determining the best rune allocation for more than 10 level values may be EXTREMELY slow',
+                extra={'color': 'red'},
+            )
+        else:
+            log_lvl = logging.DEBUG
+
+        set_groups = RunePool.for_levels(SpeedRune, levels).unique_set_groups()
+        n_tests = sum(factorial(len(g) + 1) for g in set_groups)
+        log.log(log_lvl, f'Processing {len(set_groups)} groups of speed rune sets with {n_tests:,d} total permutations')
+
+        # This still needs further optimization for cases where 10+ levels are provided...
+        tuned_candidates, ordered_candidates = [], []
+        with ProcessPoolExecutor() as executor:
+            futures = {executor.submit(self._get_alloc_candidates, set_group): set_group for set_group in set_groups}
+            try:
+                for future in as_completed(futures):
+                    new_tuned_candidates, new_ordered_candidates = future.result()
+                    tuned_candidates += new_tuned_candidates
+                    ordered_candidates += new_ordered_candidates
+            except BaseException:
+                executor.shutdown(cancel_futures=True)
+                raise
+
+        log.debug(f'Found candidates: tuned={len(tuned_candidates)}, ordered={len(ordered_candidates)}')
+        if candidates := tuned_candidates or ordered_candidates:
+            # TODO: This does not provide very consistent results - need to sort by more members' speeds maybe?
+            return max(candidates, key=_candidate_key)
+        else:
+            return self
+
+    def _get_alloc_candidates(self, set_group: tuple[RuneSet, ...]) -> tuple[list[Party], list[Party]]:
+        tuned_candidates, ordered_candidates = [], []
+        for group_order in permutations([RuneSet(SpeedRune(0)), *set_group]):
+            self.assign_speed_runes(group_order, reset=True)
+            is_tuned, is_ordered = self.speed_order_status()
+            if is_tuned:
+                tuned_candidates.append(self.copy())
+            elif is_ordered:
+                # TODO: Maybe parameterize which char number to filter for delta on?  i.e., ensure faster than 0 or 1
+                #  for cases like merlyn+matilda where order between merlyn/matilda doesn't matter
+                if (self.members[0].speed - self.members[-1].speed) >= 150:
+                    ordered_candidates.append(self.copy())
+
+        return tuned_candidates, ordered_candidates
+
+
+def _candidate_key(party: Party):
+    last_speed = party.members[-1].speed
+    return (last_speed, party.members[0].speed - last_speed)
+
+
+def speed_tune(members: Iterable[PartyMember | Character]) -> list[PartyMember]:
     """
     :param members: A list of :class:`PartyMember` or :class:`~.mb_models.Character` objects, in the order that
       they should act.
     :return: A list of :class:`PartyMember` objects with :attr:`PartyMember.speed_rune_levels` updated so that they act
       in the specified order.
     """
-    members = [m if isinstance(m, PartyMember) else PartyMember(m) for m in members]
-    calculator = RuneCalculator(SpeedRune)
-    min_speed = members[-1].speed + 150
-    for member in members[-2::-1]:  # reverse order, starting from the 2nd to last element
-        if member.speed < min_speed:
-            log.debug(f'Updating runes for {member.char} because speed={member.speed} < {min_speed=}')
-            # Rune levels need to calculate from base delta to take current runes into account
-            rune_set = calculator.find_closest_min_ticket_set(min_speed - member.char.speed)
-            member.speed_rune_levels = sorted(rune_set.levels, reverse=True)
-
-        min_speed = member.speed + 150
-
-    return members
+    party = Party(members)
+    party.tune_speed()
+    return party.members

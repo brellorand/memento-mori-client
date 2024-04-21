@@ -233,7 +233,12 @@ class Character(Show, choices=('character', 'char'), help='Show character info')
 
     @item(help='Show a basic, high-level character info summary')
     def summary(self):
-        self.pprint({char.full_id: char.get_summary() for char in self.get_mb().characters.values()})
+        if self.format == 'json-lines':
+            data = [{char.full_id: char.get_summary()} for char in self.get_mb().characters.values()]
+        else:
+            data = {char.full_id: char.get_summary() for char in self.get_mb().characters.values()}
+
+        self.pprint(data)
 
     @item(help='Show a sorted list of characters and their base speeds')
     def speed(self):

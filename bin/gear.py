@@ -35,6 +35,9 @@ class GearCLI(Command, description='Memento Mori Gear Helper', option_name_mode=
         return self.client.get_mb(use_cached=not self.no_mb_cache, json_cache_map=json_cache_map, locale=self.locale)
 
 
+# region List Commands
+
+
 class List(GearCLI, help='List the specified items'):
     item = SubCommand()
     format = Option(
@@ -133,6 +136,9 @@ class Equipment(List, help='List all equipment'):
             }
             for item in self._iter_items()
         ]
+
+
+# endregion
 
 
 if __name__ == '__main__':
