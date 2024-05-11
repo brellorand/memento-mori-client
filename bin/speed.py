@@ -44,9 +44,9 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
         for i, member in enumerate(members):
             if i:
                 delta = last - member.speed
-                if delta > 150:
+                if delta > member.after_delta:
                     color = 'green'
-                elif delta > 100:
+                elif delta > (member.after_delta * 2 / 3):
                     color = 'yellow'
                 else:
                     color = 'red'
@@ -56,7 +56,6 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
                 speed = member.speed
                 delta = '-'
 
-            # print(f'{member.char.full_name}: {speed} ({delta=!s}) with levels={member.speed_rune_levels}')
             print(f'{member.char.full_name}: {speed} ({delta=!s}) with levels={member.speed_rune_set.levels}')
             last = member.speed
 
@@ -66,9 +65,12 @@ class Allocate(SpeedCLI, help='Speed tune the specified characters using the spe
         metavar='ID|NAME', nargs=range(2, 6), help='The characters to speed tune, in descending turn order'
     )
     runes = Option('-r', nargs='+', type=int, required=True, help='Speed rune levels that should be allocated')
+    deltas = Option('-d', nargs=range(1, 4), type=int, help='The speed deltas to target between users, in order')
 
     def main(self):
-        party = Party([PartyMember(self.mb.get_character(char_info)) for char_info in self.characters])
+        party = Party(
+            [PartyMember(self.mb.get_character(char_info)) for char_info in self.characters], deltas=self.deltas
+        )
         new_party = party.allocate_speed_runes(self.runes)
         self.print_members(new_party.members)
 

@@ -11,7 +11,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import cached_property
 from itertools import product, combinations, chain, permutations
 from math import factorial
-from typing import TYPE_CHECKING, Type, Iterator, Collection, Iterable
+from typing import TYPE_CHECKING, Type, Iterator, Collection, Iterable, Sequence
 
 from .enums import RuneRarity
 from .exceptions import RuneError
@@ -301,10 +301,12 @@ _OFFENSIVE_BASE_STAT_VALUES = [
 
 
 class AccuracyRune(Rune, stat='ACC'):
+    __slots__ = ()
     values = _ACC_EVD_DEBUFF_VALUES
 
 
 class AttackRune(Rune, stat='ATK'):
+    __slots__ = ()
     values = [
         240, 440, 810, 1_480, 2_710,
         4_950, 9_050, 16_500, 30_200, 55_300,
@@ -313,18 +315,22 @@ class AttackRune(Rune, stat='ATK'):
 
 
 class CritRune(Rune, stat='CRIT'):
+    __slots__ = ()
     values = _CRIT_VALUES
 
 
 class DebuffAccuracyRune(Rune, stat='Debuff ACC'):
+    __slots__ = ()
     values = _ACC_EVD_DEBUFF_VALUES
 
 
 class PMDefBreakRune(Rune, stat='PMDB'):
+    __slots__ = ()
     values = [25, 45, 80, 140, 250, 430, 750, 1_300, 2_200, 3_710, 6_250, 10_400, 15_900, 21_900, 26_900]
 
 
 class SpeedRune(Rune, stat='SPD'):
+    __slots__ = ()
     values = [10, 18, 33, 53, 80, 110, 150, 195, 240, 300, 360, 425, 500, 575, 660]
 
 
@@ -335,18 +341,22 @@ class SpeedRune(Rune, stat='SPD'):
 
 
 class CritResistRune(Rune, stat='CRIT RES'):
+    __slots__ = ()
     values = _CRIT_VALUES
 
 
 class DebuffResistanceRune(Rune, stat='Debuff RES'):
+    __slots__ = ()
     values = _ACC_EVD_DEBUFF_VALUES
 
 
 class EvasionRune(Rune, stat='EVD'):
+    __slots__ = ()
     values = _ACC_EVD_DEBUFF_VALUES
 
 
 class HPRune(Rune, stat='HP'):
+    __slots__ = ()
     values = [
         1_000, 1_830, 3_340, 6_110, 11_100,
         20_400, 37_300, 68_300, 124_000, 228_000,
@@ -355,10 +365,12 @@ class HPRune(Rune, stat='HP'):
 
 
 class MagicDefenseRune(Rune, stat='M.DEF'):
+    __slots__ = ()
     values = _DEF_VALUES
 
 
 class PhysicalDefenseRune(Rune, stat='P.DEF'):
+    __slots__ = ()
     values = _DEF_VALUES
 
 
@@ -369,6 +381,7 @@ class PhysicalDefenseRune(Rune, stat='P.DEF'):
 
 
 class DexRune(Rune, stat='DEX'):
+    __slots__ = ()
     values = _OFFENSIVE_BASE_STAT_VALUES
 
     @property
@@ -381,6 +394,7 @@ class DexRune(Rune, stat='DEX'):
 
 
 class MagRune(Rune, stat='MAG'):
+    __slots__ = ()
     values = _OFFENSIVE_BASE_STAT_VALUES
 
     @property
@@ -393,6 +407,7 @@ class MagRune(Rune, stat='MAG'):
 
 
 class StrRune(Rune, stat='STR'):
+    __slots__ = ()
     values = _OFFENSIVE_BASE_STAT_VALUES
 
     @property
@@ -405,6 +420,7 @@ class StrRune(Rune, stat='STR'):
 
 
 class StaRune(Rune, stat='STA'):
+    __slots__ = ()
     values = [35, 60, 90, 150, 270, 510, 930, 1_700, 3_120, 5_700, 10_400, 19_000, 34_800, 63_700, 112_000]
 
     @property
@@ -483,13 +499,14 @@ class RuneCalculator:
 
 
 class PartyMember:
-    __slots__ = ('char', '_speed_rune_set')
+    __slots__ = ('char', '_speed_rune_set', 'after_delta')
 
     _speed_rune_set: RuneSet
 
-    def __init__(self, char: Character, speed_rune_set: AnyRuneLevels | RuneSet = None):
+    def __init__(self, char: Character, speed_rune_set: AnyRuneLevels | RuneSet = None, after_delta: int = 150):
         self.char = char
         self.speed_rune_set = speed_rune_set
+        self.after_delta = after_delta
 
     @property
     def speed_rune_set(self) -> RuneSet:
@@ -531,7 +548,7 @@ class PartyMember:
         self._speed_rune_set.reset()
 
     def copy(self) -> PartyMember:
-        return self.__class__(self.char, self._speed_rune_set)
+        return self.__class__(self.char, self._speed_rune_set, self.after_delta)
 
     def with_levels(self, levels: AnyRuneLevels | None) -> PartyMember:
         return self.__class__(self.char, levels)
@@ -545,9 +562,13 @@ class PartyMember:
 
 class Party:
     __slots__ = ('members',)
+    members: list[PartyMember]
 
-    def __init__(self, members: Iterable[PartyMember | Character]):
+    def __init__(self, members: Iterable[PartyMember | Character], deltas: Sequence[int] = ()):
         self.members = [m if isinstance(m, PartyMember) else PartyMember(m) for m in members]
+        if deltas:
+            for member, delta in zip(self.members, deltas):
+                member.after_delta = delta
 
     def copy(self) -> Party:
         clone = self.__class__.__new__(self.__class__)
@@ -597,7 +618,7 @@ class Party:
             elif speed < min_tuned:
                 tuned = False
 
-            min_tuned = speed + 150
+            min_tuned = speed + member.after_delta
             min_ordered = speed
 
         return tuned, True
@@ -620,6 +641,11 @@ class Party:
         Allocate speed runes with the specified levels such that this party is speed tuned in the order that the
         members were provided when this Party was initialized.
         """
+        # TODO: Alt approach: call tune_speed, and see if runes are available that are >= the suggested levels,
+        #  apply those, then call tune_speed again with the updated speed, and apply runes to the next char from the
+        #  suggested set the same way?
+
+
         if len(levels) >= 10:
             log_lvl = logging.INFO
             log.warning(
@@ -655,6 +681,7 @@ class Party:
 
     def _get_alloc_candidates(self, set_group: tuple[RuneSet, ...]) -> tuple[list[Party], list[Party]]:
         tuned_candidates, ordered_candidates = [], []
+        # TODO: This can use an extreme amount of memory - the overall approach needs to be refactored
         for group_order in permutations([RuneSet(SpeedRune(0)), *set_group]):
             self.assign_speed_runes(group_order, reset=True)
             is_tuned, is_ordered = self.speed_order_status()
