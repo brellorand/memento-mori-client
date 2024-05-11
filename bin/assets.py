@@ -83,8 +83,10 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
 
     def _get_bundle_names(self) -> list[str]:
         to_download = self.client.asset_catalog.bundle_names
+        log.debug(f'Found {len(to_download):,d} total bundles to download')
         if not (self.force or not self.output.exists()):
             to_download = [name for name in to_download if not self.output.joinpath(name).exists()]
+            log.debug(f'Filtered to {len(to_download):,d} new bundles to download')
         if self.limit:
             return to_download[:self.limit]
         return to_download
@@ -168,7 +170,6 @@ class Extract(ParallelBundleCommand, help='Extract assets from a .bundle file'):
     allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
 
     def main(self):
-        # TODO: Add --earliest arg and ignore bundle files older than the specified value
         dst_dir, force, allow_raw = self.output, self.force, self.allow_raw
         with self.executor() as executor:
             futures = [executor.submit(bundle.extract, dst_dir, force, allow_raw) for bundle in self.find_bundles()]

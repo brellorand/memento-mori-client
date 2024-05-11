@@ -16,10 +16,13 @@ from typing import TYPE_CHECKING, Optional, Callable, Any
 
 from tqdm import tqdm
 
+from .enums import Locale
+
 if TYPE_CHECKING:
     from .http_client import RequestsClient
+    from .mb_models import MBEntity
 
-__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty', 'parse_ms_epoch_ts', 'FutureWaiter']
+__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty', 'LocalizedString', 'parse_ms_epoch_ts', 'FutureWaiter']
 log = logging.getLogger(__name__)
 
 _NotSet = object()
@@ -136,6 +139,7 @@ class DataProperty:
         default_factory: Callable = _NotSet,
         delim: str = '.',
     ):
+        # noinspection PyUnresolvedReferences
         """
         Descriptor that acts as a cached property for retrieving values nested in a dict stored in the ``data``
         attribute of the object that this :class:`DataProperty` is a member of.  The value is not accessed or stored
@@ -144,7 +148,7 @@ class DataProperty:
         To un-cache a value (causes the descriptor to take over again)::\n
             >>> del instance.__dict__[attr_name]
 
-        :param path: The nexted key location in the dict attribute of the value that this DataProperty
+        :param path: The nested key location in the dict attribute of the value that this DataProperty
           represents; dict keys should be separated by ``.``, otherwise the delimiter should be provided via ``delim``
         :param type: Callable that accepts 1 argument; the value of this DataProperty will be passed to it, and the
           result will be returned as this DataProperty's value (default: no conversion)
@@ -182,6 +186,90 @@ class DataProperty:
 
         if self.type is not _NotSet:
             value = self.type(value)
+        obj.__dict__[self.name] = value
+        return value
+
+
+class LocalizedString:
+    __slots__ = ('path', 'path_repr', 'name', 'default', 'default_key', 'default_to_key', 'locale')
+
+    def __init__(
+        self,
+        path: str,
+        default: Any = _NotSet,
+        *,
+        default_key: str = None,
+        default_to_key: bool = False,
+        delim: str = '.',
+        locale: Locale = None
+    ):
+        # noinspection PyUnresolvedReferences
+        """
+        Descriptor that facilitates access to localized versions of strings in :class:`~.MBEntity` objects referenced
+        by the specified localization key.
+
+        To un-cache a value (causes the descriptor to take over again)::\n
+            >>> del instance.__dict__[attr_name]
+
+        :param path: The nested key location in the dict attribute of the value that this LocalizedString
+          represents; dict keys should be separated by ``.``, otherwise the delimiter should be provided via ``delim``
+        :param default: Default value to return if a KeyError is encountered while accessing the given path or
+          localization key
+        :param default_key: Default key to use if a KeyError is encountered while accessing the given path
+        :param default_to_key: Whether the key value should be used as the default value if a KeyError is encountered
+          while accessing the discovered localization key
+        :param delim: Separator that was used between keys in the provided path (default: ``.``)
+        """
+        if default_to_key and default is not _NotSet:
+            raise ValueError(
+                f'Invalid combination of {default_to_key=!s} and {default=}'
+                ' - default_to_key may only be True if no default is provided'
+            )
+
+        self.path = [p for p in path.split(delim) if p]
+        self.path_repr = delim.join(self.path)
+        self.default = default
+        self.default_key = default_key
+        self.default_to_key = default_to_key
+        self.locale = Locale(locale) if locale else None
+
+    def __set_name__(self, owner: type, name: str):
+        self.name = name
+
+    def _get_key(self, data) -> str:
+        for key in self.path:
+            try:
+                data = data[key]
+            except KeyError:
+                if self.default_key:
+                    return self.default_key
+                raise
+
+        return data
+
+    def __get__(self, obj: MBEntity, cls):
+        try:
+            data = obj.data
+        except AttributeError:  # obj is None / this descriptor is being accessed as a class attribute
+            return self
+
+        try:
+            loc_key = self._get_key(data)
+            if self.locale:
+                value = obj.mb.get_text_resource_map(self.locale)[loc_key]
+            else:
+                value = obj.mb.text_resource_map[loc_key]
+        except KeyError as e:
+            if self.default is not _NotSet:
+                value = self.default
+            elif self.default_to_key:
+                try:
+                    value = loc_key  # noqa
+                except NameError:
+                    raise DictAttrFieldNotFoundError(obj, self.name, self.path_repr) from e
+            else:
+                raise DictAttrFieldNotFoundError(obj, self.name, self.path_repr) from e
+
         obj.__dict__[self.name] = value
         return value
 
@@ -271,3 +359,18 @@ class FutureWaiter:
         self(futures, prog_bar, **kwargs)
         for future in self:
             future.result()
+
+
+class cached_classproperty(classmethod):
+    def __init__(self, func: Callable):
+        super().__init__(property(func))  # noqa  # makes Sphinx handle it better than if this was not done
+        self.__doc__ = func.__doc__
+        self.func = func
+        self.values = {}
+
+    def __get__(self, obj: None, cls):  # noqa
+        try:
+            return self.values[cls]
+        except KeyError:
+            self.values[cls] = value = self.func(cls)
+            return value

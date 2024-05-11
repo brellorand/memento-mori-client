@@ -40,6 +40,36 @@ class Locale(StrEnum):
     def country_code(self) -> str:
         return self._value_[2:].upper()
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            try:
+                a, b, c, d = value
+            except ValueError:
+                pass
+            else:
+                key = a.upper() + b.lower() + c.upper() + d.lower()
+                try:
+                    return cls._member_map_[key]
+                except KeyError:
+                    pass
+        return super()._missing_(value)
+
+    def __str__(self) -> str:
+        return self._value_
+
+    def __hash__(self) -> int:
+        return hash(self.__class__) ^ hash(self._value_)
+
+    def __eq__(self, other: Locale) -> bool:
+        return self._value_ == other._value_
+
+    def __lt__(self, other: Locale) -> bool:
+        return self._value_ < other._value_
+
+    def __bool__(self) -> bool:
+        return True
+
 
 LOCALES = list(Locale)
 

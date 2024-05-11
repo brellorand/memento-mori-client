@@ -4,6 +4,7 @@ Classes that wrap API responses
 
 from __future__ import annotations
 
+import re
 import json
 import logging
 from collections import defaultdict
@@ -13,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
 from .enums import Region, Element, Job, CharacterRarity, Locale
 from .data import DictWrapper
-from .utils import DataProperty, DictAttrFieldNotFoundError
+from .utils import DataProperty, LocalizedString, DictAttrFieldNotFoundError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 __all__ = ['MB', 'Character']
 log = logging.getLogger(__name__)
 
-T = TypeVar('T')
+MBE = TypeVar('MBE', bound='MBEntity')
 
 RANK_BONUS_STATS = [
     'ACC', 'ACC %', 'ATK', 'Counter', 'CRIT', 'CRIT DMG Boost', 'Debuff ACC', 'DEF Break', 'DMG Boost',
@@ -44,7 +45,8 @@ class MB:
         self.__data = data
         self._use_cached = use_cached
         self._json_cache_map = json_cache_map or {}
-        self.locale = locale
+        self.locale = Locale(locale)
+        self._locale_text_resource_map = {}
 
     # region Base MB data
 
@@ -72,32 +74,46 @@ class MB:
 
     # region File-Specific Helpers
 
-    def get_data(self, name: str):
+    def get_raw_data(self, name: str):
         if json_path := self._json_cache_map.get(name):
             return json.loads(json_path.read_text('utf-8'))
         return self._client.get_mb_data(name, use_cached=self._use_cached)
 
-    def _iter_mb_objects(self, cls: Type[T], name: str) -> Iterator[T]:
-        for row in self.get_data(name):
+    def get_data(self, cls: Type[MBEntity], locale: Locale = None):
+        return self.get_raw_data(cls._file_name_fmt.format(locale=locale or self.locale))
+
+    def _iter_mb_objects(self, cls: Type[MBE], locale: Locale = None) -> Iterator[MBE]:
+        for row in self.get_data(cls, locale):
             yield cls(self, row)
 
-    def _get_mb_objects(self, cls: Type[T], name: str) -> list[T]:
-        return [cls(self, row) for row in self.get_data(name)]
+    def _get_mb_objects(self, cls: Type[MBE], locale: Locale = None) -> list[MBE]:
+        return [cls(self, row) for row in self.get_data(cls, locale)]
 
-    def _get_mb_id_obj_map(self, cls: Type[T], name: str, key: str = 'Id') -> dict[int, T]:
-        return {row[key]: cls(self, row) for row in self.get_data(name)}
+    def _get_mb_id_obj_map(self, cls: Type[MBE], locale: Locale = None) -> dict[int, MBE]:
+        key = cls._id_key
+        return {row[key]: cls(self, row) for row in self.get_data(cls, locale)}
 
     # endregion
 
     @cached_property
     def text_resource_map(self) -> dict[str, str]:
-        return {res.key: res.value for res in self._iter_mb_objects(TextResource, f'TextResource{self.locale}MB')}
+        return self.get_text_resource_map(self.locale)
+
+    def get_text_resource_map(self, locale: Locale) -> dict[str, str]:
+        try:
+            return self._locale_text_resource_map[locale]
+        except KeyError:
+            pass
+
+        text_resource_map = {res.key: res.value for res in self._iter_mb_objects(TextResource, locale)}
+        self._locale_text_resource_map[locale] = text_resource_map
+        return text_resource_map
 
     # region Items & Equipment
 
-    def _get_typed_items(self, cls: Type[T], name: str) -> dict[int, dict[int, T]]:
+    def _get_typed_items(self, cls: Type[MBE], locale: Locale = None) -> dict[int, dict[int, MBE]]:
         type_id_item_map = {}
-        for item in self._iter_mb_objects(cls, name):
+        for item in self._iter_mb_objects(cls, locale):
             try:
                 type_id_item_map[item.item_type][item.item_id] = item
             except KeyError:
@@ -106,15 +122,15 @@ class MB:
 
     @cached_property
     def items(self) -> dict[int, dict[int, Item]]:
-        return self._get_typed_items(Item, 'ItemMB')
+        return self._get_typed_items(Item)
 
     @cached_property
     def change_items(self) -> dict[int, dict[int, ChangeItem]]:
-        return self._get_typed_items(ChangeItem, 'ChangeItemMB')
+        return self._get_typed_items(ChangeItem)
 
     @cached_property
     def adamantite(self) -> dict[int, EquipmentSetMaterial]:
-        return self._get_mb_id_obj_map(EquipmentSetMaterial, 'EquipmentSetMaterialMB')
+        return self._get_mb_id_obj_map(EquipmentSetMaterial)
 
     def get_item(self, item_type: int, item_id: int) -> Item | EquipmentPart | EquipmentSetMaterial:
         # ItemType=3: Gold
@@ -130,7 +146,7 @@ class MB:
 
     @cached_property
     def equipment(self) -> dict[int, Equipment]:
-        return self._get_mb_id_obj_map(Equipment, 'EquipmentMB')
+        return self._get_mb_id_obj_map(Equipment)
 
     @cached_property
     def equipment_parts(self) -> dict[int, EquipmentPart]:
@@ -146,11 +162,11 @@ class MB:
 
     @cached_property
     def equipment_enhance_requirements(self) -> dict[int, EquipmentEnhanceRequirements]:
-        return self._get_mb_id_obj_map(EquipmentEnhanceRequirements, 'EquipmentEvolutionMB')
+        return self._get_mb_id_obj_map(EquipmentEnhanceRequirements)
 
     @cached_property
     def _equipment_upgrade_requirements(self) -> dict[int, EquipmentUpgradeRequirements]:
-        return self._get_mb_id_obj_map(EquipmentUpgradeRequirements, 'EquipmentReinforcementMaterialMB')
+        return self._get_mb_id_obj_map(EquipmentUpgradeRequirements)
 
     @cached_property
     def weapon_upgrade_requirements(self) -> EquipmentUpgradeRequirements:
@@ -164,17 +180,17 @@ class MB:
 
     @cached_property
     def world_groups(self) -> list[WorldGroup]:
-        return self._get_mb_objects(WorldGroup, 'WorldGroupMB')
+        return self._get_mb_objects(WorldGroup)
 
     # region Player Attributes
 
     @cached_property
     def vip_levels(self) -> list[VipLevel]:
-        return self._get_mb_objects(VipLevel, 'VipMB')
+        return self._get_mb_objects(VipLevel)
 
     @cached_property
     def player_ranks(self) -> dict[int, PlayerRank]:
-        return self._get_mb_id_obj_map(PlayerRank, 'PlayerRankMB', key='Rank')
+        return self._get_mb_id_obj_map(PlayerRank)
 
     # endregion
 
@@ -182,7 +198,7 @@ class MB:
 
     @cached_property
     def characters(self) -> dict[int, Character]:
-        return self._get_mb_id_obj_map(Character, 'CharacterMB')
+        return self._get_mb_id_obj_map(Character)
 
     @cached_property
     def _char_map(self) -> dict[str, Character]:
@@ -211,6 +227,10 @@ class MB:
                 ' to find the correct ID to use here'
             ) from e
 
+    @cached_property
+    def character_profiles(self) -> dict[int, CharacterProfile]:
+        return self._get_mb_id_obj_map(CharacterProfile)
+
     # endregion
 
 
@@ -233,6 +253,18 @@ class MBEntity:
     id: int = DataProperty('Id')
     ignore: bool = DataProperty('IsIgnore', default=False)
 
+    _id_key: str = 'Id'
+    _file_name_fmt: str = None
+    _name_cls_map = {}
+
+    def __init_subclass__(cls, file_name_fmt: str = None, id_key: str = None, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._name_cls_map[cls.__name__] = cls
+        if file_name_fmt:
+            cls._file_name_fmt = file_name_fmt
+        if id_key:
+            cls._id_key = id_key
+
     def __init__(self, mb: MB, data: dict[str, Any]):
         self.mb = mb
         self.data = data
@@ -243,7 +275,7 @@ class MBEntity:
         return f'<{self.__class__.__name__}[{key}={val!r}]>'
 
 
-class TextResource(MBEntity):
+class TextResource(MBEntity, file_name_fmt='TextResource{locale}MB'):
     """A row in TextResource[locale]MB"""
 
     key = DataProperty('StringKey')
@@ -251,25 +283,13 @@ class TextResource(MBEntity):
 
 
 class NamedEntity(MBEntity):
-    name_key = DataProperty('NameKey')  # matches a TextResource.key (StringKey) value
-
-    @cached_property
-    def name(self) -> str:
-        return self.mb.text_resource_map.get(self.name_key, self.name_key)
+    name: str = LocalizedString('NameKey', default_to_key=True)
 
 
 class FullyNamedEntity(NamedEntity):
     icon_id: int = DataProperty('IconId')
-    description_key = DataProperty('DescriptionKey')  # matches a TextResource.key (StringKey) value
-    display_name_key = DataProperty('DisplayName')  # matches a TextResource.key (StringKey) value
-
-    @cached_property
-    def display_name(self) -> str:
-        return self.mb.text_resource_map.get(self.display_name_key, self.display_name_key)
-
-    @cached_property
-    def description(self) -> str:
-        return self.mb.text_resource_map.get(self.description_key, self.description_key)
+    description: str = LocalizedString('DescriptionKey', default_to_key=True)
+    display_name: str = LocalizedString('DisplayName', default_to_key=True)
 
 
 # endregion
@@ -283,7 +303,7 @@ class TypedItem:
     item_type: int = DataProperty('ItemType')
 
 
-class Item(TypedItem, FullyNamedEntity):
+class Item(TypedItem, FullyNamedEntity, file_name_fmt='ItemMB'):
     """
     Represents a row in ItemMB
 
@@ -332,7 +352,7 @@ class ItemAndCount(MBEntity):
         return f'{name} x {self.count:,d}'
 
 
-class EquipmentSetMaterial(FullyNamedEntity):
+class EquipmentSetMaterial(FullyNamedEntity, file_name_fmt='EquipmentSetMaterialMB'):
     """
     Represents an entry in ``EquipmentSetMaterialMB`` (an Adamantite material).
 
@@ -356,7 +376,7 @@ class EquipmentSetMaterial(FullyNamedEntity):
         return f'Lv {self.level} {self.name}'
 
 
-class ChangeItem(TypedItem, MBEntity):
+class ChangeItem(TypedItem, MBEntity, file_name_fmt='ChangeItemMB'):
     """
     Represents an entry in ``ChangeItemMB``.  Most entries appear to be related to Adamantite materials.
     """
@@ -378,7 +398,7 @@ class EquipmentPart(TypedItem, MBEntity):
         self.name = f'{equipment.name} Parts'
 
 
-class Equipment(NamedEntity):
+class Equipment(NamedEntity, file_name_fmt='EquipmentMB'):
     """
     Represents a row in EquipmentMB
 
@@ -444,7 +464,7 @@ class Equipment(NamedEntity):
         return self.mb.weapon_upgrade_requirements if self.slot_type == 1 else self.mb.armor_upgrade_requirements
 
 
-class EquipmentUpgradeRequirements(MBEntity):
+class EquipmentUpgradeRequirements(MBEntity, file_name_fmt='EquipmentReinforcementMaterialMB'):
     """
     Represents a "row" (which contains many other rows of data) in ``EquipmentReinforcementMaterialMB``.  There are
     only two rows/entries at the top level - Id=1 contains upgrade requirements for weapons, and Id=2 contains upgrade
@@ -459,7 +479,7 @@ class EquipmentUpgradeRequirements(MBEntity):
         }
 
 
-class EquipmentEnhancement(MBEntity):
+class EquipmentEnhancement(MBEntity, file_name_fmt='EquipmentEvolutionInfoList'):
     """
     Represents a row in the ``EquipmentEvolutionInfoList`` for a given :class:`EquipmentEnhanceRequirements` object.
     """
@@ -473,7 +493,7 @@ class EquipmentEnhancement(MBEntity):
         return [ItemAndCount(self.mb, ic) for ic in self.data['RequiredItemList']]
 
 
-class EquipmentEnhanceRequirements(MBEntity):
+class EquipmentEnhanceRequirements(MBEntity, file_name_fmt='EquipmentEvolutionMB'):
     """Represents a row in ``EquipmentEvolutionMB``."""
 
     @cached_property
@@ -490,7 +510,7 @@ class EquipmentEnhanceRequirements(MBEntity):
 # region Player Attributes
 
 
-class VipLevel(MBEntity):
+class VipLevel(MBEntity, file_name_fmt='VipMB'):
     """
     Example:
         "Id": 1,
@@ -542,7 +562,7 @@ class VipLevel(MBEntity):
         return [ItemAndCount(self.mb, row) for row in self.data['DailyRewardItemList']]
 
 
-class PlayerRank(MBEntity):
+class PlayerRank(MBEntity, file_name_fmt='PlayerRankMB', id_key='Rank'):
     """
     Example:
         "Id": 1,
@@ -609,7 +629,7 @@ class PlayerRank(MBEntity):
 # region Misc
 
 
-class WorldGroup(MBEntity):
+class WorldGroup(MBEntity, file_name_fmt='WorldGroupMB'):
     """
     Represents a row in WorldGroupMB
 
@@ -645,7 +665,7 @@ class WorldGroup(MBEntity):
 # endregion
 
 
-class Character(MBEntity):
+class Character(NamedEntity, file_name_fmt='CharacterMB'):
     """
     Example:
         "Id": 43,
@@ -674,8 +694,10 @@ class Character(MBEntity):
         "StartTimeFixJST": "2023-01-17 15:00:00"
     """
 
-    name_key = DataProperty('NameKey')          # matches a TextResource.key (StringKey) value
-    sub_name_key = DataProperty('Name2Key')     # matches a TextResource.key (StringKey) value
+    sub_name: str | None = LocalizedString('Name2Key', None)
+    name_en: str | None = LocalizedString('NameKey', locale=Locale.EnUs)
+    sub_name_en: str | None = LocalizedString('Name2Key', None, locale=Locale.EnUs)
+
     type_id: int = DataProperty('CharacterType')  # 0 (56 matches), 1 (11), or 2 (7); not clear what this indicates
     element: Element = DataProperty('ElementType', Element)
 
@@ -698,20 +720,26 @@ class Character(MBEntity):
         return f'CHR_{self.id:06d}'
 
     @cached_property
-    def name(self) -> str:
-        return self.mb.text_resource_map[self.name_key]
-
-    @cached_property
-    def sub_name(self) -> None:
-        return self.mb.text_resource_map.get(self.sub_name_key)
-
-    @cached_property
     def full_name(self) -> str:
         return f'{self.name} ({self.sub_name})' if self.sub_name else self.name
 
-    def get_summary(self) -> dict[str, Any]:
-        return {
-            # 'id': self.full_id,
+    @cached_property
+    def full_name_en(self) -> str:
+        return f'{self.name_en} ({self.sub_name_en})' if self.sub_name_en else self.name_en
+
+    @cached_property
+    def full_name_with_translation(self) -> str:
+        if self.full_name != self.full_name_en:
+            return f'{self.full_name_en} ({self.full_name})'
+        return self.full_name
+
+    @cached_property
+    def profile(self) -> CharacterProfile:
+        return self.mb.character_profiles[self.id]
+
+    def get_summary(self, *, show_lament: bool = False) -> dict[str, Any]:
+        summary = {
+            'id': self.full_id,
             'name': self.full_name,
             'type': self.type_id,
             'element': self.element.name.title(),
@@ -719,3 +747,37 @@ class Character(MBEntity):
             'rarity': self.rarity.name,
             # 'item_rarity': self.item_rarity_flags,
         }
+        if show_lament:
+            summary['lament_title'] = self.profile.lament_name
+            summary['lament_title_en'] = self.profile.lament_name_en
+
+        return summary
+
+
+class CharacterProfile(MBEntity, file_name_fmt='CharacterProfileMB'):
+    _size_pat = re.compile(r'^<size=\d+>.*?</size>')
+
+    lament_name: str = LocalizedString('LamentJPKey')               # This char's lament name, in the current locale
+    lament_lyrics_html: str = LocalizedString('LyricsJPKey')        # This char's lament lyrics, in the current locale
+    lament_name_en: str = LocalizedString('LamentUSKey')            # This char's lament name, in English
+    lament_lyrics_html_en: str = LocalizedString('LyricsUSKey')     # This char's lament lyrics, in English
+
+    @cached_property
+    def character(self) -> Character:
+        return self.mb.characters[self.id]
+
+    @cached_property
+    def lament_name_with_translation(self) -> str:
+        if self.lament_name != self.lament_name_en:
+            return f'{self.lament_name_en} ({self.lament_name})'
+        return self.lament_name
+
+    @cached_property
+    def lament_lyrics_text(self) -> str:
+        html = self._size_pat.sub('', self.lament_lyrics_html)  # Remove the title from the beginning of the string
+        return html.replace('<br>', '\n').strip()
+
+    @cached_property
+    def lament_lyrics_text_en(self) -> str:
+        html = self._size_pat.sub('', self.lament_lyrics_html_en)  # Remove the title from the beginning of the string
+        return html.replace('<br>', '\n').strip()
