@@ -6,14 +6,14 @@ from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, main
+from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, UsageError, main
 from cli_command_parser.inputs import Path as IPath, NumRange
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.enums import Region, LOCALES
-from mm.fs import path_repr
+from mm.enums import Region, Locale
+from mm.fs import path_repr, sanitize_file_name
 from mm.http_client import DataClient
-from mm.mb_models import MB, RANK_BONUS_STATS, WorldGroup
+from mm.mb_models import MB, RANK_BONUS_STATS, WorldGroup, Character as MBCharacter
 from mm.output import OUTPUT_FORMATS, YAML, pprint
 from mm.utils import FutureWaiter
 
@@ -28,7 +28,7 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
     no_client_cache = Flag('-C', help='Do not read cached game/catalog data')
     no_mb_cache = Flag('-M', help='Do not read cached MB data')
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
-    locale = Option('-loc', choices=LOCALES, default='EnUs', help='Locale to use for text resources')
+    locale = Option('-loc', choices=Locale, default='EnUs', help='Locale to use for text resources')
 
     def _init_command_(self):
         from mm.logging import init_logging
@@ -56,7 +56,8 @@ class Save(MBDataCLI, help='Save data referenced by a MB file'):
 
     @cached_property
     def raw_data_info(self) -> list[dict[str, int | str | bool]]:
-        return self.get_mb({'DownloadRawDataMB': self.mb_path} if self.mb_path else None).get_data('DownloadRawDataMB')
+        mb = self.get_mb({'DownloadRawDataMB': self.mb_path} if self.mb_path else None)
+        return mb.get_raw_data('DownloadRawDataMB')
 
     def _save(self, name: str, data: bytes, log_lvl: int = logging.DEBUG):
         path = self.output.joinpath(name)
@@ -121,6 +122,27 @@ class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
         if self.limit:
             return to_download[:self.limit]
         return to_download
+
+
+class Lyrics(Save, help='Save lament lyrics'):
+    no_translation = Flag('-T', help='Do not include the English version of character/lament names')
+    english = Flag('-e', help='Use the US version of profile strings instead of localized versions')
+
+    def main(self):
+        self.output.mkdir(parents=True, exist_ok=True)
+        for char in self.get_mb().characters.values():
+            lyrics = char.profile.lament_lyrics_text_en if self.english else char.profile.lament_lyrics_text
+            path = self.output.joinpath(sanitize_file_name(self._get_name(char)))
+            log.info(f'Saving {path.as_posix()}')
+            path.write_text(lyrics, encoding='utf-8')
+
+    def _get_name(self, char: MBCharacter):
+        if self.english:
+            return f'{char.full_id} {char.full_name_en} - {char.profile.lament_name_en}.txt'
+        elif self.no_translation:
+            return f'{char.full_id} {char.full_name} - {char.profile.lament_name}.txt'
+        else:
+            return f'{char.full_id} {char.full_name_with_translation} - {char.profile.lament_name_with_translation}.txt'
 
 
 # endregion
@@ -225,6 +247,7 @@ class Rank(Show, help='Show player rank info'):
 class Character(Show, choices=('character', 'char'), help='Show character info'):
     item = Action()
     descending = Flag('-d', help='[speed only] Sort output in descending order (default: ascending)')
+    show_laments = Flag('-L', help='[summary only] Show lament names')
 
     @item(help='Show the name of each character with its ID')
     def names(self):
@@ -233,10 +256,11 @@ class Character(Show, choices=('character', 'char'), help='Show character info')
 
     @item(help='Show a basic, high-level character info summary')
     def summary(self):
+        chars = self.get_mb().characters.values()
         if self.format == 'json-lines':
-            data = [{char.full_id: char.get_summary()} for char in self.get_mb().characters.values()]
+            data = [{char.full_id: char.get_summary(show_lament=self.show_laments)} for char in chars]
         else:
-            data = {char.full_id: char.get_summary() for char in self.get_mb().characters.values()}
+            data = {char.full_id: char.get_summary(show_lament=self.show_laments) for char in chars}
 
         self.pprint(data)
 
