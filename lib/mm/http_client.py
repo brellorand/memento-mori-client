@@ -19,9 +19,10 @@ from requests import Session, Response, HTTPError
 from .assets import AssetCatalog
 from .config import ConfigFile, AccountConfig
 from .data import GameData, OrtegaInfo
+from .enums import Locale
 from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
 from .fs import FileCache, PathLike
-from .mb_models import MB, Locale
+from .mb_models import MB
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
 if TYPE_CHECKING:

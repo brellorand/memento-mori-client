@@ -1,0 +1,270 @@
+"""
+Classes that wrap API responses
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections import defaultdict
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
+
+from mm.enums import Locale
+from mm.data import DictWrapper
+from mm.utils import DataProperty
+from .utils import LocalizedString, MBEntityList, MBEntityMap
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from mm.http_client import DataClient
+    from .characters import Character, CharacterProfile
+    from .items import Item, EquipmentSetMaterial, ChangeItem, EquipmentPart, Equipment, EquipmentUpgradeRequirements
+    from .items import EquipmentEnhanceRequirements
+    from .player import PlayerRank, VipLevel
+    from .world_group import WorldGroup
+
+__all__ = ['MB', 'MBEntity']
+log = logging.getLogger(__name__)
+
+MBE = TypeVar('MBE', bound='MBEntity')
+
+
+class MB:
+    def __init__(
+        self,
+        client: DataClient,
+        *,
+        data: dict[str, Any] = None,
+        use_cached: bool = True,
+        json_cache_map: dict[str, Path] = None,
+        locale: Locale = Locale.EnUs,
+    ):
+        self._client = client
+        self.__data = data
+        self._use_cached = use_cached
+        self._json_cache_map = json_cache_map or {}
+        self.locale = Locale(locale)
+        self._locale_text_resource_map = {}
+
+    # region Base MB data
+
+    @cached_property
+    def _data(self) -> dict[str, Any]:
+        if self.__data:
+            return self.__data
+        return self._client._get_mb_catalog()
+
+    @cached_property
+    def file_map(self) -> dict[str, FileInfo]:
+        """
+        Example info map:
+        {
+            'AchieveRankingRewardMB': {'Hash': 'fd9d21d514779c2e3758992907156420', 'Name': 'AchieveRankingRewardMB', 'Size': 47188},
+            'ActiveSkillMB': {'Hash': 'ae15826e4bd042d14a61dad219c91932', 'Name': 'ActiveSkillMB', 'Size': 372286},
+            ...
+            'VipMB': {'Hash': 'be0114a5a24b5350459cdba6eea6bbcf', 'Name': 'VipMB', 'Size': 16293},
+            'WorldGroupMB': {'Hash': '34afb2d419e8153a451d53b54d9829ae', 'Name': 'WorldGroupMB', 'Size': 20907}
+        }
+        """
+        return {name: FileInfo(data) for name, data in self._data['MasterBookInfoMap'].items()}
+
+    # endregion
+
+    # region File-Specific Helpers
+
+    @cached_property
+    def _mb_entity_classes(self) -> dict[str, Type[MBEntity]]:
+        return MBEntity._name_cls_map
+
+    def get_raw_data(self, name: str):
+        if json_path := self._json_cache_map.get(name):
+            return json.loads(json_path.read_text('utf-8'))
+        return self._client.get_mb_data(name, use_cached=self._use_cached)
+
+    def get_data(self, cls: Type[MBEntity], locale: Locale = None):
+        return self.get_raw_data(cls._file_name_fmt.format(locale=locale or self.locale))
+
+    def _iter_mb_objects(self, cls: Type[MBE], locale: Locale = None) -> Iterator[MBE]:
+        for row in self.get_data(cls, locale):
+            yield cls(self, row)
+
+    # endregion
+
+    # region Text Resources / Localization
+
+    @cached_property
+    def text_resource_map(self) -> dict[str, str]:
+        return self.get_text_resource_map(self.locale)
+
+    def get_text_resource_map(self, locale: Locale) -> dict[str, str]:
+        try:
+            return self._locale_text_resource_map[locale]
+        except KeyError:
+            pass
+
+        text_resource_map = {res.key: res.value for res in self._iter_mb_objects(TextResource, locale)}
+        self._locale_text_resource_map[locale] = text_resource_map
+        return text_resource_map
+
+    # endregion
+
+    # region Items & Equipment
+
+    def get_item(self, item_type: int, item_id: int) -> Item | EquipmentPart | EquipmentSetMaterial:
+        # ItemType=3: Gold
+        # ItemType=5: object parts for a given slot/set
+        # ItemType=9: Adamantite material for a given slot/level
+        if type_group := self.items.get(item_type):
+            return type_group[item_id]
+        elif item_type == 5:
+            return self.equipment_parts[item_id]
+        elif item_type == 9:
+            return self.adamantite[item_id]
+        raise KeyError(f'Unable to find item with {item_type=}, {item_id=}')
+
+    @cached_property
+    def items(self) -> dict[int, dict[int, Item]]:
+        return self._get_typed_items(Item)
+
+    @cached_property
+    def change_items(self) -> dict[int, dict[int, ChangeItem]]:
+        return self._get_typed_items(ChangeItem)
+
+    def _get_typed_items(self, cls: Type[MBE], locale: Locale = None) -> dict[int, dict[int, MBE]]:
+        type_id_item_map = {}
+        for item in self._iter_mb_objects(cls, locale):
+            try:
+                type_id_item_map[item.item_type][item.item_id] = item
+            except KeyError:
+                type_id_item_map[item.item_type] = {item.item_id: item}
+        return type_id_item_map
+
+    adamantite: dict[int, EquipmentSetMaterial] = MBEntityMap('EquipmentSetMaterial')
+    equipment: dict[int, Equipment] = MBEntityMap('Equipment')
+    equipment_enhance_reqs: dict[int, EquipmentEnhanceRequirements] = MBEntityMap('EquipmentEnhanceRequirements')
+    _equipment_upgrade_reqs: dict[int, EquipmentUpgradeRequirements] = MBEntityMap('EquipmentUpgradeRequirements')
+
+    @cached_property
+    def equipment_parts(self) -> dict[int, EquipmentPart]:
+        part_id_items_map = defaultdict(list)
+        for item in self.equipment.values():
+            if item.part_id:
+                part_id_items_map[item.part_id].append(item)
+
+        return {
+            part_id: EquipmentPart(self, min(items, key=lambda i: i.level))
+            for part_id, items in part_id_items_map.items()
+        }
+
+    @cached_property
+    def weapon_upgrade_requirements(self) -> EquipmentUpgradeRequirements:
+        return self._equipment_upgrade_reqs[1]
+
+    @cached_property
+    def armor_upgrade_requirements(self) -> EquipmentUpgradeRequirements:
+        return self._equipment_upgrade_reqs[2]
+
+    # endregion
+
+    world_groups: list[WorldGroup] = MBEntityList('WorldGroup')
+
+    # region Player Attributes
+
+    vip_levels: list[VipLevel] = MBEntityList('VipLevel')
+    player_ranks: dict[int, PlayerRank] = MBEntityMap('PlayerRank')
+
+    # endregion
+
+    # region Characters
+
+    characters: dict[int, Character] = MBEntityMap('Character')
+    character_profiles: dict[int, CharacterProfile] = MBEntityMap('CharacterProfile')
+
+    @cached_property
+    def _char_map(self) -> dict[str, Character]:
+        all_aliases = {8: ('FLO',), 46: ('LUNA',)}
+
+        char_map = {}
+        for num, char in self.characters.items():
+            char_map[str(num)] = char
+            char_map[char.full_id.upper()] = char
+            char_map[char.full_name.upper()] = char
+            # Using setdefault here to prevent summer Cordie from conflicting with normal Cordie, for example
+            char_map.setdefault(char.name.upper(), char)
+
+            if aliases := all_aliases.get(num):
+                for alias in aliases:
+                    char_map[alias] = char
+
+        return char_map
+
+    def get_character(self, id_or_name: str) -> Character:
+        try:
+            return self._char_map[id_or_name.upper()]
+        except KeyError as e:
+            raise KeyError(
+                f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
+                ' to find the correct ID to use here'
+            ) from e
+
+    # endregion
+
+
+class FileInfo(DictWrapper):
+    hash: str = DataProperty('Hash')
+    name: str = DataProperty('Name')
+    size: int = DataProperty('Size', int)
+
+
+# region Generic / Base Entity Classes
+
+
+class MBEntity:
+    __slots__ = ('data', 'mb')
+
+    id: int = DataProperty('Id')
+    ignore: bool = DataProperty('IsIgnore', default=False)
+
+    _id_key: str = 'Id'
+    _file_name_fmt: str = None
+    _name_cls_map = {}
+
+    def __init_subclass__(cls, file_name_fmt: str = None, id_key: str = None, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._name_cls_map[cls.__name__] = cls
+        if file_name_fmt:
+            cls._file_name_fmt = file_name_fmt
+        if id_key:
+            cls._id_key = id_key
+
+    def __init__(self, mb: MB, data: dict[str, Any]):
+        self.mb = mb
+        self.data = data
+
+    def __repr__(self) -> str:
+        attrs = ('full_name', 'name', 'id')
+        key, val = next((attr, v) for attr in attrs if (v := getattr(self, attr, None)) is not None)
+        return f'<{self.__class__.__name__}[{key}={val!r}]>'
+
+
+class TextResource(MBEntity, file_name_fmt='TextResource{locale}MB'):
+    """A row in TextResource[locale]MB"""
+
+    key = DataProperty('StringKey')
+    value = DataProperty('Text')
+
+
+class NamedEntity(MBEntity):
+    name: str = LocalizedString('NameKey', default_to_key=True)
+
+
+class FullyNamedEntity(NamedEntity):
+    icon_id: int = DataProperty('IconId')
+    description: str = LocalizedString('DescriptionKey', default_to_key=True)
+    display_name: str = LocalizedString('DisplayName', default_to_key=True)
+
+
+# endregion
+
+
