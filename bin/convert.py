@@ -25,7 +25,7 @@ class CodeConversionCLI(Command, description='Memento Mori Code Converter', opti
         init_logging(self.verbose)
 
 
-class Enum(CodeConversionCLI, help='List asset paths'):
+class Enum(CodeConversionCLI, help='Convert an enum class'):
     input: Path = Option(
         '-i', type=IPath(type='file', exists=True), help='Input file containing the enum to convert', required=True
     )
