@@ -60,7 +60,8 @@ class Show(GameCLI, help='Show info'):
 
     @item
     def user_sync_data(self):
-        self.print(self.world_account.get_user_sync_data().data)
+        # self.print(self.world_account.get_user_sync_data().data)
+        self.print(self.world_account.get_user_data())
 
     @item
     def my_page(self):

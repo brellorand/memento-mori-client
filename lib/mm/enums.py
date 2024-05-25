@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from enum import StrEnum, IntEnum
+from enum import StrEnum, IntEnum, IntFlag, CONFORM
 
 __all__ = ['Rarity', 'RuneRarity', 'Region', 'Locale', 'LOCALES']
 log = logging.getLogger(__name__)
@@ -974,3 +974,75 @@ class ErrorCode(IntEnum):
     StripeNotFoundCustomerInfo = 5_010_011
     StripeNotEnoughPoint = 5_010_012
     StripeNotFoundSession = 5_010_013
+
+
+class ItemType(IntEnum):
+    NONE = 0
+    CurrencyFree = 1
+    CurrencyPaid = 2
+    Gold = 3
+    Equipment = 4
+    EquipmentFragment = 5
+    Character = 6
+    CharacterFragment = 7
+    DungeonBattleRelic = 8
+    EquipmentSetMaterial = 9
+    QuestQuickTicket = 10
+    CharacterTrainingMaterial = 11
+    EquipmentReinforcementItem = 12
+    ExchangePlaceItem = 13
+    Sphere = 14
+    MatchlessSacredTreasureExpItem = 15
+    GachaTicket = 16
+    TreasureChest = 17
+    TreasureChestKey = 18
+    BossChallengeTicket = 19
+    TowerBattleTicket = 20
+    DungeonRecoveryItem = 21
+    PlayerExp = 22
+    FriendPoint = 23
+    EquipmentRarityCrystal = 24
+    LevelLinkExp = 25
+    GuildFame = 26
+    GuildExp = 27
+    ActivityMedal = 28
+    VipExp = 29
+    PanelGetJudgmentItem = 30
+    UnlockPanelGridItem = 31
+    PanelUnlockItem = 32
+    MusicTicket = 33
+    SpecialIcon = 34
+    IconFragment = 35
+    GuildTowerJobReinforcementMaterial = 36
+    EventExchangePlaceItem = 50
+    StripeCoupon = 1_001
+
+
+class EquipmentRarityFlags(IntFlag, boundary=CONFORM):
+    NONE = 0
+    D = 1
+    C = 2
+    B = 4
+    A = 8
+    S = 16
+    R = 32
+    SR = 64
+    SSR = 128
+    UR = 256
+    LR = 512
+
+
+class BaseParameterType(IntEnum):
+    Muscle = 1
+    Energy = 2
+    Intelligence = 3
+    Health = 4
+
+
+class EquipmentSlotType(IntEnum):
+    Weapon = 1
+    Sub = 2
+    Gauntlet = 3
+    Helmet = 4
+    Armor = 5
+    Shoes = 6

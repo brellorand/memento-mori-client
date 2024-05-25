@@ -253,6 +253,7 @@ class UserSyncData(DictWrapper):
     user_vip_gift_dto_infos: list[UserVipGiftDtoInfo] = DataProperty('UserVipGiftDtoInfos')
 
     def update(self, data: dict[str, Any]):
+        # TODO: This doesn't work :|
         if not data:
             return
 

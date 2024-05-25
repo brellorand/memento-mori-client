@@ -572,6 +572,9 @@ class AuthClient(OrtegaClient):
 
 
 class ApiClient(OrtegaClient):
+    def post_msg(self, uri_path: str, to_pack, **kwargs):
+        return self._post_msg(uri_path, to_pack, **kwargs)
+
     def login_player(
         self, player_id: int, password: str, error_log_info: list[ErrorLogInfo] = None
     ) -> LoginPlayerResponse:
