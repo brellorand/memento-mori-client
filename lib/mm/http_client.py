@@ -8,7 +8,7 @@ import logging
 import re
 from functools import cached_property
 from threading import Lock
-from typing import TYPE_CHECKING, Union, MutableMapping, Any, Mapping
+from typing import TYPE_CHECKING, Union, MutableMapping, Any, Mapping, Self
 from urllib.parse import urlencode, urlparse
 from uuid import uuid4
 from weakref import finalize
@@ -27,6 +27,7 @@ from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .typing import LoginResponse, GetServerHostResponse, LoginPlayerResponse, ErrorLogInfo, GetUserDataResponse
 
 __all__ = ['AuthClient', 'DataClient']
 log = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ class RequestsClient:
         log_data: Bool = False,
         rate_limit: float = 0,
         nopath: Bool = False,
+        shared_session: Bool = False,
     ):
         if host_or_url and re.match('^[a-zA-Z]+://', host_or_url):  # If it begins with a scheme, assume it is a url
             parsed = urlparse(host_or_url)
@@ -96,14 +98,15 @@ class RequestsClient:
         self.log_lvl = log_lvl
         self.log_params = log_params
         self.log_data = log_data
-        self._init(rate_limit)
+        self._init(rate_limit, shared_session)
 
-    def _init(self, rate_limit: float):
+    def _init(self, rate_limit: float, shared_session: bool = False):
         # This method is separate from __init__ to allow RequestsClient objects to be pickleable - see __setstate__
         self._lock = Lock()
         self.__session = None
-        self.__finalizer = finalize(self, self.__close)
         self._rate_limit = rate_limit
+        if not shared_session:
+            self.__finalizer = finalize(self, self.__close)
         if rate_limit:
             self.request = rate_limited(rate_limit)(self.request)
 
@@ -245,7 +248,7 @@ class RequestsClient:
         try:
             finalizer = self.__finalizer
         except AttributeError:
-            pass  # This happens if an exception was raised in __init__
+            pass  # This happens if sharing a session, or if an exception was raised in __init__
         else:
             if finalizer.detach():
                 self.__close()
@@ -278,12 +281,20 @@ class RequestsClient:
         )
         # fmt: on
         self_dict = self.__dict__
-        return {key: self_dict[key] for key in keys}
+        state = {key: self_dict[key] for key in keys}
+        try:
+            self.__finalizer
+        except AttributeError:
+            state['shared_session'] = True
+        else:
+            state['shared_session'] = False
+        return state
 
     def __setstate__(self, state: dict[str, Any]):
         rate_limit = state.pop('_rate_limit')
+        shared_session = state.pop('shared_session')
         self.__dict__.update(state)
-        self._init(rate_limit)
+        self._init(rate_limit, shared_session)
 
     def __repr__(self) -> str:
         return f'<{self.__class__.__name__}[{self.url_for("")}]>'
@@ -340,7 +351,61 @@ class AppVersionManager:
         self.config.auth.save()
 
 
-class AuthClient(RequestsClient):
+class OrtegaClient(RequestsClient):
+    __config: ConfigFile
+
+    def __init__(self, host: str, *, config: PathLike | ConfigFile = None, **kwargs):
+        super().__init__(host, **kwargs)
+        if config is not None:
+            self.config = config
+
+    @classmethod
+    def child_client(cls, parent_client: OrtegaClient, host: str, **kwargs) -> Self:
+        child = cls(host, config=parent_client.config, shared_session=True, **kwargs)
+        child.session = parent_client.session
+        return child
+
+    @property
+    def config(self) -> ConfigFile:
+        try:
+            return self.__config
+        except AttributeError:
+            self.__config = ConfigFile()
+            return self.__config
+
+    @config.setter
+    def config(self, value: PathLike | ConfigFile):
+        self.__config = value if isinstance(value, ConfigFile) else ConfigFile(value)
+
+    def _update_app_version(self):
+        self.session.headers['ortegaappversion'] = self.config.app_version_manager.get_latest_version()
+
+    def request(self, *args, **kwargs) -> Response:
+        try:
+            resp: Response = super().request(*args, **kwargs)
+        except HTTPError as e:
+            self._maybe_update_headers(e.response.headers)
+            raise
+        else:
+            self._maybe_update_headers(resp.headers)
+            return resp
+
+    def _maybe_update_headers(self, headers: dict[str, str] | None):
+        log.debug(f'Response {headers=}')  # TODO: This can probably be removed once confident in handling
+        if headers and (next_token := headers.get('orteganextaccesstoken')):
+            log.debug(f'Updating ortegaaccesstoken=>{next_token!r}')
+            self.session.headers['ortegaaccesstoken'] = next_token
+
+    def _post_msg(self, uri_path: str, to_pack, **kwargs):
+        resp = self.post(uri_path, data=msgpack.packb(to_pack), **kwargs)
+        data = msgpack.unpackb(resp.content, timestamp=3, strict_map_key=False)
+        if (status_code := resp.headers.get('ortegastatuscode')) and status_code != '0':
+            # TODO: If the error code is 103 / CommonRequireClientUpdate, automatically update?
+            raise ApiResponseError(resp, data)
+        return data
+
+
+class AuthClient(OrtegaClient):
     def __init__(
         self,
         *,
@@ -349,20 +414,20 @@ class AuthClient(RequestsClient):
         use_cache: bool = True,
         config_path: PathLike = None,
     ):
-        self.config = ConfigFile(config_path)
-        self._version_manager = AppVersionManager(self.config)
+        self.config = config_path
         if app_version:
-            self._version_manager.set_version(app_version)
+            self.config.app_version_manager.set_version(app_version)
+
         headers = {
             'content-type': 'application/json; charset=UTF-8',
             'ortegaaccesstoken': '',
-            'ortegaappversion': self._version_manager.get_version(),
+            'ortegaappversion': self.config.app_version_manager.get_version(),
             'ortegadevicetype': '2',
             'ortegauuid': ortega_uuid or str(uuid4()).replace('-', ''),
             'accept-encoding': 'gzip',
             'User-Agent': 'BestHTTP/2 v2.3.0',
         }
-        super().__init__(AUTH_HOST, scheme='https', headers=headers, path_prefix='api')
+        super().__init__(AUTH_HOST, scheme='https', path_prefix='api', headers=headers)
         self.cache = FileCache('auth', use_cache=use_cache)
         self.__made_first_req = False
 
@@ -374,34 +439,18 @@ class AuthClient(RequestsClient):
             except KeyError:
                 pass
 
-        self.session.headers['ortegaappversion'] = self._version_manager.get_latest_version()
-
-    def request(self, *args, **kwargs) -> Response:
-        try:
-            resp: Response = super().request(*args, **kwargs)
-        except HTTPError as e:
-            self._maybe_update_headers(e.response.headers)
-            raise
-        else:
-            self.__made_first_req = True
-            self._maybe_update_headers(resp.headers)
-            return resp
-
-    def _maybe_update_headers(self, headers: dict[str, str] | None):
-        log.debug(f'Response {headers=}')  # TODO: This can probably be removed once confident in handling
-        if headers and (next_token := headers.get('orteganextaccesstoken')):
-            log.debug(f'Updating ortegaaccesstoken=>{next_token!r}')
-            self.session.headers['ortegaaccesstoken'] = next_token
+        super()._update_app_version()
 
     def _post_msg(self, uri_path: str, to_pack, **kwargs):
         if not self.__made_first_req:
             self._get_data_resp  # noqa  # Ensure the app version is up to date
 
-        resp = self.post(uri_path, data=msgpack.packb(to_pack), **kwargs)
-        data = msgpack.unpackb(resp.content, timestamp=3, strict_map_key=False)
-        if (status_code := resp.headers.get('ortegastatuscode')) and status_code != '0':
-            raise ApiResponseError(f'Error requesting {uri_path=}: {data}')
-        return data
+        return super()._post_msg(uri_path, to_pack, **kwargs)
+
+    def request(self, *args, **kwargs) -> Response:
+        resp: Response = super().request(*args, **kwargs)
+        self.__made_first_req = True
+        return resp
 
     # region getDataUri
 
@@ -464,7 +513,7 @@ class AuthClient(RequestsClient):
         auth_config = self.config.auth
         data = {
             'AdverisementId': str(uuid4()),  # noqa  # Typo is intentional
-            'AppVersion': self._version_manager.get_version(),
+            'AppVersion': self.config.app_version_manager.get_version(),
             'CountryCode': auth_config.locale.country_code,
             'DeviceToken': '',
             'ModelName': auth_config.model_name,
@@ -494,7 +543,7 @@ class AuthClient(RequestsClient):
 
     # endregion
 
-    def login(self, account: AccountConfig):
+    def login(self, account: AccountConfig) -> LoginResponse:
         """
         Login to the specified account (not a world).
 
@@ -509,13 +558,35 @@ class AuthClient(RequestsClient):
         data = {
             'ClientKey': account.client_key,
             'DeviceToken': '',
-            'AppVersion': self._version_manager.get_version(),
+            'AppVersion': self.config.app_version_manager.get_version(),
             'OSVersion': auth_config.os_version,
             'ModelName': auth_config.model_name,
             'AdverisementId': str(uuid4()),  # noqa  # Typo is intentional
             'UserId': account.user_id,
         }
         return self._post_msg('auth/login', data)
+
+    def get_server_host(self, world_id: int) -> GetServerHostResponse:
+        # This request requires prior login, and may NOT be made during maintenance
+        return self._post_msg('auth/getServerHost', {'WorldId': world_id})
+
+
+class ApiClient(OrtegaClient):
+    def login_player(
+        self, player_id: int, password: str, error_log_info: list[ErrorLogInfo] = None
+    ) -> LoginPlayerResponse:
+        # This request does not need prior login, and may be made during maintenance
+        data = {'Password': password, 'PlayerId': player_id, 'ErrorLogInfoList': error_log_info or []}
+        return self._post_msg('user/loginPlayer', data)
+
+    def get_user_data(self) -> GetUserDataResponse:
+        # This request requires prior login, and may NOT be made during maintenance
+        return self._post_msg('user/getUserData', {})
+
+    def get_my_page(self, locale: Locale = None):
+        # This request requires prior login, and may NOT be made during maintenance
+        data = {'LanguageType': locale.num} if locale is not None else {}
+        return self._post_msg('user/getMypage', data)
 
 
 class DataClient(RequestsClient):
@@ -586,70 +657,13 @@ class DataClient(RequestsClient):
     def mb_catalog(self) -> MB:
         return MB(self, data=self._get_mb_catalog())
 
-    def get_mb(self, *, use_cached: bool = True, json_cache_map: dict[str, Path] = None, locale: Locale = 'EnUS') -> MB:
+    def get_mb(
+        self, *, use_cached: bool = True, json_cache_map: dict[str, Path] = None, locale: Locale = Locale.EnUs
+    ) -> MB:
         return MB(self, use_cached=use_cached, json_cache_map=json_cache_map, locale=locale)
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
-        """
-        Top-level keys:
-            m_BucketDataString
-            m_EntryDataString
-            m_ExtraDataString
-            m_InstanceProviderData
-            m_InternalIdPrefixes
-            m_InternalIds:              Asset bundles
-            m_KeyDataString
-            m_LocatorId
-            m_ProviderIds
-            m_ResourceProviderData
-            m_SceneProviderData
-            m_resourceTypes
-
-
-        Example:
-        {
-            'm_LocatorId': 'AddressablesMainContentCatalog',
-            'm_InstanceProviderData': {
-                'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.InstanceProvider',
-                'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.InstanceProvider'},
-                'm_Data': ''
-            },
-            'm_SceneProviderData': {
-                'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.SceneProvider',
-                'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.SceneProvider'},
-                'm_Data': ''
-            },
-            'm_ResourceProviderData': [
-                {
-                    'm_Id': 'Ortega.Common.OrtegaAssestBundleProvider',
-                    'm_ObjectType': {'m_AssemblyName': 'Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'Ortega.Common.OrtegaAssestBundleProvider'},
-                    'm_Data': ''
-                },
-                {
-                    'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider',
-                    'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider'},
-                    'm_Data': ''
-                },
-                {
-                    'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider',
-                    'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider'},
-                    'm_Data': ''
-                },
-                {
-                    'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.AtlasSpriteProvider',
-                    'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.AtlasSpriteProvider'},
-                    'm_Data': ''
-                }
-            ],
-            'm_ProviderIds': ['Ortega.Common.OrtegaAssestBundleProvider', 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider'],
-            'm_InternalIds': [
-                '0#/0004aa460a958eb6464bec077ab56602.bundle',
-                '0#/0009f326fb5c3ee00f92ba11c7b0e6c7.bundle',
-                '0#/0009f9dbfd2fdbecf57794788e788960.bundle',
-                ...
-
-        """
         try:
             catalog = self.cache.get('asset-catalog.json')
         except CacheMiss:

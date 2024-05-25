@@ -7,7 +7,7 @@ from functools import cached_property
 from pathlib import Path
 
 from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, UsageError, main
-from cli_command_parser.inputs import Path as IPath, NumRange
+from cli_command_parser.inputs import Path as IPath, NumRange, File as IFile, FileWrapper
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.enums import Region, Locale
@@ -148,6 +148,9 @@ class Lyrics(Save, help='Save lament lyrics'):
 # endregion
 
 
+# region Show Commands
+
+
 class Show(MBDataCLI, help='Show info from MB files'):
     item = SubCommand()
     format = Option(
@@ -269,6 +272,32 @@ class Character(Show, choices=('character', 'char'), help='Show character info')
         speeds = ((char.speed, char.full_name) for char in self.get_mb().characters.values())
         for speed, name in sorted(speeds, reverse=self.descending):
             print(f'{speed:,d}  {name}')
+
+
+# endregion
+
+
+class GenerateErrorMap(MBDataCLI, help='Generate a mapping of error codes to their error messages'):
+    output: FileWrapper = Option(
+        '-o',
+        type=IFile('w', type='file', allow_dash=True, exists=False, encoding='utf-8'),
+        default='-',
+        help='Output file',
+    )
+
+    def main(self):
+        mb = self.get_mb()
+        code_message_map = {}
+        for key, text in mb.text_resource_map.items():
+            if key.startswith('[ErrorMessage'):
+                code = int(key[13:-1])
+                code_message_map[code] = text
+
+        with self.output as f:
+            f.write('{\n')
+            for code, text in code_message_map.items():
+                f.write(f'    {code:_d}: {text!r},\n')
+            f.write('}\n')
 
 
 if __name__ == '__main__':

@@ -19,6 +19,66 @@ _DIR_0 = '{Ortega.Common.Manager.GameManager.AssetFullUrl}'
 
 
 class AssetCatalog(DictWrapper):
+    """
+    Top-level keys:
+        m_BucketDataString
+        m_EntryDataString
+        m_ExtraDataString
+        m_InstanceProviderData
+        m_InternalIdPrefixes
+        m_InternalIds:              Asset bundles
+        m_KeyDataString
+        m_LocatorId
+        m_ProviderIds
+        m_ResourceProviderData
+        m_SceneProviderData
+        m_resourceTypes
+
+
+    Example:
+    {
+        'm_LocatorId': 'AddressablesMainContentCatalog',
+        'm_InstanceProviderData': {
+            'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.InstanceProvider',
+            'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.InstanceProvider'},
+            'm_Data': ''
+        },
+        'm_SceneProviderData': {
+            'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.SceneProvider',
+            'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.SceneProvider'},
+            'm_Data': ''
+        },
+        'm_ResourceProviderData': [
+            {
+                'm_Id': 'Ortega.Common.OrtegaAssestBundleProvider',
+                'm_ObjectType': {'m_AssemblyName': 'Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'Ortega.Common.OrtegaAssestBundleProvider'},
+                'm_Data': ''
+            },
+            {
+                'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider',
+                'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider'},
+                'm_Data': ''
+            },
+            {
+                'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider',
+                'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider'},
+                'm_Data': ''
+            },
+            {
+                'm_Id': 'UnityEngine.ResourceManagement.ResourceProviders.AtlasSpriteProvider',
+                'm_ObjectType': {'m_AssemblyName': 'Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', 'm_ClassName': 'UnityEngine.ResourceManagement.ResourceProviders.AtlasSpriteProvider'},
+                'm_Data': ''
+            }
+        ],
+        'm_ProviderIds': ['Ortega.Common.OrtegaAssestBundleProvider', 'UnityEngine.ResourceManagement.ResourceProviders.BundledAssetProvider'],
+        'm_InternalIds': [
+            '0#/0004aa460a958eb6464bec077ab56602.bundle',
+            '0#/0009f326fb5c3ee00f92ba11c7b0e6c7.bundle',
+            '0#/0009f9dbfd2fdbecf57794788e788960.bundle',
+            ...
+
+    """
+
     locator_id: str = DataProperty('m_LocatorId')
     instance_provider_data: dict[str, Any] = DataProperty('m_InstanceProviderData')
     scene_provider_data: dict[str, Any] = DataProperty('m_SceneProviderData')

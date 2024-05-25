@@ -519,7 +519,12 @@ class PartyMember:
         elif not value:
             self._speed_rune_set = RuneSet.new(SpeedRune)
         else:
-            self._speed_rune_set.set_levels(value)
+            try:
+                self._speed_rune_set.set_levels(value)
+            except AttributeError:
+                # self._speed_rune_set = RuneSet.new(SpeedRune)
+                # self._speed_rune_set.set_levels(value)
+                self._speed_rune_set = SpeedRune.get_rune_set(*value)
 
     @property
     def speed(self) -> int:

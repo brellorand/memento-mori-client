@@ -5,10 +5,11 @@ import logging
 from functools import cached_property
 from getpass import getpass
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, ParamGroup, main
+from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, main
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
+from mm.account import PlayerAccount, WorldAccount
 from mm.config import ConfigFile, AccountConfig
 from mm.http_client import AuthClient
 from mm.output import CompactJSONEncoder
@@ -42,20 +43,45 @@ class Login(GameCLI, help='Log in for the first time'):
 
 
 class Show(GameCLI, help='Show info'):
-    item = Positional(choices=('account',), help='The item to show')
+    item = Action(help='The item to show')
 
     with ParamGroup('Account', required=True, mutually_exclusive=True):
         user_id = Option('-i', type=int, help='Numeric user ID')
         name = Option('-n', help='Friendly name associated with the account')
 
+    world: int = Option('-w', help='The world to log in to (required for some items)')
     sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
 
-    def main(self):
-        if self.item == 'account':
-            self.print(self.auth_client.login(self.account))
+    # region Actions
+
+    @item
+    def account(self):
+        self.print(self.player_account.login_data)
+
+    @item
+    def user_sync_data(self):
+        self.print(self.world_account.get_user_sync_data().data)
+
+    @item
+    def my_page(self):
+        self.print(self.world_account.get_my_page())
+
+    # endregion
+
+    # region Account Properties
 
     @cached_property
-    def account(self) -> AccountConfig:
+    def player_account(self) -> PlayerAccount:
+        return PlayerAccount(self.account_config, self.auth_client)
+
+    @cached_property
+    def world_account(self) -> WorldAccount:
+        if not self.world:
+            raise UsageError('Missing required parameter: --world / -w')
+        return self.player_account.get_world(self.world)
+
+    @cached_property
+    def account_config(self) -> AccountConfig:
         config = ConfigFile()
         if user_id := self.user_id:
             try:
@@ -69,6 +95,8 @@ class Show(GameCLI, help='Show info'):
 
             names = ', '.join(sorted(a.name for a in config.accounts.values()))
             raise UsageError(f'Unable to find an account with name={self.name!r} - pick from: {names}')
+
+    # endregion
 
     def print(self, data):
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))

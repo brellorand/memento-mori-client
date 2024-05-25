@@ -16,6 +16,7 @@ from .fs import PathLike, get_config_dir, path_repr
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .http_client import AppVersionManager
 
 __all__ = ['ConfigFile', 'AccountConfig', 'AndroidModel', 'ANDROID_MODELS', 'DEFAULT_ANDROID_MODEL']
 log = logging.getLogger(__name__)
@@ -55,6 +56,12 @@ class ConfigFile:
     def accounts(self) -> dict[str, AccountConfig]:
         return AccountConfig._load_all(self)
 
+    @cached_property
+    def app_version_manager(self) -> AppVersionManager:
+        from .http_client import AppVersionManager
+
+        return AppVersionManager(self)
+
 
 class ConfigSection(ABC):
     section_name: str
@@ -85,6 +92,10 @@ class ConfigSection(ABC):
     @abstractmethod
     def as_dict(self) -> dict[str, int | str | None]:
         raise NotImplementedError
+
+    @property
+    def parent(self) -> ConfigFile:
+        return self._config
 
     def save(self):
         section = self._config.data.setdefault(self.section_name, {})
