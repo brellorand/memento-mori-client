@@ -254,10 +254,11 @@ class UserSyncData(DictWrapper):
     user_vip_gift_dto_infos: list[UserVipGiftDtoInfo] = DataProperty('UserVipGiftDtoInfos')
 
     def update(self, data: dict[str, Any]):
-        # TODO: This doesn't work :|
         if not data:
             log.debug('Ignoring UserSyncData update with no data')
             return
+
+        self.clear_cached_properties()
 
         simple_lists = {
             'BlockPlayerIdList', 'ClearedTutorialIdList', 'ReceivedGuildTowerFloorRewardIdList',
@@ -283,12 +284,14 @@ class UserSyncData(DictWrapper):
 
         for key, value in data.items():
             if value is False or value is True:
+                # log.debug(f'UserSyncData: storing {key} => {value!r}')
                 self.data[key] = value
             elif not value:
                 continue
 
             current = self.data[key]
             if key in store_new and not current:
+                # log.debug(f'UserSyncData: storing {key} => {value!r}')
                 self.data[key] = value
                 continue
 
@@ -297,7 +300,9 @@ class UserSyncData(DictWrapper):
                 for v in chain(current, value):
                     if v not in combined:
                         combined.append(v)
+                # log.debug(f'UserSyncData: updating {key}(list) from {len(current)} to {len(combined)} items')
             elif key in simple_dicts:
+                # log.debug(f'UserSyncData: updating {key}(dict) from {len(current)} with {len(value)} items')
                 self.data[key].update(value)
             elif cmp_keys := cmp_key_lists.get(key):
                 combined, included = [], set()
@@ -306,13 +311,16 @@ class UserSyncData(DictWrapper):
                         combined.append(v)
                         included.add(cmp_value)
 
+                # log.debug(f'UserSyncData: updating {key}(cmp list) from {len(current)} to {len(combined)} items')
                 self.data[key] = combined
             elif alt_key := rm_guid_map.get(key):
                 if current := self.data[alt_key]:
                     to_rm = set(value)
+                    # log.debug(f'UserSyncData: removing {len(to_rm)} items from {key} that had {len(current)} items')
                     self.data[alt_key] = [v for v in current if v['Guid'] not in to_rm]
             elif key == 'GivenItemCountInfoList':
                 items = self.data['UserItemDtoInfo']
+                # log.debug(f'UserSyncData: updating {len(items)} item counts for {key}')
                 for item_count in value:
                     item_id, item_type = item_count['ItemId'], item_count['ItemType']
                     if ci := next((i for i in items if i['ItemId'] == item_id and i['ItemType'] == item_type), None):
@@ -320,4 +328,5 @@ class UserSyncData(DictWrapper):
                     else:
                         items.append(item_count)
             else:
+                # log.debug(f'UserSyncData: storing {key} => {value!r}')
                 self.data[key] = value

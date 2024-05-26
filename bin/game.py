@@ -61,8 +61,12 @@ class Show(GameCLI, help='Show info'):
     # region Actions
 
     @item
-    def account(self):
+    def player_login(self):
         self.print(self.player_account.login_data)
+
+    @item
+    def world_login(self):
+        self.print(self.world_account.login())
 
     @item
     def user_sync_data(self):

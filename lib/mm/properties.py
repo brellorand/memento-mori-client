@@ -155,15 +155,12 @@ def clear_cached_properties(instance, *names: str, skip: Collection[str] = None)
     :param names: The names of the cached properties to be cleared
     :param skip: A collection of names of cached properties that should NOT be cleared
     """
-    if not names:
-        names = get_cached_property_names(instance.__class__)
+    names = set(names) if names else get_cached_property_names(instance.__class__)
     if skip:
-        if isinstance(skip, str):
-            skip = (skip,)
-        names = (name for name in names if name not in skip)
+        names = names.difference({skip} if isinstance(skip, str) else set(skip))
 
     cache = instance.__dict__
-    for name in names:
+    for name in names.intersection(cache):
         try:
             del cache[name]
         except KeyError:

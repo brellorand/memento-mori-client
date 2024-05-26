@@ -1,5 +1,5 @@
 """
-
+Classes representing player / player + world accounts
 """
 
 from __future__ import annotations
@@ -84,6 +84,9 @@ class PlayerAccount:
         return world
 
 
+# region API Request Decorator
+
+
 class ApiRequestMethod:
     __slots__ = ('method', 'requires_login', 'maintenance_ok')
 
@@ -124,6 +127,9 @@ class ApiRequestMethod:
 
 def api_request(*, requires_login: bool = True, maintenance_ok: bool = False):
     return lambda method: ApiRequestMethod(method, requires_login, maintenance_ok)
+
+
+# endregion
 
 
 class WorldAccount:
@@ -188,6 +194,7 @@ class WorldAccount:
 
     @api_request(requires_login=False, maintenance_ok=True)
     def _login(self, error_log_info: list[ErrorLogInfo] = None) -> LoginPlayerResponse:
+        log.log(19, f'Logging player_id={self.player_id} into world={self.world_id}')
         resp = self._api_client.login_player(self.player_id, self.player_data['Password'], error_log_info)
         self._is_logged_in = True
         return resp
