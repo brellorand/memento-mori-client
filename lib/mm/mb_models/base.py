@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
@@ -67,6 +68,22 @@ class MB:
         """
         return {name: FileInfo(data) for name, data in self._data['MasterBookInfoMap'].items()}
 
+    @cached_property
+    def _mb_raw_cache(self):
+        return {name: data for name in self.file_map if (data := self._client.get_mb_data_if_cached(name)) is not None}
+
+    def populate_cache(self, parallel: int = 4):
+        file_names = set(self.file_map).difference(self._mb_raw_cache)
+        if not file_names:
+            log.log(19, 'All MB files are already in the cache')
+            return
+
+        log.log(19, f'Downloading {len(file_names):,d} files using {parallel} threads')
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            futures = {executor.submit(self._client.get_mb_data, name, refresh=True): name for name in file_names}
+            for future in as_completed(futures):
+                self._mb_raw_cache[futures[future]] = future.result()
+
     # endregion
 
     # region File-Specific Helpers
@@ -76,7 +93,10 @@ class MB:
         return MBEntity._name_cls_map
 
     def get_raw_data(self, name: str):
-        if json_path := self._json_cache_map.get(name):
+        if mb_raw_cache := self.__dict__.get('_mb_raw_cache'):
+            # Avoid populating the cache if `populate_cache` was not called
+            return mb_raw_cache[name]
+        elif json_path := self._json_cache_map.get(name):
             return json.loads(json_path.read_text('utf-8'))
         return self._client.get_mb_data(name)
 

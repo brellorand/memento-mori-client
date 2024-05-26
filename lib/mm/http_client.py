@@ -629,16 +629,26 @@ class DataClient(RequestsClient):
     #     url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
     #     return self.head(url, relative=False).headers['etag'].strip('"')
 
-    def get_mb_data(self, name: str):
+    def get_mb_data_if_cached(self, name: str):
         if not self._use_mb_cache:
-            return self._get_mb_data(name)
-
+            return None
         try:
             return self._mb_cache.get(f'{name}.msgpack')
         except CacheMiss:
-            data = self._get_mb_data(name)
-            self._mb_cache.store(data, f'{name}.msgpack')
-            return data
+            return None
+
+    def get_mb_data(self, name: str, refresh: bool = False):
+        if not self._use_mb_cache:
+            return self._get_mb_data(name)
+        elif not refresh:
+            try:
+                return self._mb_cache.get(f'{name}.msgpack')
+            except CacheMiss:
+                pass
+
+        data = self._get_mb_data(name)
+        self._mb_cache.store(data, f'{name}.msgpack')
+        return data
 
     def _get_mb_data(self, name: str):
         url = self.game_data.mb_uri_fmt.format(self.auth.ortega_info.mb_version, name)

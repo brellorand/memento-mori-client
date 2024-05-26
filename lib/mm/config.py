@@ -91,11 +91,11 @@ class ConfigSection(ABC):
 
     @classmethod
     def _load_all(cls, config: ConfigFile) -> dict[str, Self]:
-        return {key: cls(config_file=config, **val) for key, val in config.data[cls.section_name].items()}
+        return {key: cls(config_file=config, **val) for key, val in config.data.get(cls.section_name, {}).items()}
 
     @classmethod
     def _load(cls, config: ConfigFile) -> Self:
-        return cls(config_file=config, **config.data[cls.section_name])
+        return cls(config_file=config, **config.data.get(cls.section_name, {}))
 
     @abstractmethod
     def as_dict(self) -> dict[str, int | str | None]:

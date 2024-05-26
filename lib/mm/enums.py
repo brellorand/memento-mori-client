@@ -1032,6 +1032,30 @@ class EquipmentRarityFlags(IntFlag, boundary=CONFORM):
     LR = 512
 
 
+class CharacterRarityFlags(IntFlag, boundary=CONFORM):
+    NONE = 0
+    N = 1
+    R = 2
+    RPlus = 4
+    SR = 8
+    SRPlus = 16
+    SSR = 32
+    SSRPlus = 64
+    UR = 128
+    URPlus = 256
+    LR = 512
+    LRPlus = 1_024
+    LRPlus2 = 2_048
+    LRPlus3 = 4_096
+    LRPlus4 = 8_192
+    LRPlus5 = 16_384
+    LRPlus6 = 32_768
+    LRPlus7 = 65_536
+    LRPlus8 = 131_072
+    LRPlus9 = 262_144
+    LRPlus10 = 524_288
+
+
 class BaseParameterType(IntEnum):
     Muscle = 1
     Energy = 2

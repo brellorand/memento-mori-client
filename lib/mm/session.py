@@ -35,11 +35,14 @@ class MementoMoriSession:
         use_mb_cache: bool = True,
         mb_locale: Locale = None,
         mb_json_cache_map: dict[str, Path] = None,
+        populate_mb_cache: bool = False,
     ):
         self.config = config if isinstance(config, ConfigFile) else ConfigFile(config)
         self._use_cache = {'auth': use_auth_cache, 'data': use_data_cache, 'mb': use_mb_cache}
         self._mb_locale = mb_locale
         self._mb_json_cache_map = mb_json_cache_map
+        if populate_mb_cache:
+            self.mb.populate_cache()
 
     @cached_property
     def auth_client(self) -> AuthClient:

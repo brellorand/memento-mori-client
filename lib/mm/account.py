@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from .data import UserSyncData
 from .enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
 from .http_client import ApiClient
+from .properties import ClearableCachedPropertyMixin
+from .models import Character, Equipment
 
 if TYPE_CHECKING:
     from .config import AccountConfig, ConfigFile
@@ -101,6 +103,7 @@ class ApiRequestMethod:
 
         resp = self.method(instance, *args, **kwargs)
         if user_sync_data := self._get_user_sync_data(resp):
+            instance._reset_user_sync_data_properties()
             if instance.user_sync_data is None:
                 instance.user_sync_data = UserSyncData(user_sync_data)
             else:
@@ -132,7 +135,7 @@ def api_request(*, requires_login: bool = True, maintenance_ok: bool = False):
 # endregion
 
 
-class WorldAccount:
+class WorldAccount(ClearableCachedPropertyMixin):
     """Represents a player + world account / logged in session for that account."""
 
     session: MementoMoriSession
@@ -214,6 +217,8 @@ class WorldAccount:
 
         self._is_logged_in = False
 
+    # region User Data Sync / My Page
+
     @api_request()
     def get_user_data(self) -> GetUserDataResponse:
         return self._api_client.post_msg('user/getUserData', {})
@@ -227,6 +232,35 @@ class WorldAccount:
         # Alt locale value source: self.player.config.auth.locale
         data = {'LanguageType': locale.num} if locale is not None else {}
         return self._api_client.post_msg('user/getMypage', data)
+
+    # endregion
+
+    # region Character / Equipment Data
+
+    def _reset_user_sync_data_properties(self):
+        self.clear_cached_properties('characters', 'equipment', 'char_guid_equipment_map')
+
+    @cached_property
+    def characters(self) -> dict[str, Character]:
+        return {row['Guid']: Character(self, row) for row in self.user_sync_data.user_character_dto_infos}
+
+    @cached_property
+    def equipment(self) -> dict[str, Equipment]:
+        return {row['Guid']: Equipment(self, row) for row in self.user_sync_data.user_equipment_dto_infos}
+
+    @cached_property
+    def char_guid_equipment_map(self) -> dict[str, list[Equipment]]:
+        char_guid_equipment_map = {}
+        for item in self.equipment.values():
+            try:
+                char_items = char_guid_equipment_map[item.char_guid]
+            except KeyError:
+                char_guid_equipment_map[item.char_guid] = [item]
+            else:
+                char_items.append(item)
+        return char_guid_equipment_map
+
+    # endregion
 
     # region Equipment
 

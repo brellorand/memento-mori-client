@@ -77,6 +77,15 @@ class Show(GameCLI, help='Show info'):
     def my_page(self):
         self.print(self.world_account.get_my_page())
 
+    @item
+    def characters(self):
+        self.mm_session.mb.populate_cache()
+        self.world_account.get_user_sync_data()
+        for char in self.world_account.characters.values():
+            print(f'- {char}')
+            for item in char.equipment:
+                print(f'    - {item}')
+
     # endregion
 
     # region Account Properties
