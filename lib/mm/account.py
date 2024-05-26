@@ -9,16 +9,23 @@ from functools import cached_property, partial
 from typing import TYPE_CHECKING
 
 from .data import UserSyncData
-from .enums import Region, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
+from .enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
 from .http_client import ApiClient
-from .grpc_client import MagicOnionClient
 
 if TYPE_CHECKING:
     from .config import AccountConfig, ConfigFile
+    from .grpc_client import MagicOnionClient
     from .session import MementoMoriSession
     from .typing import (
-        LoginResponse, PlayerDataInfo, GetServerHostResponse, LoginPlayerResponse, GetMypageResponse,
-        UserEquipment, EquipmentChangeInfo
+        LoginResponse,
+        PlayerDataInfo,
+        GetServerHostResponse,
+        LoginPlayerResponse,
+        GetUserDataResponse,
+        GetMypageResponse,
+        UserEquipment,
+        EquipmentChangeInfo,
+        ErrorLogInfo,
     )
 
 __all__ = ['PlayerAccount', 'WorldAccount']
@@ -26,6 +33,8 @@ log = logging.getLogger(__name__)
 
 
 class PlayerAccount:
+    """A player account, which may contain one or more :class:`.WorldAccount`s"""
+
     session: MementoMoriSession
     config: ConfigFile
     account_config: AccountConfig
@@ -75,56 +84,78 @@ class PlayerAccount:
         return world
 
 
-class requires_login:
-    __slots__ = ('method',)
+class ApiRequestMethod:
+    __slots__ = ('method', 'requires_login', 'maintenance_ok')
 
-    def __init__(self, method):
+    def __init__(self, method, requires_login: bool, maintenance_ok: bool):
         self.method = method
+        self.requires_login = requires_login
+        self.maintenance_ok = maintenance_ok
 
     def _request_wrapper(self, instance: WorldAccount, *args, **kwargs):
-        resp = self.method(instance, *args, **kwargs)
-        try:
-            user_sync_data = resp['UserSyncData']
-        except TypeError:
-            try:
-                user_sync_data = resp.data['UserSyncData']
-            except (TypeError, KeyError):
-                user_sync_data = None
-        except KeyError:
-            user_sync_data = None
+        if self.requires_login and not instance.is_logged_in:
+            instance.login()
 
-        if user_sync_data is not None:
-            instance.user_sync_data.update(user_sync_data)
+        resp = self.method(instance, *args, **kwargs)
+        if user_sync_data := self._get_user_sync_data(resp):
+            if instance.user_sync_data is None:
+                instance.user_sync_data = UserSyncData(user_sync_data)
+            else:
+                instance.user_sync_data.update(user_sync_data)
 
         return resp
+
+    def _get_user_sync_data(self, resp):
+        try:
+            return resp['UserSyncData']
+        except TypeError:
+            try:
+                return resp.data['UserSyncData']
+            except (TypeError, KeyError, AttributeError):
+                return None
+        except KeyError:
+            return None
 
     def __get__(self, instance: WorldAccount, owner):
         if instance is None:
             return self
-        instance._login_resp  # noqa
         return partial(self._request_wrapper, instance)
 
 
+def api_request(*, requires_login: bool = True, maintenance_ok: bool = False):
+    return lambda method: ApiRequestMethod(method, requires_login, maintenance_ok)
+
+
 class WorldAccount:
+    """Represents a player + world account / logged in session for that account."""
+
     session: MementoMoriSession
+    player_data: PlayerDataInfo
     user_sync_data: UserSyncData = None
 
     def __init__(self, player: PlayerAccount, world_id: int):
         try:
-            self._player_data: PlayerDataInfo = player.worlds[world_id]
+            self.player_data = player.worlds[world_id]
         except KeyError as e:
             raise ValueError(f'Invalid {world_id=} - pick from: {", ".join(map(str, sorted(player.worlds)))}') from e
         self.session = player.session
         self.player = player
         self._world_id = world_id
+        self._is_logged_in = False
+
+    # region General Properties
 
     @cached_property
     def player_id(self) -> int:
-        return self._player_data['PlayerId']
+        return self.player_data['PlayerId']
 
     @property
     def world_id(self) -> int:
         return self._world_id
+
+    # endregion
+
+    # region Client Properties
 
     @cached_property
     def _server_host_info(self) -> GetServerHostResponse:
@@ -135,54 +166,72 @@ class WorldAccount:
         return ApiClient.child_client(self.session.auth_client, self._server_host_info['ApiHost'])
 
     @cached_property
-    def _login_resp(self) -> LoginPlayerResponse:
-        resp = self._api_client.login_player(self.player_id, self._player_data['Password'])
-        self.user_sync_data = UserSyncData(resp['UserSyncData'])
-        return resp
-
-    @cached_property
     def _grpc_client(self) -> MagicOnionClient:
+        from .grpc_client import MagicOnionClient
+
         return MagicOnionClient(
             f'https://{self._server_host_info["MagicOnionHost"]}:{self._server_host_info["MagicOnionPort"]}',
             player_id=self.player_id,
             auth_token=self._login_resp['AuthTokenOfMagicOnion'],
         )
 
+    # endregion
+
+    # region Login
+
+    @property
+    def is_logged_in(self) -> bool:
+        return self._is_logged_in
+
+    def login(self) -> LoginPlayerResponse:
+        return self._login_resp
+
+    @api_request(requires_login=False, maintenance_ok=True)
+    def _login(self, error_log_info: list[ErrorLogInfo] = None) -> LoginPlayerResponse:
+        resp = self._api_client.login_player(self.player_id, self.player_data['Password'], error_log_info)
+        self._is_logged_in = True
+        return resp
+
+    @cached_property
+    def _login_resp(self) -> LoginPlayerResponse:
+        return self._login()
+
+    # endregion
+
     def close(self):
-        for key in ('_server_host_info', '_api_client', '_login_resp', '_grpc_client'):
+        for key in ('_server_host_info', '_api_client', '_grpc_client', '_login_resp'):
             try:
                 del self.__dict__[key]
             except KeyError:
                 pass
 
-    # def login(self) -> LoginPlayerResponse:
-    #     return self._login_resp
+        self._is_logged_in = False
 
-    @requires_login
-    def get_user_data(self):
-        return self._api_client.get_user_data()
+    @api_request()
+    def get_user_data(self) -> GetUserDataResponse:
+        return self._api_client.post_msg('user/getUserData', {})
 
-    @requires_login
     def get_user_sync_data(self) -> UserSyncData:
-        self._api_client.get_user_data()
+        self.get_user_data()
         return self.user_sync_data
 
-    @requires_login
-    def get_my_page(self) -> GetMypageResponse:
-        # return self._api_client.get_my_page(self.player.config.auth.locale)
-        return self._api_client.get_my_page()
+    @api_request()
+    def get_my_page(self, locale: Locale = None) -> GetMypageResponse:
+        # Alt locale value source: self.player.config.auth.locale
+        data = {'LanguageType': locale.num} if locale is not None else {}
+        return self._api_client.post_msg('user/getMypage', data)
 
     # region Equipment
 
-    @requires_login
+    @api_request()
     def smelt_gear(self, guid: str, user_equipment: UserEquipment):
         return self._api_client.post_msg('equipment/cast', {'Guid': guid, 'UserEquipment': user_equipment})
 
-    @requires_login
+    @api_request()
     def smelt_all_gear(self, rarity: EquipmentRarityFlags | int):
         return self._api_client.post_msg('equipment/castMany', {'RarityFlags': getattr(rarity, 'value', rarity)})
 
-    @requires_login
+    @api_request()
     def upgrade_gear(self, guid: str, num_times: int = 1):
         """
         Spend `Upgrade Water` and `Upgrade Panacea` to upgrade the specified equipment the specified number of times.
@@ -191,25 +240,25 @@ class WorldAccount:
         """
         return self._api_client.post_msg('equipment/reinforcement', {'EquipmentGuid': guid, 'NumberOfTimes': num_times})
 
-    @requires_login
+    @api_request()
     def reforge_gear(self, guid: str, locked_params: list[BaseParameterType | int] = None):
         params = [getattr(v, 'value', v) for v in locked_params] if locked_params else []
         return self._api_client.post_msg('equipment/training', {'EquipmentGuid': guid, 'ParameterLockedList': params})
 
-    @requires_login
+    @api_request()
     def transfer_runes_and_augments(self, src_guid: str, dst_guid: str):
         return self._api_client.post_msg(
             'equipment/inheritanceEquipment', {'InheritanceEquipmentGuid': dst_guid, 'SourceEquipmentGuid': src_guid}
         )
 
-    @requires_login
+    @api_request()
     def remove_gear(self, char_guid: str, slots: list[EquipmentSlotType | int]):
         slots = [getattr(v, 'value', v) for v in slots] if slots else []
         return self._api_client.post_msg(
             'equipment/removeEquipment', {'UserCharacterGuid': char_guid, 'EquipmentSlotTypes': slots}
         )
 
-    @requires_login
+    @api_request()
     def change_gear(self, char_guid: str, changes: list[EquipmentChangeInfo]):
         return self._api_client.post_msg(
             'equipment/changeEquipment', {'UserCharacterGuid': char_guid, 'EquipmentChangeInfos': changes}

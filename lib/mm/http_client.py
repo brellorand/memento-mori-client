@@ -18,13 +18,12 @@ from requests import Session, Response, HTTPError
 
 from .config import ConfigFile, AccountConfig
 from .data import GameData, OrtegaInfo
-from .enums import Locale
 from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
 from .fs import FileCache, PathLike
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
 if TYPE_CHECKING:
-    from .typing import LoginResponse, GetServerHostResponse, LoginPlayerResponse, ErrorLogInfo, GetUserDataResponse
+    from .typing import LoginResponse, GetServerHostResponse, LoginPlayerResponse, ErrorLogInfo
 
 __all__ = ['AuthClient', 'DataClient']
 log = logging.getLogger(__name__)
@@ -569,6 +568,13 @@ class AuthClient(OrtegaClient):
 
 
 class ApiClient(OrtegaClient):
+    """
+    API client for making requests specific to a logged in player + world.
+
+    Only one specific request method is defined here since it doesn't require prior world login.  Methods for requests
+    that require login are defined in :class:`~.WorldAccount`
+    """
+
     def post_msg(self, uri_path: str, to_pack, **kwargs):
         return self._post_msg(uri_path, to_pack, **kwargs)
 
@@ -578,15 +584,6 @@ class ApiClient(OrtegaClient):
         # This request does not need prior login, and may be made during maintenance
         data = {'Password': password, 'PlayerId': player_id, 'ErrorLogInfoList': error_log_info or []}
         return self._post_msg('user/loginPlayer', data)
-
-    def get_user_data(self) -> GetUserDataResponse:
-        # This request requires prior login, and may NOT be made during maintenance
-        return self._post_msg('user/getUserData', {})
-
-    def get_my_page(self, locale: Locale = None):
-        # This request requires prior login, and may NOT be made during maintenance
-        data = {'LanguageType': locale.num} if locale is not None else {}
-        return self._post_msg('user/getMypage', data)
 
 
 class DataClient(RequestsClient):
