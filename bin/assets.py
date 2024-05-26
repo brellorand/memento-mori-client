@@ -16,8 +16,8 @@ from cli_command_parser.inputs import Path as IPath, NumRange
 from cli_command_parser.inputs.time import DateTime, DEFAULT_DATE_FMT, DEFAULT_DT_FMT
 
 from mm.__version__ import __author_email__, __version__  # noqa
+from mm.account import MementoMoriSession
 from mm.fs import path_repr
-from mm.http_client import DataClient
 from mm.logging import init_logging, log_initializer
 from mm.utils import FutureWaiter
 
@@ -32,14 +32,17 @@ DATE_OR_DT = DateTime(DEFAULT_DATE_FMT, DEFAULT_DT_FMT)
 class AssetCLI(Command, description='Memento Mori Asset Manager', option_name_mode='*-'):
     action = SubCommand()
     no_cache = Flag('-C', help='Do not read cached game/catalog data')
+    config_file = Option(
+        '-cf', type=IPath(type='file'), help='Config file path (default: ~/.config/memento-mori-client)'
+    )
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
 
     def _init_command_(self):
         init_logging(self.verbose)
 
     @cached_property
-    def client(self) -> DataClient:
-        return DataClient(use_cache=not self.no_cache)
+    def mm_session(self) -> MementoMoriSession:
+        return MementoMoriSession(self.config_file, use_auth_cache=not self.no_cache, use_data_cache=not self.no_cache)
 
 
 class List(AssetCLI, help='List asset paths'):
@@ -47,7 +50,8 @@ class List(AssetCLI, help='List asset paths'):
     depth: int = Option('-d', help='Show assets up to the specified depth')
 
     def main(self):
-        tree = self.client.asset_catalog.get_asset(self.path) if self.path else self.client.asset_catalog.asset_tree
+        asset_catalog = self.mm_session.asset_catalog
+        tree = asset_catalog.get_asset(self.path) if self.path else asset_catalog.asset_tree
         for asset in tree.iter_flat(self.depth):
             print(asset)
 
@@ -71,7 +75,7 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
 
         log.info(f'Downloading {len(bundle_names):,d} bundles')
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-            futures = {executor.submit(self.client.get_asset, name): name for name in bundle_names}
+            futures = {executor.submit(self.mm_session.data_client.get_asset, name): name for name in bundle_names}
             with FutureWaiter(executor)(futures, add_bar=not self.verbose) as waiter:
                 for future in waiter:
                     self._save_bundle(futures[future], future.result())
@@ -82,7 +86,7 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
         out_path.write_bytes(data)
 
     def _get_bundle_names(self) -> list[str]:
-        to_download = self.client.asset_catalog.bundle_names
+        to_download = self.mm_session.asset_catalog.bundle_names
         log.debug(f'Found {len(to_download):,d} total bundles to download')
         if not (self.force or not self.output.exists()):
             to_download = [name for name in to_download if not self.output.joinpath(name).exists()]

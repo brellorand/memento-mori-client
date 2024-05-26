@@ -6,14 +6,14 @@ from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, UsageError, main
+from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, main
 from cli_command_parser.inputs import Path as IPath, NumRange, File as IFile, FileWrapper
 
 from mm.__version__ import __author_email__, __version__  # noqa
+from mm.account import MementoMoriSession
 from mm.enums import Region, Locale
 from mm.fs import path_repr, sanitize_file_name
-from mm.http_client import DataClient
-from mm.mb_models import MB, RANK_BONUS_STATS, WorldGroup, Character as MBCharacter
+from mm.mb_models import RANK_BONUS_STATS, WorldGroup, Character as MBCharacter
 from mm.output import OUTPUT_FORMATS, YAML, pprint
 from mm.utils import FutureWaiter
 
@@ -27,8 +27,11 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
     action = SubCommand()
     no_client_cache = Flag('-C', help='Do not read cached game/catalog data')
     no_mb_cache = Flag('-M', help='Do not read cached MB data')
-    verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
+    config_file = Option(
+        '-cf', type=IPath(type='file'), help='Config file path (default: ~/.config/memento-mori-client)'
+    )
     locale = Option('-loc', choices=Locale, default='EnUs', help='Locale to use for text resources')
+    verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
 
     def _init_command_(self):
         from mm.logging import init_logging
@@ -36,11 +39,14 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
         init_logging(self.verbose)
 
     @cached_property
-    def client(self) -> DataClient:
-        return DataClient(use_cache=not self.no_client_cache)
-
-    def get_mb(self, json_cache_map=None) -> MB:
-        return self.client.get_mb(use_cached=not self.no_mb_cache, json_cache_map=json_cache_map, locale=self.locale)
+    def mm_session(self) -> MementoMoriSession:
+        return MementoMoriSession(
+            self.config_file,
+            use_auth_cache=not self.no_client_cache,
+            use_data_cache=not self.no_client_cache,
+            use_mb_cache=not self.no_mb_cache,
+            mb_locale=self.locale,
+        )
 
 
 # region Save Commands
@@ -56,7 +62,7 @@ class Save(MBDataCLI, help='Save data referenced by a MB file'):
 
     @cached_property
     def raw_data_info(self) -> list[dict[str, int | str | bool]]:
-        mb = self.get_mb({'DownloadRawDataMB': self.mb_path} if self.mb_path else None)
+        mb = self.mm_session.get_mb(json_cache_map={'DownloadRawDataMB': self.mb_path} if self.mb_path else None)
         return mb.get_raw_data('DownloadRawDataMB')
 
     def _save(self, name: str, data: bytes, log_lvl: int = logging.DEBUG):
@@ -76,7 +82,7 @@ class File(Save, help='Download and save a single file'):
         elif not self.skip_validation and not any(row['FilePath'] == self.name for row in self.raw_data_info):
             raise ValueError(f'Invalid file={self.name!r} - does not match any DownloadRawDataMB FilePath')
 
-        self._save(self.name, self.client.get_raw_data(self.name), log_lvl=logging.INFO)
+        self._save(self.name, self.mm_session.data_client.get_raw_data(self.name), log_lvl=logging.INFO)
 
 
 class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
@@ -102,7 +108,7 @@ class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
 
     def _download(self, paths: list[str]):
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-            futures = {executor.submit(self.client.get_raw_data, path): path for path in paths}
+            futures = {executor.submit(self.mm_session.data_client.get_raw_data, path): path for path in paths}
             with FutureWaiter(executor)(futures, add_bar=not self.verbose, unit=' files') as waiter:
                 for future in waiter:
                     self._save(futures[future], future.result())
@@ -130,7 +136,7 @@ class Lyrics(Save, help='Save lament lyrics'):
 
     def main(self):
         self.output.mkdir(parents=True, exist_ok=True)
-        for char in self.get_mb().characters.values():
+        for char in self.mm_session.mb.characters.values():
             lyrics = char.profile.lament_lyrics_text_en if self.english else char.profile.lament_lyrics_text
             path = self.output.joinpath(sanitize_file_name(self._get_name(char)))
             log.info(f'Saving {path.as_posix()}')
@@ -173,7 +179,7 @@ class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
         self.pprint(self.get_groups())
 
     def get_groups(self):
-        mb = self.get_mb({'WorldGroupMB': self.mb_path} if self.mb_path else None)
+        mb = self.mm_session.get_mb(json_cache_map={'WorldGroupMB': self.mb_path} if self.mb_path else None)
         groups = []
         for i, group in enumerate(mb.world_groups):
             if self.region and group.region != self.region:
@@ -190,7 +196,7 @@ class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
             now = datetime.now()
             grand_battles = [(start, end) for start, end in group.grand_battles if end > now]
 
-        game_data = self.client.game_data
+        game_data = self.mm_session.auth_client.game_data
         return {
             'id': group.id,
             'region': group.region.name,
@@ -208,7 +214,7 @@ class VIP(Show, choice='vip', help='Show daily VIP rewards by level'):
             f'Level {level.level}': [
                 f'{ic.item.display_name} x {ic.count:,d}' for ic in level.daily_rewards
             ]
-            for level in self.get_mb().vip_levels
+            for level in self.mm_session.mb.vip_levels
         }
         self.pprint(data)
 
@@ -221,7 +227,7 @@ class Rank(Show, help='Show player rank info'):
     @item(help='Show the ranks at which additional level link slots are unlocked')
     def link_slots(self):
         last = 0
-        for num, rank in self.get_mb().player_ranks.items():
+        for num, rank in self.mm_session.mb.player_ranks.items():
             if rank.level_link_slots > last:
                 print(f'Rank {num:>3d}: {rank.level_link_slots:>2d} link slots')
                 last = rank.level_link_slots
@@ -231,7 +237,7 @@ class Rank(Show, help='Show player rank info'):
         stats = set(self.stat or RANK_BONUS_STATS).difference(self.not_stat)
         output = {}
         last = {}
-        for num, rank in self.get_mb().player_ranks.items():
+        for num, rank in self.mm_session.mb.player_ranks.items():
             rank_stats = {
                 k: v
                 for k, v in rank.get_stat_bonuses().items()
@@ -254,12 +260,12 @@ class Character(Show, choices=('character', 'char'), help='Show character info')
 
     @item(help='Show the name of each character with its ID')
     def names(self):
-        for num, char in self.get_mb().characters.items():
+        for num, char in self.mm_session.mb.characters.items():
             print(f'{char.full_id}: {char.full_name}')
 
     @item(help='Show a basic, high-level character info summary')
     def summary(self):
-        chars = self.get_mb().characters.values()
+        chars = self.mm_session.mb.characters.values()
         if self.format == 'json-lines':
             data = [{char.full_id: char.get_summary(show_lament=self.show_laments)} for char in chars]
         else:
@@ -269,7 +275,7 @@ class Character(Show, choices=('character', 'char'), help='Show character info')
 
     @item(help='Show a sorted list of characters and their base speeds')
     def speed(self):
-        speeds = ((char.speed, char.full_name) for char in self.get_mb().characters.values())
+        speeds = ((char.speed, char.full_name) for char in self.mm_session.mb.characters.values())
         for speed, name in sorted(speeds, reverse=self.descending):
             print(f'{speed:,d}  {name}')
 
@@ -286,9 +292,8 @@ class GenerateErrorMap(MBDataCLI, help='Generate a mapping of error codes to the
     )
 
     def main(self):
-        mb = self.get_mb()
         code_message_map = {}
-        for key, text in mb.text_resource_map.items():
+        for key, text in self.mm_session.mb.text_resource_map.items():
             if key.startswith('[ErrorMessage'):
                 code = int(key[13:-1])
                 code_message_map[code] = text

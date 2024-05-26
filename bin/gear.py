@@ -5,11 +5,12 @@ from functools import cached_property
 from typing import Iterator
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, main
+from cli_command_parser.inputs import Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
+from mm.account import MementoMoriSession
 from mm.enums import LOCALES
-from mm.http_client import DataClient
-from mm.mb_models import MB, Equipment as _Equipment
+from mm.mb_models import Equipment as _Equipment
 from mm.output import OUTPUT_FORMATS, YAML, pprint
 
 log = logging.getLogger(__name__)
@@ -19,8 +20,11 @@ class GearCLI(Command, description='Memento Mori Gear Helper', option_name_mode=
     action = SubCommand()
     no_client_cache = Flag('-C', help='Do not read cached game/catalog data')
     no_mb_cache = Flag('-M', help='Do not read cached MB data')
-    verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
+    config_file = Option(
+        '-cf', type=IPath(type='file'), help='Config file path (default: ~/.config/memento-mori-client)'
+    )
     locale = Option('-loc', choices=LOCALES, default='EnUs', help='Locale to use for text resources')
+    verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
 
     def _init_command_(self):
         from mm.logging import init_logging
@@ -28,11 +32,14 @@ class GearCLI(Command, description='Memento Mori Gear Helper', option_name_mode=
         init_logging(self.verbose)
 
     @cached_property
-    def client(self) -> DataClient:
-        return DataClient(use_cache=not self.no_client_cache)
-
-    def get_mb(self, json_cache_map=None) -> MB:
-        return self.client.get_mb(use_cached=not self.no_mb_cache, json_cache_map=json_cache_map, locale=self.locale)
+    def mm_session(self) -> MementoMoriSession:
+        return MementoMoriSession(
+            self.config_file,
+            use_auth_cache=not self.no_client_cache,
+            use_data_cache=not self.no_client_cache,
+            use_mb_cache=not self.no_mb_cache,
+            mb_locale=self.locale,
+        )
 
 
 # region List Commands
@@ -67,7 +74,7 @@ class UpgradeReqs(List, help='List all upgrade requirements'):
         self.pprint(data)
 
     def _get_requirements(self):
-        mb = self.get_mb()
+        mb = self.mm_session.mb
         return mb.armor_upgrade_requirements if self.type == 'armor' else mb.weapon_upgrade_requirements
 
     def get_csv_data(self):
@@ -101,7 +108,7 @@ class Items(List, help='List all items'):
                 'type': item.item_type,
                 'id': item.id,
             }
-            for type_item_map in self.get_mb().items.values()
+            for type_item_map in self.mm_session.mb.items.values()
             for item in type_item_map.values()
         ]
 
@@ -115,7 +122,7 @@ class Equipment(List, help='List all equipment'):
         self.pprint(self.get_data())
 
     def _iter_items(self) -> Iterator[_Equipment]:
-        items = self.get_mb().equipment.values()
+        items = self.mm_session.mb.equipment.values()
         if min_level := self.min_level:
             items = (i for i in items if i.level >= min_level)
         if max_level := self.max_level:
