@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, date
 from getpass import getuser
 from pathlib import Path
 from string import printable
@@ -34,6 +34,8 @@ PathLike = str | Path
 
 
 class FileCache:
+    __slots__ = ('use_cache', 'root')
+
     def __init__(self, subdir: str = None, use_cache: bool = True):
         self.use_cache = use_cache
         self.root = get_user_cache_dir(subdir)
@@ -48,7 +50,7 @@ class FileCache:
         except OSError as e:
             raise CacheMiss from e
 
-        if mod_time.date() != datetime.now().date():
+        if mod_time.date() != date.today():
             raise CacheMiss
 
         try:

@@ -48,6 +48,8 @@ class ConfigFile:
         with self.path.open('w', encoding='utf-8') as f:
             json.dump(self.data, f, ensure_ascii=False, sort_keys=True, indent=4)
 
+    # region Sections
+
     @cached_property
     def auth(self) -> AuthOptions:
         return AuthOptions._load(self)
@@ -55,6 +57,12 @@ class ConfigFile:
     @cached_property
     def accounts(self) -> dict[str, AccountConfig]:
         return AccountConfig._load_all(self)
+
+    @cached_property
+    def mb(self) -> MBOptions:
+        return MBOptions._load(self)
+
+    # endregion
 
     @cached_property
     def app_version_manager(self) -> AppVersionManager:
@@ -106,6 +114,9 @@ class ConfigSection(ABC):
         self._config.save()
 
 
+# region Android Model
+
+
 @dataclass
 class AndroidModel:
     brand: str
@@ -152,6 +163,9 @@ ANDROID_MODELS = {
     'Xiaomi 12S Ultra': AndroidModel('Xiaomi', '2203121C', 13, 33, 'TKQ1.220829.002', 'V14.0.12.0.TLACNXM'),
 }
 DEFAULT_ANDROID_MODEL = ANDROID_MODELS['Galaxy S22']
+
+
+# endregion
 
 
 class AuthOptions(ConfigSection, section='auth'):
@@ -202,3 +216,12 @@ class AccountConfig(ConfigSection, section='accounts', id_attr='user_id'):
         self._client_key = value
         if save and value:
             self.save()
+
+
+class MBOptions(ConfigSection, section='mb'):
+    def __init__(self, *, locale: Locale = None, config_file: ConfigFile = None):
+        super().__init__(config_file)
+        self.locale = Locale(locale) if locale else Locale.EnUs
+
+    def as_dict(self) -> dict[str, int | str | None]:
+        return {'locale': self.locale}

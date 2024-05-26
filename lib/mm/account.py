@@ -8,33 +8,97 @@ import logging
 from functools import cached_property, partial
 from typing import TYPE_CHECKING
 
-from .config import AccountConfig
+from .assets import AssetCatalog
+from .config import AccountConfig, ConfigFile
 from .data import UserSyncData
-from .enums import Region, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
-from .http_client import AuthClient, ApiClient
+from .enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
+from .http_client import AuthClient, ApiClient, DataClient
 from .grpc_client import MagicOnionClient
+from .mb_models import MB
 
 if TYPE_CHECKING:
+    from pathlib import Path
+    from .fs import PathLike
     from .typing import (
         LoginResponse, PlayerDataInfo, GetServerHostResponse, LoginPlayerResponse, GetMypageResponse,
         UserEquipment, EquipmentChangeInfo
     )
 
-__all__ = ['PlayerAccount', 'WorldAccount']
+__all__ = ['MementoMoriSession', 'PlayerAccount', 'WorldAccount']
 log = logging.getLogger(__name__)
 
 
+class MementoMoriSession:
+    config: ConfigFile
+
+    def __init__(
+        self,
+        config: PathLike | ConfigFile = None,
+        *,
+        use_auth_cache: bool = True,
+        use_data_cache: bool = True,
+        use_mb_cache: bool = True,
+        mb_locale: Locale = None,
+        mb_json_cache_map: dict[str, Path] = None,
+    ):
+        self.config = config if isinstance(config, ConfigFile) else ConfigFile(config)
+        self._use_cache = {'auth': use_auth_cache, 'data': use_data_cache, 'mb': use_mb_cache}
+        self._mb_locale = mb_locale
+        self._mb_json_cache_map = mb_json_cache_map
+
+    @cached_property
+    def auth_client(self) -> AuthClient:
+        return AuthClient(config=self.config, use_cache=self._use_cache['auth'])
+
+    @cached_property
+    def data_client(self) -> DataClient:
+        return DataClient(
+            auth_client=self.auth_client, use_data_cache=self._use_cache['data'], use_mb_cache=self._use_cache['mb']
+        )
+
+    @cached_property
+    def asset_catalog(self) -> AssetCatalog:
+        return AssetCatalog(self.data_client._get_asset_catalog())
+
+    @cached_property
+    def mb(self) -> MB:
+        return self.get_mb()
+
+    def get_mb(self, **kwargs) -> MB:
+        kwargs.setdefault('json_cache_map', self._mb_json_cache_map)
+        if 'locale' not in kwargs:
+            kwargs['locale'] = self._mb_locale or self.config.mb.locale
+        return self.data_client.get_mb(**kwargs)
+
+    def get_account_by_id(self, user_id: int) -> PlayerAccount:
+        try:
+            account_config = self.config.accounts[str(user_id)]
+        except KeyError as e:
+            raise ValueError(f'Invalid {user_id=} - pick from: {", ".join(sorted(self.config.accounts))}') from e
+        else:
+            return PlayerAccount(self, account_config)
+
+    def get_account_by_name(self, name: str) -> PlayerAccount:
+        for account in self.config.accounts.values():
+            if account.name == name:
+                return PlayerAccount(self, account)
+
+        names = ', '.join(sorted(a.name for a in self.config.accounts.values()))
+        raise ValueError(f'Unable to find an account with {name=} - pick from: {names}')
+
+
 class PlayerAccount:
+    session: MementoMoriSession
     _last_world: WorldAccount = None
 
-    def __init__(self, config: AccountConfig, auth_client: AuthClient):
+    def __init__(self, session: MementoMoriSession, config: AccountConfig):
+        self.session = session
         self.config = config.parent
         self.account_config = config
-        self.auth_client = auth_client
 
     @cached_property
     def login_data(self) -> LoginResponse:
-        return self.auth_client.login(self.account_config)
+        return self.session.auth_client.login(self.account_config)
 
     @cached_property
     def region(self) -> Region:
@@ -102,6 +166,7 @@ class requires_login:
 
 
 class WorldAccount:
+    session: MementoMoriSession
     user_sync_data: UserSyncData = None
 
     def __init__(self, player: PlayerAccount, world_id: int):
@@ -109,6 +174,7 @@ class WorldAccount:
             self._player_data: PlayerDataInfo = player.worlds[world_id]
         except KeyError as e:
             raise ValueError(f'Invalid {world_id=} - pick from: {", ".join(map(str, sorted(player.worlds)))}') from e
+        self.session = player.session
         self.player = player
         self._world_id = world_id
 
@@ -122,11 +188,11 @@ class WorldAccount:
 
     @cached_property
     def _server_host_info(self) -> GetServerHostResponse:
-        return self.player.auth_client.get_server_host(self._world_id)
+        return self.session.auth_client.get_server_host(self._world_id)
 
     @cached_property
     def _api_client(self) -> ApiClient:
-        return ApiClient.child_client(self.player.auth_client, self._server_host_info['ApiHost'])
+        return ApiClient.child_client(self.session.auth_client, self._server_host_info['ApiHost'])
 
     @cached_property
     def _login_resp(self) -> LoginPlayerResponse:

@@ -400,7 +400,7 @@ class OrtegaClient(RequestsClient):
         resp = self.post(uri_path, data=msgpack.packb(to_pack), **kwargs)
         data = msgpack.unpackb(resp.content, timestamp=3, strict_map_key=False)
         if (status_code := resp.headers.get('ortegastatuscode')) and status_code != '0':
-            # TODO: If the error code is 103 / CommonRequireClientUpdate, automatically update?
+            # TODO: If the error code in the resp body is 103 / CommonRequireClientUpdate, automatically update?
             raise ApiResponseError(resp, data)
         return data
 
@@ -412,9 +412,9 @@ class AuthClient(OrtegaClient):
         app_version: str = None,
         ortega_uuid: str = None,
         use_cache: bool = True,
-        config_path: PathLike = None,
+        config: PathLike | ConfigFile = None,
     ):
-        self.config = config_path
+        self.config = config
         if app_version:
             self.config.app_version_manager.set_version(app_version)
 
@@ -593,9 +593,16 @@ class ApiClient(OrtegaClient):
 
 
 class DataClient(RequestsClient):
-    def __init__(self, auth_client: AuthClient = None, system: str = 'Android', use_cache: bool = True, **kwargs):
+    def __init__(
+        self,
+        auth_client: AuthClient = None,
+        system: str = 'Android',
+        use_data_cache: bool = True,
+        use_mb_cache: bool = True,
+        **kwargs,
+    ):
         self.system = system
-        self.auth = auth_client or AuthClient(use_cache=use_cache, **kwargs)
+        self.auth = auth_client or AuthClient(**kwargs)
         self.game_data = self.auth.game_data
         headers = {
             'content-type': 'application/json; charset=UTF-8',
@@ -604,8 +611,9 @@ class DataClient(RequestsClient):
             'X-Unity-Version': '2021.3.10f1',
         }
         super().__init__(urlparse(self.game_data.asset_catalog_uri_fmt).hostname, scheme='https', headers=headers)
-        self.cache = FileCache('data', use_cache=use_cache)
+        self.cache = FileCache('data', use_cache=use_data_cache)
         self._mb_cache = FileCache('mb')
+        self._use_mb_cache = use_mb_cache
 
     def _get_asset(self, name: str) -> Response:
         url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
@@ -627,8 +635,8 @@ class DataClient(RequestsClient):
     #     url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
     #     return self.head(url, relative=False).headers['etag'].strip('"')
 
-    def get_mb_data(self, name: str, use_cached: bool = False):
-        if not use_cached:
+    def get_mb_data(self, name: str):
+        if not self._use_mb_cache:
             return self._get_mb_data(name)
 
         try:
@@ -648,6 +656,14 @@ class DataClient(RequestsClient):
         resp = self.get(url, relative=False)
         return resp.content
 
+    def _get_asset_catalog(self):
+        try:
+            return self.cache.get('asset-catalog.json')
+        except CacheMiss:
+            catalog = self._get_asset(f'{self.auth.ortega_info.asset_version}.json').json()
+            self.cache.store(catalog, 'asset-catalog.json')
+            return catalog
+
     def _get_mb_catalog(self):
         try:
             return self.cache.get('master-catalog.msgpack')
@@ -656,21 +672,5 @@ class DataClient(RequestsClient):
             self.cache.store(catalog, 'master-catalog.msgpack')
             return catalog
 
-    @cached_property
-    def mb_catalog(self) -> MB:
-        return MB(self, data=self._get_mb_catalog())
-
-    def get_mb(
-        self, *, use_cached: bool = True, json_cache_map: dict[str, Path] = None, locale: Locale = Locale.EnUs
-    ) -> MB:
-        return MB(self, use_cached=use_cached, json_cache_map=json_cache_map, locale=locale)
-
-    @cached_property
-    def asset_catalog(self) -> AssetCatalog:
-        try:
-            catalog = self.cache.get('asset-catalog.json')
-        except CacheMiss:
-            catalog = self._get_asset(f'{self.auth.ortega_info.asset_version}.json').json()
-            self.cache.store(catalog, 'asset-catalog.json')
-
-        return AssetCatalog(catalog)
+    def get_mb(self, *, json_cache_map: dict[str, Path] = None, locale: Locale = Locale.EnUs) -> MB:
+        return MB(self, json_cache_map=json_cache_map, locale=locale)

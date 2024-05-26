@@ -36,13 +36,11 @@ class MB:
         client: DataClient,
         *,
         data: dict[str, Any] = None,
-        use_cached: bool = True,
         json_cache_map: dict[str, Path] = None,
         locale: Locale = Locale.EnUs,
     ):
         self._client = client
         self.__data = data
-        self._use_cached = use_cached
         self._json_cache_map = json_cache_map or {}
         self.locale = Locale(locale)
         self._locale_text_resource_map = {}
@@ -80,7 +78,7 @@ class MB:
     def get_raw_data(self, name: str):
         if json_path := self._json_cache_map.get(name):
             return json.loads(json_path.read_text('utf-8'))
-        return self._client.get_mb_data(name, use_cached=self._use_cached)
+        return self._client.get_mb_data(name)
 
     def get_data(self, cls: Type[MBEntity], locale: Locale = None):
         return self.get_raw_data(cls._file_name_fmt.format(locale=locale or self.locale))
