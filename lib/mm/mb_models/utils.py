@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from mm.enums import Locale
-from mm.utils import DictAttrFieldNotFoundError
+from mm.properties import DictAttrFieldNotFoundError
 
 if TYPE_CHECKING:
     from .base import MB, MBEntity

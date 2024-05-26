@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from functools import cached_property
 
-from mm.utils import DataProperty, DictAttrFieldNotFoundError
+from mm.properties import DataProperty, DictAttrFieldNotFoundError
 from .base import MB, MBEntity, NamedEntity, FullyNamedEntity
 
 __all__ = [

@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from functools import cached_property
 
-from mm.utils import DataProperty
+from mm.properties import DataProperty
 from .base import MBEntity
 from .items import ItemAndCount
 

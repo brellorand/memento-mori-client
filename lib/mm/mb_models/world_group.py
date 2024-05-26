@@ -9,7 +9,7 @@ from datetime import datetime
 from functools import cached_property
 
 from mm.enums import Region
-from mm.utils import DataProperty
+from mm.properties import DataProperty
 from .base import MBEntity
 from .utils import parse_dt
 

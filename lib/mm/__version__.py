@@ -1,7 +1,7 @@
 __title__ = 'Memento Mori Client'
 __description__ = 'Memento Mori Game API Client & Utilities'
 __url__ = 'https://github.com/brellorand/memento-mori-client'
-__version__ = '2024.02.19'
+__version__ = '2024.05.26'
 __author__ = 'Brellor / Lorand'
 __author_email__ = 'brellorand@gmail.com'
 __copyright__ = 'Copyright 2024 Brellor / Lorand'

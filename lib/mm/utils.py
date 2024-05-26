@@ -12,14 +12,14 @@ from json.encoder import JSONEncoder, encode_basestring_ascii, encode_basestring
 from operator import attrgetter
 from threading import Lock
 from time import sleep, monotonic
-from typing import TYPE_CHECKING, Optional, Callable, Any
+from typing import TYPE_CHECKING, Optional, Callable
 
 from tqdm import tqdm
 
 if TYPE_CHECKING:
     from .http_client import RequestsClient
 
-__all__ = ['rate_limited', 'format_path_prefix', 'DataProperty', 'parse_ms_epoch_ts', 'FutureWaiter']
+__all__ = ['rate_limited', 'format_path_prefix', 'parse_ms_epoch_ts', 'FutureWaiter']
 log = logging.getLogger(__name__)
 
 _NotSet = object()
@@ -122,87 +122,6 @@ def format_path_prefix(value: Optional[str]) -> str:
 # endregion
 
 
-# region Data Property
-
-
-class DataProperty:
-    __slots__ = ('path', 'path_repr', 'type', 'name', 'default', 'default_factory')
-
-    def __init__(
-        self,
-        path: str,
-        type: Callable = _NotSet,  # noqa
-        default: Any = _NotSet,
-        default_factory: Callable = _NotSet,
-        delim: str = '.',
-    ):
-        # noinspection PyUnresolvedReferences
-        """
-        Descriptor that acts as a cached property for retrieving values nested in a dict stored in the ``data``
-        attribute of the object that this :class:`DataProperty` is a member of.  The value is not accessed or stored
-        until the first time that it is accessed.
-
-        To un-cache a value (causes the descriptor to take over again)::\n
-            >>> del instance.__dict__[attr_name]
-
-        :param path: The nested key location in the dict attribute of the value that this DataProperty
-          represents; dict keys should be separated by ``.``, otherwise the delimiter should be provided via ``delim``
-        :param type: Callable that accepts 1 argument; the value of this DataProperty will be passed to it, and the
-          result will be returned as this DataProperty's value (default: no conversion)
-        :param default: Default value to return if a KeyError is encountered while accessing the given path
-        :param default_factory: Callable that accepts no arguments to be used to generate default values
-          instead of an explicit default value
-        :param delim: Separator that was used between keys in the provided path (default: ``.``)
-        """
-        self.path = [p for p in path.split(delim) if p]
-        self.path_repr = delim.join(self.path)
-        self.type = type
-        self.default = default
-        self.default_factory = default_factory
-
-    def __set_name__(self, owner: type, name: str):
-        self.name = name
-
-    def __get__(self, obj, cls):
-        try:
-            value = obj.data
-        except AttributeError:  # obj is None / this descriptor is being accessed as a class attribute
-            return self
-
-        for key in self.path:
-            try:
-                value = value[key]
-            except KeyError as e:
-                if self.default is not _NotSet:
-                    value = self.default
-                    break
-                elif self.default_factory is not _NotSet:
-                    value = self.default_factory()
-                    break
-                raise DictAttrFieldNotFoundError(obj, self.name, self.path_repr) from e
-
-        if self.type is not _NotSet:
-            value = self.type(value)
-        obj.__dict__[self.name] = value
-        return value
-
-
-class DictAttrFieldNotFoundError(Exception):
-    def __init__(self, obj, prop_name: str, path_repr: str):
-        self.obj = obj
-        self.prop_name = prop_name
-        self.path_repr = path_repr
-
-    def __str__(self) -> str:
-        return (
-            f'{self.obj.__class__.__name__} object has no attribute {self.prop_name!r}'
-            f' ({self.path_repr} not found in {self.obj!r}.data)'
-        )
-
-
-# endregion
-
-
 def parse_ms_epoch_ts(epoch_ts: str | int) -> datetime:
     return datetime.fromtimestamp(int(epoch_ts) / 1000)
 
@@ -272,18 +191,3 @@ class FutureWaiter:
         self(futures, prog_bar, **kwargs)
         for future in self:
             future.result()
-
-
-class cached_classproperty(classmethod):
-    def __init__(self, func: Callable):
-        super().__init__(property(func))  # noqa  # makes Sphinx handle it better than if this was not done
-        self.__doc__ = func.__doc__
-        self.func = func
-        self.values = {}
-
-    def __get__(self, obj: None, cls):  # noqa
-        try:
-            return self.values[cls]
-        except KeyError:
-            self.values[cls] = value = self.func(cls)
-            return value

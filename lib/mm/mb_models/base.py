@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
 from mm.enums import Locale
 from mm.data import DictWrapper
-from mm.utils import DataProperty
+from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
 
 if TYPE_CHECKING:

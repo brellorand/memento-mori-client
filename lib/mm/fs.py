@@ -18,7 +18,7 @@ from urllib.parse import quote
 import msgpack
 
 from .exceptions import CacheError, CacheMiss
-from .utils import cached_classproperty
+from .properties import cached_classproperty
 
 __all__ = [
     'get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr', 'get_config_dir',

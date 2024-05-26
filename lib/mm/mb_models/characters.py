@@ -10,7 +10,7 @@ from functools import cached_property
 from typing import Any
 
 from mm.enums import Element, Job, CharacterRarity, Locale
-from mm.utils import DataProperty
+from mm.properties import DataProperty
 from .base import MBEntity, NamedEntity
 from .utils import LocalizedString
 

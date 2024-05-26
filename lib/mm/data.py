@@ -11,7 +11,8 @@ from itertools import chain
 from typing import Any
 
 from .enums import Region, SnsType
-from .utils import DataProperty, parse_ms_epoch_ts
+from .properties import DataProperty, ClearableCachedPropertyMixin
+from .utils import parse_ms_epoch_ts
 
 __all__ = ['OrtegaInfo', 'GameData', 'WorldInfo']
 log = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ UserTowerBattleDtoInfo = dict  # TODO
 UserVipGiftDtoInfo = dict  # TODO
 
 
-class DictWrapper:
+class DictWrapper(ClearableCachedPropertyMixin):
     __slots__ = ('data',)
 
     def __init__(self, data: dict[str, Any]):
@@ -255,6 +256,7 @@ class UserSyncData(DictWrapper):
     def update(self, data: dict[str, Any]):
         # TODO: This doesn't work :|
         if not data:
+            log.debug('Ignoring UserSyncData update with no data')
             return
 
         simple_lists = {
