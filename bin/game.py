@@ -10,7 +10,8 @@ from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import MementoMoriSession, PlayerAccount, WorldAccount
+from mm.account import PlayerAccount, WorldAccount
+from mm.session import MementoMoriSession
 from mm.config import AccountConfig
 from mm.output import CompactJSONEncoder
 

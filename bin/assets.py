@@ -16,7 +16,7 @@ from cli_command_parser.inputs import Path as IPath, NumRange
 from cli_command_parser.inputs.time import DateTime, DEFAULT_DATE_FMT, DEFAULT_DT_FMT
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import MementoMoriSession
+from mm.session import MementoMoriSession
 from mm.fs import path_repr
 from mm.logging import init_logging, log_initializer
 from mm.utils import FutureWaiter

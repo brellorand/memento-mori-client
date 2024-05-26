@@ -10,7 +10,7 @@ from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, O
 from cli_command_parser.inputs import Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import MementoMoriSession
+from mm.session import MementoMoriSession
 from mm.enums import LOCALES
 from mm.runes import PartyMember, Party, speed_tune
 

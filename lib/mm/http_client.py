@@ -16,17 +16,14 @@ from weakref import finalize
 import msgpack
 from requests import Session, Response, HTTPError
 
-from .assets import AssetCatalog
 from .config import ConfigFile, AccountConfig
 from .data import GameData, OrtegaInfo
 from .enums import Locale
 from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
 from .fs import FileCache, PathLike
-from .mb_models import MB
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from .typing import LoginResponse, GetServerHostResponse, LoginPlayerResponse, ErrorLogInfo, GetUserDataResponse
 
 __all__ = ['AuthClient', 'DataClient']
@@ -671,6 +668,3 @@ class DataClient(RequestsClient):
             catalog = self.get_mb_data('master-catalog')
             self.cache.store(catalog, 'master-catalog.msgpack')
             return catalog
-
-    def get_mb(self, *, json_cache_map: dict[str, Path] = None, locale: Locale = Locale.EnUs) -> MB:
-        return MB(self, json_cache_map=json_cache_map, locale=locale)

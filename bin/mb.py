@@ -10,7 +10,7 @@ from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, O
 from cli_command_parser.inputs import Path as IPath, NumRange, File as IFile, FileWrapper
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import MementoMoriSession
+from mm.session import MementoMoriSession
 from mm.enums import Region, Locale
 from mm.fs import path_repr, sanitize_file_name
 from mm.mb_models import RANK_BONUS_STATS, WorldGroup, Character as MBCharacter

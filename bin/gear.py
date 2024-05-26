@@ -8,7 +8,7 @@ from cli_command_parser import Command, SubCommand, Flag, Counter, Option, main
 from cli_command_parser.inputs import Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import MementoMoriSession
+from mm.session import MementoMoriSession
 from mm.enums import LOCALES
 from mm.mb_models import Equipment as _Equipment
 from mm.output import OUTPUT_FORMATS, YAML, pprint
