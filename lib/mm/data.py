@@ -375,12 +375,12 @@ class UserSyncData(DictWrapper):
             elif key == 'GivenItemCountInfoList':
                 items = self.data['UserItemDtoInfo']
                 # log.debug(f'UserSyncData: updating {len(items)} item counts for {key}')
-                for item_count in value:
-                    item_id, item_type = item_count['ItemId'], item_count['ItemType']
+                for _, item_info in value:
+                    item_id, item_type = item_info['ItemId'], item_info['ItemType']
                     if ci := next((i for i in items if i['ItemId'] == item_id and i['ItemType'] == item_type), None):
-                        ci['ItemCount'] += item_count['ItemCount']
+                        ci['ItemCount'] += item_info['ItemCount']
                     else:
-                        items.append(item_count)
+                        items.append(item_info | {'PlayerId': self.player_info['PlayerId']})
             else:
                 # log.debug(f'UserSyncData: storing {key} => {value!r}')
                 self.data[key] = value

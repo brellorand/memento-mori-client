@@ -2,10 +2,11 @@
 
 import json
 import logging
+from abc import ABC
 from functools import cached_property
 from getpass import getpass
 
-from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, main
+from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, after_main, main
 from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.exceptions import UsageError
 
@@ -49,15 +50,44 @@ class Login(GameCLI, help='Log in for the first time'):
         account.client_key = client_key
 
 
-class Show(GameCLI, help='Show info'):
-    item = Action(help='The item to show')
-
+class WorldCommand(GameCLI, ABC):
     with ParamGroup('Account', required=True, mutually_exclusive=True):
         user_id = Option('-i', type=int, help='Numeric user ID')
         name = Option('-n', help='Friendly name associated with the account')
 
-    world: int = Option('-w', help='The world to log in to (required for some items)')
+    world: int
     sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
+
+    # region Account Properties
+
+    @cached_property
+    def player_account(self) -> PlayerAccount:
+        if self.user_id:
+            return self.mm_session.get_account_by_id(self.user_id)
+        else:
+            return self.mm_session.get_account_by_name(self.name)
+
+    @cached_property
+    def world_account(self) -> WorldAccount:
+        if not self.world:
+            raise UsageError('Missing required parameter: --world / -w')
+        return self.player_account.get_world(self.world)
+
+    # endregion
+
+    def print(self, data):
+        print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))
+
+
+class Show(WorldCommand, help='Show info'):
+    item = Action(help='The item to show')
+
+    # with ParamGroup('Account', required=True, mutually_exclusive=True):
+    #     user_id = Option('-i', type=int, help='Numeric user ID')
+    #     name = Option('-n', help='Friendly name associated with the account')
+
+    world: int = Option('-w', help='The world to log in to (required for some items)')
+    # sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
 
     # region Actions
 
@@ -89,25 +119,29 @@ class Show(GameCLI, help='Show info'):
 
     # endregion
 
-    # region Account Properties
 
-    @cached_property
-    def player_account(self) -> PlayerAccount:
-        if self.user_id:
-            return self.mm_session.get_account_by_id(self.user_id)
+class Dailies(WorldCommand, help='Perform daily tasks'):
+    world: int = Option('-w', required=True, help='The world to log in to (required for some items)')
+    actions = Option('-a', choices=('vip_gift',), required=True, help='The actions to take')
+    dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
+
+    def main(self):
+        self.mm_session.mb.populate_cache()
+        self.world_account.get_user_sync_data()
+        self.world_account.get_my_page()
+
+        if 'vip_gift' in self.actions:
+            self.get_vip_gift()
+
+    def get_vip_gift(self):
+        if self.world_account.user_sync_data.has_vip_daily_gift:
+            if self.dry_run:
+                log.info('[DRY RUN] Would claim daily VIP gift')
+            else:
+                log.info('Claiming daily VIP gift')
+                self.print(self.world_account.get_daily_vip_gift())
         else:
-            return self.mm_session.get_account_by_name(self.name)
-
-    @cached_property
-    def world_account(self) -> WorldAccount:
-        if not self.world:
-            raise UsageError('Missing required parameter: --world / -w')
-        return self.player_account.get_world(self.world)
-
-    # endregion
-
-    def print(self, data):
-        print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))
+            log.info('The daily VIP gift was already claimed')
 
 
 if __name__ == '__main__':

@@ -265,6 +265,14 @@ class WorldAccount(ClearableCachedPropertyMixin):
 
     # endregion
 
+    # region Dailies
+
+    @api_request()
+    def get_daily_vip_gift(self):
+        return self._api_client.post_msg('vip/getDailyGift', {})
+
+    # endregion
+
     # region Equipment
 
     @api_request()
