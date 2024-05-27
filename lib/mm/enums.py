@@ -190,6 +190,48 @@ class RankingDataType(IntEnum):
     TowerYellow = 8
 
 
+class BadgeType(IntEnum):
+    Normal = 0
+    Special = 1
+
+
+class TransferSpotType(IntEnum):
+    NONE = 0
+    AutoBattle = 10
+    BountyQuest = 20
+    DungeonBattle = 30
+    GachaCase = 40
+    Competition = 50
+    LocalRaid = 60
+    Notice = 70
+    ShopTab = 80
+    ShopItem = 81
+    TowerBattle = 90
+    TowerBattleSelectTower = 91
+    TradeShop = 100
+    OuterWebSite = 110
+    MonthlyLoginBonus = 120
+    LimitedLoginBonus = 121
+    BeginnerMission = 130
+    ComebackMission = 131
+    NewCharacterMission = 132
+    EventMission = 133
+    FriendCampaign = 134
+    PanelMission = 135
+    GuerrillaPack = 140
+    StoreIcon = 150
+    Character = 160
+    Chat = 170
+    Guild = 180
+    GuildRaid = 181
+    GuildRaidWorldReward = 182
+    RetrieveItem = 190
+    GuildMemberRecruit = 200
+    IndividualNotification = 210
+    StarsGuidanceTradeShop = 220
+    Friend = 4
+
+
 # endregion
 
 
@@ -1607,13 +1649,36 @@ class EffectType(IntEnum):
 # endregion
 
 
-# region Guild Raid
+# region Guild
 
 
 class GuildRaidBossType(IntEnum):
     Normal = 0
     Releasable = 1
     Event = 2
+
+
+class GuildActivityPolicyType(IntEnum):
+    NONE = 0
+    PlayFreely = 1
+    PlayGuts = 2
+    PlayLeisurely = 3
+    PlayNoisy = 4
+    BeginnerWelcome = 5
+
+
+class GlobalGvgGroupType(IntEnum):
+    All = 0
+    Bronze = 1
+    Silver = 2
+    Golden = 3
+
+
+class PlayerGuildPositionType(IntEnum):
+    NONE = 0
+    Leader = 1
+    SubLeader = 2
+    Member = 3
 
 
 # endregion

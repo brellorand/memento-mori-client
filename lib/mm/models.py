@@ -27,7 +27,7 @@ class WorldEntity:
 
 class Equipment(WorldEntity):
     guid: str = DataProperty('Guid')
-    char_guid: str = DataProperty('CharacterGuid')
+    char_guid: str = DataProperty('CharacterGuid')  # Empty string indicates this item is not equipped
     equipment_id: int = DataProperty('EquipmentId')
     upgrade_level: int = DataProperty('ReinforcementLv')
     rune_id_1: int = DataProperty('SphereId1')

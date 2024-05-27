@@ -9,10 +9,9 @@ from typing import Iterator
 
 from cli_command_parser import Command, SubCommand, Counter, Option, main
 from cli_command_parser.inputs import Path as IPath
-# from cli_command_parser.utils import camel_to_snake_case
+from cli_command_parser.utils import camel_to_snake_case
 
 from mm.__version__ import __author_email__, __version__  # noqa
-# from mm.fs import path_repr
 from mm.logging import init_logging
 
 log = logging.getLogger(__name__)
@@ -99,17 +98,70 @@ class Enum(CodeConversionCLI, help='Convert an enum class'):
             yield f'    {name} = {value:_d}'
 
 
-class TypedDict(CodeConversionCLI, help='Convert a response class'):
-    def iter_py_lines(self, path: Path) -> Iterator[str]:
-        lines = iter(map(str.strip, path.read_text('utf-8').splitlines()))
+class LineIterator:
+    __slots__ = ('line_num', 'last_line', 'lines')
 
+    last_line: str | None
+
+    def __init__(self, path: Path):
+        self.line_num = 0
+        self.last_line = None
+        self.lines = iter(map(str.strip, path.read_text('utf-8').splitlines()))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> str:
+        line = next(self.lines)
+        self.last_line = line
+        self.line_num += 1
+        return line
+
+
+class Data(CodeConversionCLI, help='Convert a data class'):
+    mode = Option('-m', choices=('stub', 'wrapper'), default='stub', help='Conversion mode')
+
+    _annotation_replacements = [
+        (re.compile(r'\bDictionary<'), 'dict['),
+        (re.compile(r'\bList<'), 'list['),
+        (re.compile(r'\bHashSet<'), 'set['),
+        (re.compile(r'\bstring\b'), 'str'),
+        (re.compile(r'\blong\b'), 'int'),
+        (re.compile(r'\bDateTime\b'), 'datetime'),
+    ]
+
+    def format_class_line(self, cls_name: str) -> str:
+        if self.mode == 'stub':
+            return f'class {cls_name}(TypedDict):'
+        else:
+            return f'class {cls_name}(DictWrapper):'
+
+    def format_property(self, attr_type: str, name: str) -> str:
+        for pat, replacement in self._annotation_replacements:
+            attr_type = pat.sub(replacement, attr_type)
+
+        attr_type = attr_type.replace('>', ']')
+        if attr_type == 'TimeSpan':
+            attr_type = 'int'
+            comment = '  # Divide by 1,000,000 to get the time delta in seconds'
+        else:
+            comment = ''
+
+        if attr_type.endswith('?'):
+            attr_type = attr_type[:-1] + ' | None'
+
+        if self.mode == 'stub':
+            return f'    {name}: {attr_type}{comment}'
+        else:
+            return f'    {camel_to_snake_case(name)}: {attr_type} = DataProperty({name!r}){comment}'
+
+    def iter_py_lines(self, path: Path) -> Iterator[str]:
+        lines = LineIterator(path)
         cls_name_pat = re.compile(r'^public (?:class|struct) (\w+)')
-        line_num = 0
         while True:
-            line_num += 1
             if m := cls_name_pat.match(next(lines)):
                 cls_name = m.group(1)
-                yield f'class {cls_name}(TypedDict):'
+                yield self.format_class_line(cls_name)
                 break
 
         ignore = {'{', '}', 'get;', 'set;', 'readonly get;'}
@@ -118,69 +170,48 @@ class TypedDict(CodeConversionCLI, help='Convert a response class'):
         private_method_pat = re.compile(r'^private (.+) (\w+)\(')
         constructor_pat = re.compile(r'^public (\w+)\(')
 
-        replacements = [
-            (re.compile(r'\bDictionary<'), 'dict['),
-            (re.compile(r'\bList<'), 'list['),
-            (re.compile(r'\bHashSet<'), 'set['),
-            (re.compile(r'\bstring\b'), 'str'),
-            (re.compile(r'\blong\b'), 'int'),
-            (re.compile(r'\bDateTime\b'), 'datetime'),
-        ]
-
         for line in lines:
-            line_num += 1
-            if not line or line in ignore or line.startswith(('//', '[Description(')):
+            if not line or line in ignore or line.startswith(('//', '[Description(', '[PropertyOrder(')):
                 continue
 
             if m := property_pat.search(line):
-                attr_type, name = m.groups()
-                for pat, replacement in replacements:
-                    attr_type = pat.sub(replacement, attr_type)
-                attr_type = attr_type.replace('>', ']')
-                yield f'    {name}: {attr_type}'
+                yield self.format_property(*m.groups())
             elif m := constructor_pat.search(line):
                 method_name = m.group(1)
                 if method_name != cls_name:
-                    # line_num = self._consume_method(path, f'method={method_name!r}', lines, line_num)
-                    log.warning(f'Unexpected method={method_name!r} in {path}:{line_num}: {line!r}')
+                    log.warning(f'Unexpected method={method_name!r} in {path}:{lines.line_num}: {line!r}')
                     continue
 
-                log.debug(f'Found constructor @ {path}:{line_num}')
-                if line.endswith(','):
-                    while True:
-                        line_num += 1
-                        if next(lines).endswith(')'):
-                            break
-
-                line_num = self._consume_method(path, 'constructor', lines, line_num)
+                self._consume_method(path, 'constructor', lines)
             elif m := method_pat.search(line):
-                method_name = m.group(1)
-                line_num = self._consume_method(path, f'method={method_name!r}', lines, line_num)
+                self._consume_method(path, f'method={m.group(1)!r}', lines)
             elif m := private_method_pat.search(line):
-                method_name = m.group(1)
-                line_num = self._consume_method(path, f'private method={method_name!r}', lines, line_num)
+                self._consume_method(path, f'private method={m.group(1)!r}', lines)
             else:
-                log.warning(f'Unexpected content in {path}:{line_num}: {line!r}')
+                log.warning(f'Unexpected content in {path}:{lines.line_num}: {line!r}')
 
     @classmethod
-    def _consume_method(cls, path: Path, method_type: str, lines: Iterator[str], line_num: int) -> int:
-        line_num += 1
-        if (line := next(lines)) != '{':
-            log.warning(f'Unexpected {method_type} content in {path}:{line_num}: {line!r}')
-            return line_num
+    def _consume_method(cls, path: Path, method_type: str, lines: LineIterator):
+        if lines.last_line.endswith(','):
+            while True:
+                if next(lines).endswith(')'):
+                    break
 
-        log.debug(f'Consuming {method_type} @ {path}:{line_num}')
+        if next(lines) != '{':
+            log.warning(f'Unexpected {method_type} content in {path}:{lines.line_num}: {lines.last_line!r}')
+            return
+
+        log.debug(f'Consuming {method_type} @ {path}:{lines.line_num}')
         opened = 1
         while opened > 0:
-            line_num += 1
             line = next(lines)
             if line == '{':
                 opened += 1
-                log.debug(f'Consuming nested block @ {path}:{line_num}')
+                log.debug(f'Consuming nested block @ {path}:{lines.line_num}')
             elif line == '}':
                 opened -= 1
                 log_type = method_type if opened == 0 else 'nested block'
-                log.debug(f'Finished consuming {log_type} @ {path}:{line_num}')
+                log.debug(f'Finished consuming {log_type} @ {path}:{lines.line_num}')
             elif line.startswith('}'):
                 for c in line:
                     if c == '{':
@@ -189,9 +220,7 @@ class TypedDict(CodeConversionCLI, help='Convert a response class'):
                         opened -= 1
 
                 log_type = method_type if opened == 0 else 'nested block'
-                log.debug(f'Finished consuming {log_type} with additional content @ {path}:{line_num}')
-
-        return line_num
+                log.debug(f'Finished consuming {log_type} with additional content @ {path}:{lines.line_num}')
 
 
 if __name__ == '__main__':

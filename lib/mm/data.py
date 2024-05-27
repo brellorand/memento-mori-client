@@ -17,10 +17,12 @@ from .utils import parse_ms_epoch_ts
 if TYPE_CHECKING:
     from .enums import LegendLeagueClassType, LockEquipmentDeckType, PrivacySettingsType, RankingDataType
     from .typing import (
+        UserSyncData as _UserSyncData,
+        MissionGuideInfo, DisplayMypageInfo, GuildSyncData,
         UserItem, LeadLockEquipmentDialogInfo, ShopProductGuerrillaPack,
         UserBattleBossDtoInfo, UserBattleLegendLeagueDtoInfo, UserBattlePvpDtoInfo, UserBoxSizeDtoInfo,
         UserCharacterBookDtoInfo, UserCharacterCollectionDtoInfo, UserCharacterDtoInfo, UserDeckDtoInfo,
-        UserEquipmentDtoInfo, UserFriendMissionDtoInfo, UserItemDtoInfo, UserLevelLinkDtoInfo,
+        UserEquipmentDtoInfo, UserFriendDtoInfo, UserFriendMissionDtoInfo, UserItemDtoInfo, UserLevelLinkDtoInfo,
         UserLevelLinkMemberDtoInfo, UserMissionActivityDtoInfo, UserMissionDtoInfo, UserMissionOccurrenceHistoryDtoInfo,
         UserNotificationDtoInfo, UserOpenContentDtoInfo, UserRecruitGuildMemberSettingDtoInfo, UserSettingsDtoInfo,
         UserShopSubscriptionDtoInfo, UserStatusDtoInfo, UserTowerBattleDtoInfo, UserVipGiftDtoInfo,
@@ -165,73 +167,147 @@ class GameData(DictWrapper):
 # endregion
 
 
+class MyPage(DictWrapper):
+    has_pending_friend_point_transfers: bool = DataProperty('ExistNewFriendPointTransfer')
+    has_unread_private_chat: bool = DataProperty('ExistNewPrivateChat')
+
+    has_unclaimed_bounty_quest_reward: bool = DataProperty('ExistNotReceivedBountyQuestReward')
+    has_unclaimed_mission_reward: bool = DataProperty('ExistNotReceivedMissionReward')
+
+    my_page_info: DisplayMypageInfo = DataProperty('MypageInfo')
+    guild_sync_data: GuildSyncData = DataProperty('GuildSyncData')
+    user_sync_data: _UserSyncData = DataProperty('UserSyncData')
+    friend_list: list[UserFriendDtoInfo] = DataProperty('UserFriendDtoInfoList')
+    mission_guide_info: MissionGuideInfo = DataProperty('MissionGuideInfo')
+    bounty_quest_ids: list[int] = DataProperty('NotOrderedBountyQuestIdList')
+    display_notice_ids: list[int] = DataProperty('DisplayNoticeIdList')
+    unread_notification_ids: list[int] = DataProperty('UnreadIndividualNotificationIdList')
+    latest_chat_announcement_registered: int = DataProperty('LatestAnnounceChatRegistrationLocalTimestamp')
+
+
 class UserSyncData(DictWrapper):
-    blocked_player_ids: list[int] = DataProperty('BlockPlayerIdList')
+    player_info: UserStatusDtoInfo = DataProperty('UserStatusDtoInfo')  # name, comment, rank, vip level, exp, etc
+    quest_status: UserBattleBossDtoInfo = DataProperty('UserBattleBossDtoInfo')
+    tower_status: list[UserTowerBattleDtoInfo] = DataProperty('UserTowerBattleDtoInfos')
+
+    # region Items & Equipment
+
+    equipment: list[UserEquipmentDtoInfo] = DataProperty('UserEquipmentDtoInfos')
+    items: list[UserItemDtoInfo] = DataProperty('UserItemDtoInfo')
+
+    deleted_equipment_guids: list[str] = DataProperty('DeletedEquipmentGuidList')
+    item_counts: list[UserItem] = DataProperty('GivenItemCountInfoList')
+
+    # endregion
+
+    # region Characters & Level Link
+
+    characters: list[UserCharacterDtoInfo] = DataProperty('UserCharacterDtoInfos')
+    parties: list[UserDeckDtoInfo] = DataProperty('UserDeckDtoInfos')
+    character_index_info: list[UserCharacterBookDtoInfo] = DataProperty('UserCharacterBookDtoInfos')
+    character_collection: list[UserCharacterCollectionDtoInfo] = DataProperty('UserCharacterCollectionDtoInfos')
+
+    deleted_character_guids: list[str] = DataProperty('DeletedCharacterGuidList')
+
+    level_link_status: UserLevelLinkDtoInfo = DataProperty('UserLevelLinkDtoInfo')
+    level_link_characters: list[UserLevelLinkMemberDtoInfo] = DataProperty('UserLevelLinkMemberDtoInfos')
+
+    # endregion
+
+    # region Daily Tasks
+
+    has_vip_daily_gift: bool = DataProperty('ExistVipDailyGift')                    # Daily VIP chest
+    vip_gift_info: list[UserVipGiftDtoInfo] = DataProperty('UserVipGiftDtoInfos')   # VIP level, VIP gift ID
+
+    present_count: int | None = DataProperty('PresentCount')                        # Present inbox unread count
+
+    # endregion
+
+    # region Rewards
+
+    receivable_achieve_ranking_reward_id_map: dict[RankingDataType, int] = DataProperty('ReceivableAchieveRankingRewardIdMap')
+    received_achieve_ranking_reward_id_list: list[int] = DataProperty('ReceivedAchieveRankingRewardIdList')
+    received_auto_battle_reward_last_time: int | None = DataProperty('ReceivedAutoBattleRewardLastTime')
+
+    guild_tower_floor_received_achievement_ids: list[int] = DataProperty('ReceivedGuildTowerFloorRewardIdList')
+
+    # endregion
+
+    # region Gear Lock
+
+    lead_lock_equipment_dialog_info_map: dict[LockEquipmentDeckType, LeadLockEquipmentDialogInfo] = DataProperty('LeadLockEquipmentDialogInfoMap')
+    locked_equipment_character_guid_list_map: dict[LockEquipmentDeckType, list[str]] = DataProperty('LockedEquipmentCharacterGuidListMap')
+    locked_user_equipment_dto_info_list_map: dict[LockEquipmentDeckType, list[UserEquipmentDtoInfo]] = DataProperty('LockedUserEquipmentDtoInfoListMap')
+    release_lock_equipment_cooldown_time_stamp_map: dict[LockEquipmentDeckType, int] = DataProperty('ReleaseLockEquipmentCooldownTimeStampMap')
+
+    # endregion
+
+    # region PvP
+
+    battle_league_status: UserBattlePvpDtoInfo = DataProperty('UserBattlePvpDtoInfo')
+    legend_league_status: UserBattleLegendLeagueDtoInfo = DataProperty('UserBattleLegendLeagueDtoInfo')
+
     can_join_legend_league: bool = DataProperty('CanJoinTodayLegendLeague')
-    cleared_tutorial_ids: list[int] = DataProperty('ClearedTutorialIdList')
+    legend_league_class_type: LegendLeagueClassType | None = DataProperty('LegendLeagueClassType')
+
+    # endregion
+
+    # region General
+
     user_creation_time: int = DataProperty('CreateUserIdTimestamp')
     world_creation_time: int = DataProperty('CreateWorldLocalTimeStamp')
+    time_server_id: int | None = DataProperty('TimeServerId')
+
+    blocked_player_ids: list[int] = DataProperty('BlockPlayerIdList')
+    privacy_settings_type: PrivacySettingsType | None = DataProperty('PrivacySettingsType')
+
+    stripe_point: int = DataProperty('StripePoint')
+    cleared_tutorial_ids: list[int] = DataProperty('ClearedTutorialIdList')
     data_linkage_map: dict[SnsType, bool] = DataProperty('DataLinkageMap')
-    deleted_character_guids: list[str] = DataProperty('DeletedCharacterGuidList')
-    deleted_equipment_guids: list[str] = DataProperty('DeletedEquipmentGuidList')
+
     has_unconfirmed_retrieve_item_history: bool = DataProperty('ExistUnconfirmedRetrieveItemHistory')
-    has_vip_daily_gift: bool = DataProperty('ExistVipDailyGift')
-    item_counts: list[UserItem] = DataProperty('GivenItemCountInfoList')
-    guild_join_limit_count: int = DataProperty('GuildJoinLimitCount')
     has_transitioned_panel_picture_book: bool = DataProperty('HasTransitionedPanelPictureBook')
     is_data_linkage: bool = DataProperty('IsDataLinkage')
     is_joined_global_gvg: bool = DataProperty('IsJoinedGlobalGvg')
     is_joined_local_gvg: bool = DataProperty('IsJoinedLocalGvg')
-    has_pending_friend_point_actions: bool = DataProperty('IsReceivedSnsShareReward')
+    is_received_sns_share_reward: bool = DataProperty('IsReceivedSnsShareReward')  # Not related to friend points
     is_retrieved_item: bool = DataProperty('IsRetrievedItem')
     is_valid_contract_privilege: bool = DataProperty('IsValidContractPrivilege')
-    lead_lock_equipment_dialog_info_map: dict[LockEquipmentDeckType, LeadLockEquipmentDialogInfo] = DataProperty('LeadLockEquipmentDialogInfoMap')
-    legend_league_class_type: LegendLeagueClassType | None = DataProperty('LegendLeagueClassType')
-    local_raid_challenge_count: int = DataProperty('LocalRaidChallengeCount')
-    locked_equipment_character_guid_list_map: dict[LockEquipmentDeckType, list[str]] = DataProperty('LockedEquipmentCharacterGuidListMap')
-    locked_user_equipment_dto_info_list_map: dict[LockEquipmentDeckType, list[UserEquipmentDtoInfo]] = DataProperty('LockedUserEquipmentDtoInfoListMap')
-    present_count: int | None = DataProperty('PresentCount')
-    privacy_settings_type: PrivacySettingsType | None = DataProperty('PrivacySettingsType')
-    receivable_achieve_ranking_reward_id_map: dict[RankingDataType, int] = DataProperty('ReceivableAchieveRankingRewardIdMap')
-    received_achieve_ranking_reward_id_list: list[int] = DataProperty('ReceivedAchieveRankingRewardIdList')
-    received_auto_battle_reward_last_time: int | None = DataProperty('ReceivedAutoBattleRewardLastTime')
-    received_guild_tower_floor_reward_id_list: list[int] = DataProperty('ReceivedGuildTowerFloorRewardIdList')
-    release_lock_equipment_cooldown_time_stamp_map: dict[LockEquipmentDeckType, int] = DataProperty('ReleaseLockEquipmentCooldownTimeStampMap')
+
+    box_size_info: UserBoxSizeDtoInfo = DataProperty('UserBoxSizeDtoInfo')
+    notifications_info: list[UserNotificationDtoInfo] = DataProperty('UserNotificationDtoInfoInfos')
+    open_contents: list[UserOpenContentDtoInfo] = DataProperty('UserOpenContentDtoInfos')
+    settings: list[UserSettingsDtoInfo] = DataProperty('UserSettingsDtoInfoList')
+
+    # endregion
+
+    # region Guild
+
+    guild_join_limit_count: int = DataProperty('GuildJoinLimitCount')
+    guild_raid_challenge_count: int = DataProperty('LocalRaidChallengeCount')
+    recruit_guild_member_setting: UserRecruitGuildMemberSettingDtoInfo = DataProperty('UserRecruitGuildMemberSettingDtoInfo')
+
+    # endregion
+
+    # region Shop
+
     shop_currency_mission_progress_map: dict[str, int] = DataProperty('ShopCurrencyMissionProgressMap')
     shop_product_guerrilla_pack_list: list[ShopProductGuerrillaPack] = DataProperty('ShopProductGuerrillaPackList')
-    stripe_point: int = DataProperty('StripePoint')
-    time_server_id: int | None = DataProperty('TimeServerId')
-    treasure_chest_ceiling_count_map: dict[int, int] = DataProperty('TreasureChestCeilingCountMap')
-    user_battle_boss_dto_info: UserBattleBossDtoInfo = DataProperty('UserBattleBossDtoInfo')
-    user_battle_legend_league_dto_info: UserBattleLegendLeagueDtoInfo = DataProperty('UserBattleLegendLeagueDtoInfo')
-    user_battle_pvp_dto_info: UserBattlePvpDtoInfo = DataProperty('UserBattlePvpDtoInfo')
-    user_box_size_dto_info: UserBoxSizeDtoInfo = DataProperty('UserBoxSizeDtoInfo')
-    user_character_book_dto_infos: list[UserCharacterBookDtoInfo] = DataProperty('UserCharacterBookDtoInfos')
-    user_character_collection_dto_infos: list[UserCharacterCollectionDtoInfo] = DataProperty('UserCharacterCollectionDtoInfos')
-    user_character_dto_infos: list[UserCharacterDtoInfo] = DataProperty('UserCharacterDtoInfos')
-    user_deck_dto_infos: list[UserDeckDtoInfo] = DataProperty('UserDeckDtoInfos')
-    user_equipment_dto_infos: list[UserEquipmentDtoInfo] = DataProperty('UserEquipmentDtoInfos')
-    user_item_dto_info: list[UserItemDtoInfo] = DataProperty('UserItemDtoInfo')
-    user_level_link_dto_info: UserLevelLinkDtoInfo = DataProperty('UserLevelLinkDtoInfo')
-    user_level_link_member_dto_infos: list[UserLevelLinkMemberDtoInfo] = DataProperty('UserLevelLinkMemberDtoInfos')
-    user_mission_activity_dto_infos: list[UserMissionActivityDtoInfo] = DataProperty('UserMissionActivityDtoInfos')
-    user_mission_dto_infos: list[UserMissionDtoInfo] = DataProperty('UserMissionDtoInfos')
-    user_mission_occurrence_history_dto_info: UserMissionOccurrenceHistoryDtoInfo = DataProperty('UserMissionOccurrenceHistoryDtoInfo')
-    user_friend_mission_dto_info_list: list[UserFriendMissionDtoInfo] = DataProperty('UserFriendMissionDtoInfoList')
-    user_notification_dto_info_infos: list[UserNotificationDtoInfo] = DataProperty('UserNotificationDtoInfoInfos')
-    user_open_content_dto_infos: list[UserOpenContentDtoInfo] = DataProperty('UserOpenContentDtoInfos')
-    user_recruit_guild_member_setting_dto_info: UserRecruitGuildMemberSettingDtoInfo = DataProperty('UserRecruitGuildMemberSettingDtoInfo')
-    user_settings_dto_info_list: list[UserSettingsDtoInfo] = DataProperty('UserSettingsDtoInfoList')
-    user_shop_achievement_pack_dto_infos: list[UserShopAchievementPackDtoInfo] = DataProperty('UserShopAchievementPackDtoInfos')
-    user_shop_first_charge_bonus_dto_info: UserShopFirstChargeBonusDtoInfo = DataProperty('UserShopFirstChargeBonusDtoInfo')
-    user_shop_free_growth_pack_dto_infos: list[UserShopFreeGrowthPackDtoInfo] = DataProperty('UserShopFreeGrowthPackDtoInfos')
-    user_shop_monthly_boost_dto_infos: list[UserShopMonthlyBoostDtoInfo] = DataProperty('UserShopMonthlyBoostDtoInfos')
-    user_shop_subscription_dto_infos: list[UserShopSubscriptionDtoInfo] = DataProperty('UserShopSubscriptionDtoInfos')
-    user_status_dto_info: UserStatusDtoInfo = DataProperty('UserStatusDtoInfo')
-    user_tower_battle_dto_infos: list[UserTowerBattleDtoInfo] = DataProperty('UserTowerBattleDtoInfos')
-    user_vip_gift_dto_infos: list[UserVipGiftDtoInfo] = DataProperty('UserVipGiftDtoInfos')
+    shop_achievement_packs: list[UserShopAchievementPackDtoInfo] = DataProperty('UserShopAchievementPackDtoInfos')
+    shop_first_charge_bonus: UserShopFirstChargeBonusDtoInfo = DataProperty('UserShopFirstChargeBonusDtoInfo')
+    shop_free_growth_pack: list[UserShopFreeGrowthPackDtoInfo] = DataProperty('UserShopFreeGrowthPackDtoInfos')
+    shop_monthly_boost: list[UserShopMonthlyBoostDtoInfo] = DataProperty('UserShopMonthlyBoostDtoInfos')
+    shop_subscription: list[UserShopSubscriptionDtoInfo] = DataProperty('UserShopSubscriptionDtoInfos')
 
-    def update(self, data: dict[str, Any]):
+    # endregion
+
+    treasure_chest_ceiling_count_map: dict[int, int] = DataProperty('TreasureChestCeilingCountMap')
+    mission_activity: list[UserMissionActivityDtoInfo] = DataProperty('UserMissionActivityDtoInfos')
+    missions: list[UserMissionDtoInfo] = DataProperty('UserMissionDtoInfos')
+    mission_history: UserMissionOccurrenceHistoryDtoInfo = DataProperty('UserMissionOccurrenceHistoryDtoInfo')
+    friend_missions: list[UserFriendMissionDtoInfo] = DataProperty('UserFriendMissionDtoInfoList')
+
+    def update(self, data: _UserSyncData):
         if not data:
             log.debug('Ignoring UserSyncData update with no data')
             return

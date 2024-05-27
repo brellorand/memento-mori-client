@@ -242,14 +242,17 @@ class WorldAccount(ClearableCachedPropertyMixin):
 
     @cached_property
     def characters(self) -> dict[str, Character]:
-        return {row['Guid']: Character(self, row) for row in self.user_sync_data.user_character_dto_infos}
+        return {row['Guid']: Character(self, row) for row in self.user_sync_data.characters}
 
     @cached_property
     def equipment(self) -> dict[str, Equipment]:
-        return {row['Guid']: Equipment(self, row) for row in self.user_sync_data.user_equipment_dto_infos}
+        return {row['Guid']: Equipment(self, row) for row in self.user_sync_data.equipment}
 
     @cached_property
     def char_guid_equipment_map(self) -> dict[str, list[Equipment]]:
+        """
+        Mapping of ``{character guid: [Equipment]}``.  Unequipped gear is stored under guid/key ``''`` (empty string).
+        """
         char_guid_equipment_map = {}
         for item in self.equipment.values():
             try:

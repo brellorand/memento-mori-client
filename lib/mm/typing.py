@@ -10,13 +10,15 @@ if TYPE_CHECKING:
     from datetime import datetime
     from .enums import (
         ErrorLogType, NotificationType, BingoType, DeviceType, PlayerSettingsType, LeadLockEquipmentDialogType,
-        LegendLeagueClassType, GuildRaidBossType, FriendStatusType, ShopGuerrillaPackRankType,
+        LegendLeagueClassType, GuildRaidBossType, FriendStatusType, ShopGuerrillaPackRankType, TransferSpotType,
         ItemType, EquipmentSlotType, SacredTreasureType,
         MissionGroupType, MissionAchievementType, MissionType, MissionStatusType, MissionActivityRewardStatusType,
         CharacterRarity, DeckUseContentType, Element, Job,
         BountyQuestType, BountyQuestRarityFlags, DungeonBattleGridState, TowerType,
         BattleFieldCharacterGroupType, UnitType, BattleType, HitType, SubSetType, PassiveTrigger, SkillDisplayType,
         SubSkillResultType, EffectType, SkillCategory, EffectGroupType, RemoveEffectType,
+        BadgeType, SnsType, LockEquipmentDeckType, PrivacySettingsType, RankingDataType,
+        GuildActivityPolicyType, GlobalGvgGroupType, PlayerGuildPositionType,
     )
 
 # region Errors
@@ -81,7 +83,7 @@ class LoginResponse(TypedDict):
 class LoginPlayerResponse(TypedDict):
     AuthTokenOfMagicOnion: str
     BanChatInfo: dict
-    UserSyncData: dict[str, Any]  # -> mm.data.UserSyncData
+    UserSyncData: UserSyncData
 
 
 # endregion
@@ -93,7 +95,7 @@ class LoginPlayerResponse(TypedDict):
 class GetUserDataResponse(TypedDict):
     IsNotClearDungeonBattleMap: bool
     GachaSelectListCharacterIds: list[int]
-    UserSyncData: dict[str, Any]  # -> mm.data.UserSyncData
+    UserSyncData: UserSyncData
 
 
 class GetMypageResponse(TypedDict):
@@ -103,13 +105,217 @@ class GetMypageResponse(TypedDict):
     ExistNotReceivedBountyQuestReward: bool
     ExistNotReceivedMissionReward: bool
     LatestAnnounceChatRegistrationLocalTimestamp: int
-    MissionGuideInfo: dict  # MissionGuideInfo
-    MypageInfo: dict  # DisplayMypageInfo
+    MissionGuideInfo: MissionGuideInfo
+    MypageInfo: DisplayMypageInfo
     NotOrderedBountyQuestIdList: list[int]
     UnreadIndividualNotificationIdList: list[int]
-    UserFriendDtoInfoList: list[dict]  # list[UserFriendDtoInfo]
+    UserFriendDtoInfoList: list[UserFriendDtoInfo]
     GuildSyncData: dict  # GuildSyncData
-    UserSyncData: dict[str, Any]  # -> mm.data.UserSyncData
+    UserSyncData: UserSyncData
+
+
+class DisplayMypageInfo(TypedDict):
+    MypageBannerInfos: list[MypageBannerInfo]
+    MypageIconInfos: list[MypageIconInfo]
+
+
+class MissionGuideInfo(TypedDict):
+    GuideId: int
+    MissionGroupType: MissionGroupType
+    MissionStatus: MissionStatusType
+
+
+class MypageBannerInfo(TypedDict):
+    DisplayPriority: int
+    ImageId: int
+    MBId: int
+    SortOrder: int
+    TransferDetailInfo: TransferDetailInfo
+
+
+class MypageIconInfo(TypedDict):
+    BadgeType: BadgeType
+    DisplayPriority: int
+    HidePriority: int
+    IconNameKey: str
+    Id: int
+    ImageId: int
+    IsBlackout: bool
+    IsDisplayBadge: bool
+    NotOpenEventStoreIconId: int
+    OpenContentLocalTimestamp: int
+    SortOrder: int
+    StoredIconInfoList: list[MypageIconInfo]
+    StoreIconId: int
+    TransferDetailInfo: TransferDetailInfo
+
+
+class SnsInfo(TypedDict):
+    NameKey: str
+    Url: str
+    MissionAchievementType: MissionAchievementType
+
+
+class TransferDetailInfo(TypedDict):
+    NumberInfo1: int
+    NumberInfo2: int
+    StringInfo: str
+    TransferSpotType: TransferSpotType
+
+
+# endregion
+
+
+# region Player
+
+
+class PlayerInfo(TypedDict):
+    DeckUserCharacterInfoList: list[UserCharacterInfo]
+    BattlePower: int
+    Comment: str
+    CumulativeGuildFame: int
+    FriendStatus: FriendStatusType
+    GuildId: int
+    GuildJoinRequestUtcTimeStamp: int
+    GuildJoinTimeStamp: int
+    GuildName: str
+    GuildPeriodTotalFame: int
+    IsBlock: bool
+    IsRecruit: bool
+    LastLoginTime: int  # Divide by 1,000,000 to get the time delta in seconds
+    LatestQuestId: int
+    LatestTowerBattleQuestId: int
+    LocalRaidBattlePower: int
+    MainCharacterIconId: int
+    NpcNameKey: str
+    PlayerGuildPositionType: PlayerGuildPositionType
+    PlayerId: int
+    PlayerLevel: int
+    PlayerName: str
+    PrevLegendLeagueClass: LegendLeagueClassType
+
+
+class UserCharacterInfo(TypedDict):
+    Guid: str
+    PlayerId: int
+    CharacterId: int
+    Level: int
+    SubLevel: int
+    Exp: int
+    RarityFlags: CharacterRarity
+    IsLocked: bool
+
+
+class UserSyncData(TypedDict):
+    BlockPlayerIdList: list[int]
+    CanJoinTodayLegendLeague: bool | None
+    ClearedTutorialIdList: list[int]
+    CreateUserIdTimestamp: int | None
+    CreateWorldLocalTimeStamp: int | None
+    DataLinkageMap: dict[SnsType, bool]
+    DeletedCharacterGuidList: list[str]
+    DeletedEquipmentGuidList: list[str]
+    ExistUnconfirmedRetrieveItemHistory: bool | None
+    ExistVipDailyGift: bool | None
+    GivenItemCountInfoList: list[UserItem]
+    GuildJoinLimitCount: int | None
+    HasTransitionedPanelPictureBook: bool | None
+    IsDataLinkage: bool | None
+    IsJoinedGlobalGvg: bool | None
+    IsJoinedLocalGvg: bool | None
+    IsReceivedSnsShareReward: bool | None
+    IsRetrievedItem: bool | None
+    IsValidContractPrivilege: bool | None
+    LeadLockEquipmentDialogInfoMap: dict[LockEquipmentDeckType, LeadLockEquipmentDialogInfo]
+    LegendLeagueClassType: LegendLeagueClassType | None
+    LocalRaidChallengeCount: int | None
+    LockedEquipmentCharacterGuidListMap: dict[LockEquipmentDeckType, list[str]]
+    LockedUserEquipmentDtoInfoListMap: dict[LockEquipmentDeckType, list[UserEquipmentDtoInfo]]
+    PresentCount: int | None
+    PrivacySettingsType: PrivacySettingsType | None
+    ReceivableAchieveRankingRewardIdMap: dict[RankingDataType, int]
+    ReceivedAchieveRankingRewardIdList: list[int]
+    ReceivedAutoBattleRewardLastTime: int | None
+    ReceivedGuildTowerFloorRewardIdList: list[int]
+    ReleaseLockEquipmentCooldownTimeStampMap: dict[LockEquipmentDeckType, int]
+    ShopCurrencyMissionProgressMap: dict[str, int]
+    ShopProductGuerrillaPackList: list[ShopProductGuerrillaPack]
+    StripePoint: int
+    TimeServerId: int | None
+    TreasureChestCeilingCountMap: dict[int, int]
+    UserBattleBossDtoInfo: UserBattleBossDtoInfo
+    UserBattleLegendLeagueDtoInfo: UserBattleLegendLeagueDtoInfo
+    UserBattlePvpDtoInfo: UserBattlePvpDtoInfo
+    UserBoxSizeDtoInfo: UserBoxSizeDtoInfo
+    UserCharacterBookDtoInfos: list[UserCharacterBookDtoInfo]
+    UserCharacterCollectionDtoInfos: list[UserCharacterCollectionDtoInfo]
+    UserCharacterDtoInfos: list[UserCharacterDtoInfo]
+    UserDeckDtoInfos: list[UserDeckDtoInfo]
+    UserEquipmentDtoInfos: list[UserEquipmentDtoInfo]
+    UserItemDtoInfo: list[UserItemDtoInfo]
+    UserLevelLinkDtoInfo: UserLevelLinkDtoInfo
+    UserLevelLinkMemberDtoInfos: list[UserLevelLinkMemberDtoInfo]
+    UserMissionActivityDtoInfos: list[UserMissionActivityDtoInfo]
+    UserMissionDtoInfos: list[UserMissionDtoInfo]
+    UserMissionOccurrenceHistoryDtoInfo: UserMissionOccurrenceHistoryDtoInfo
+    UserFriendMissionDtoInfoList: list[UserFriendMissionDtoInfo]
+    UserNotificationDtoInfoInfos: list[UserNotificationDtoInfo]
+    UserOpenContentDtoInfos: list[UserOpenContentDtoInfo]
+    UserRecruitGuildMemberSettingDtoInfo: UserRecruitGuildMemberSettingDtoInfo
+    UserSettingsDtoInfoList: list[UserSettingsDtoInfo]
+    UserShopAchievementPackDtoInfos: list[UserShopAchievementPackDtoInfo]
+    UserShopFirstChargeBonusDtoInfo: UserShopFirstChargeBonusDtoInfo
+    UserShopFreeGrowthPackDtoInfos: list[UserShopFreeGrowthPackDtoInfo]
+    UserShopMonthlyBoostDtoInfos: list[UserShopMonthlyBoostDtoInfo]
+    UserShopSubscriptionDtoInfos: list[UserShopSubscriptionDtoInfo]
+    UserStatusDtoInfo: UserStatusDtoInfo
+    UserTowerBattleDtoInfos: list[UserTowerBattleDtoInfo]
+    UserVipGiftDtoInfos: list[UserVipGiftDtoInfo]
+
+
+# endregion
+
+
+# region Guild
+
+
+class GuildInfo(TypedDict):
+    GuildExp: int
+    GuildId: int
+    GuildLevel: int
+    GuildFame: int
+    GuildMemberCount: int
+    GuildOverView: GuildOverView
+    LeaderPlayerInfo: PlayerInfo
+
+
+class GuildOverView(TypedDict):
+    ActivityPolicyType: GuildActivityPolicyType
+    GuildDescription: str
+    GuildName: str
+    IsFreeJoin: bool
+    RequireBattlePower: int
+
+
+class GuildSyncData(TypedDict):
+    ApplyPlayerInfoList: list[PlayerInfo]
+    CreateGuildLocalTime: int
+    GlobalGvgGroupType: GlobalGvgGroupType
+    GuildAnnouncement: str
+    GuildAnnouncementUpdateTime: int
+    GuildBattlePower: int
+    GuildInfo: GuildInfo
+    GuildPlayerInfoList: list[PlayerInfo]
+    GuildTowerBadgeInfo: GuildTowerBadgeInfo
+    JoinGuildTime: int
+    MatchingNumber: int
+    PlayerGuildPositionType: PlayerGuildPositionType
+
+
+class GuildTowerBadgeInfo(TypedDict):
+    CurrentFloorId: int
+    TodayTotalGuildWinCount: int
+    TodayWinCount: int
 
 
 # endregion
@@ -151,7 +357,7 @@ class UserEquipment(TypedDict):
 class SmeltResponse(TypedDict):  # Same response for smelt 1 vs smelt many
     ResultEquipmentList: list[UserEquipment]
     ResultItemList: list[UserItem]
-    UserSyncData: dict[str, Any]  # -> mm.data.UserSyncData
+    UserSyncData: UserSyncData
 
 
 class EquipmentChangeInfo(TypedDict):
