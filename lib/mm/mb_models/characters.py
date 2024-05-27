@@ -9,7 +9,7 @@ import logging
 from functools import cached_property
 from typing import Any
 
-from mm.enums import Element, Job, CharacterRarity, Locale, CharacterType
+from mm.enums import Element, Job, CharacterRarity, Locale, CharacterType, ItemRarityFlags
 from mm.properties import DataProperty
 from .base import MBEntity, NamedEntity
 from .utils import LocalizedString
@@ -56,7 +56,7 @@ class Character(NamedEntity, file_name_fmt='CharacterMB'):
 
     job: Job = DataProperty('JobFlags', Job)
     rarity: CharacterRarity = DataProperty('RarityFlags', CharacterRarity)
-    item_rarity_flags: int = DataProperty('ItemRarityFlags')  # Seems to always correlate with rarity
+    item_rarity_flags: ItemRarityFlags = DataProperty('ItemRarityFlags', ItemRarityFlags)
 
     normal_skill_id: int = DataProperty('NormalSkillId')
     active_skill_ids: list[int] = DataProperty('ActiveSkillIds')

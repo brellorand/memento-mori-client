@@ -8,50 +8,28 @@ import logging
 from datetime import datetime
 from functools import cached_property
 from itertools import chain
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .enums import Region, SnsType
 from .properties import DataProperty, ClearableCachedPropertyMixin
 from .utils import parse_ms_epoch_ts
 
+if TYPE_CHECKING:
+    from .enums import LegendLeagueClassType, LockEquipmentDeckType, PrivacySettingsType, RankingDataType
+    from .typing import (
+        UserItem, LeadLockEquipmentDialogInfo, ShopProductGuerrillaPack,
+        UserBattleBossDtoInfo, UserBattleLegendLeagueDtoInfo, UserBattlePvpDtoInfo, UserBoxSizeDtoInfo,
+        UserCharacterBookDtoInfo, UserCharacterCollectionDtoInfo, UserCharacterDtoInfo, UserDeckDtoInfo,
+        UserEquipmentDtoInfo, UserFriendMissionDtoInfo, UserItemDtoInfo, UserLevelLinkDtoInfo,
+        UserLevelLinkMemberDtoInfo, UserMissionActivityDtoInfo, UserMissionDtoInfo, UserMissionOccurrenceHistoryDtoInfo,
+        UserNotificationDtoInfo, UserOpenContentDtoInfo, UserRecruitGuildMemberSettingDtoInfo, UserSettingsDtoInfo,
+        UserShopSubscriptionDtoInfo, UserStatusDtoInfo, UserTowerBattleDtoInfo, UserVipGiftDtoInfo,
+        UserShopAchievementPackDtoInfo, UserShopFirstChargeBonusDtoInfo, UserShopFreeGrowthPackDtoInfo,
+        UserShopMonthlyBoostDtoInfo,
+    )
+
 __all__ = ['OrtegaInfo', 'GameData', 'WorldInfo']
 log = logging.getLogger(__name__)
-
-IUserItem = dict  # TODO
-LockEquipmentDeckType = dict  # TODO
-LeadLockEquipmentDialogInfo = dict  # TODO
-LegendLeagueClassType = dict  # TODO
-UserEquipmentDtoInfo = dict  # TODO
-PrivacySettingsType = dict  # TODO
-RankingDataType = dict  # TODO
-ShopProductGuerrillaPack = dict  # TODO
-UserBattleBossDtoInfo = dict  # TODO
-UserBattleLegendLeagueDtoInfo = dict  # TODO
-UserBattlePvpDtoInfo = dict  # TODO
-UserBoxSizeDtoInfo = dict  # TODO
-UserCharacterBookDtoInfo = dict  # TODO
-UserCharacterCollectionDtoInfo = dict  # TODO
-UserCharacterDtoInfo = dict  # TODO
-UserDeckDtoInfo = dict  # TODO
-UserItemDtoInfo = dict  # TODO
-UserLevelLinkDtoInfo = dict  # TODO
-UserLevelLinkMemberDtoInfo = dict  # TODO
-UserMissionActivityDtoInfo = dict  # TODO
-UserMissionDtoInfo = dict  # TODO
-UserMissionOccurrenceHistoryDtoInfo = dict  # TODO
-UserFriendMissionDtoInfo = dict  # TODO
-UserNotificationDtoInfo = dict  # TODO
-UserOpenContentDtoInfo = dict  # TODO
-UserRecruitGuildMemberSettingDtoInfo = dict  # TODO
-UserSettingsDtoInfo = dict  # TODO
-UserShopAchievementPackDtoInfo = dict  # TODO
-UserShopFirstChargeBonusDtoInfo = dict  # TODO
-UserShopFreeGrowthPackDtoInfo = dict  # TODO
-UserShopMonthlyBoostDtoInfo = dict  # TODO
-UserShopSubscriptionDtoInfo = dict  # TODO
-UserStatusDtoInfo = dict  # TODO
-UserTowerBattleDtoInfo = dict  # TODO
-UserVipGiftDtoInfo = dict  # TODO
 
 
 class DictWrapper(ClearableCachedPropertyMixin):
@@ -198,7 +176,7 @@ class UserSyncData(DictWrapper):
     deleted_equipment_guids: list[str] = DataProperty('DeletedEquipmentGuidList')
     has_unconfirmed_retrieve_item_history: bool = DataProperty('ExistUnconfirmedRetrieveItemHistory')
     has_vip_daily_gift: bool = DataProperty('ExistVipDailyGift')
-    item_counts: list[IUserItem] = DataProperty('GivenItemCountInfoList')
+    item_counts: list[UserItem] = DataProperty('GivenItemCountInfoList')
     guild_join_limit_count: int = DataProperty('GuildJoinLimitCount')
     has_transitioned_panel_picture_book: bool = DataProperty('HasTransitionedPanelPictureBook')
     is_data_linkage: bool = DataProperty('IsDataLinkage')

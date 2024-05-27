@@ -130,6 +130,66 @@ class SnsType(IntEnum):
     GooglePlay = 6
 
 
+class DeviceType(IntEnum):
+    iOS = 1
+    Android = 2
+    UnityEditor = 3
+    Win64 = 4
+    DmmGames = 5
+    Steam = 6
+    Apk = 7
+
+
+class NotificationType(IntEnum):
+    NONE = 0
+    NewGachaTicket = 1
+    MaxRarityInSelectList = 2
+    NewCharacterInSelectList = 3
+    GachaFreeCount = 4
+    GuildRaidAvailable = 5
+    NewGuildJoinRequest = 6
+    GuildLevelUp = 7
+    LocalGvgReward = 8
+    GlobalGvgReward = 9
+    NewRetrieveItem = 10
+    ReceivableGuildMission = 11
+    NewRecruitGuildMember = 12
+    ReceivableGuildTowerMission = 13
+
+
+class BingoType(IntEnum):
+    NONE = 0
+    UpperRow = 1
+    CenterRow = 2
+    LowerRow = 3
+    LeftColumn = 4
+    CenterColumn = 5
+    RightColumn = 6
+
+
+class PlayerSettingsType(IntEnum):
+    NONE = 0
+    AutoSellRarityNCharacter = 1
+
+
+class PrivacySettingsType(IntEnum):
+    NONE = 0
+    OptIn = 1
+    OptOut = 2
+
+
+class RankingDataType(IntEnum):
+    NONE = 0
+    PlayerBattlePower = 1
+    PlayerRank = 2
+    PlayerMainQuest = 3
+    PlayerTower = 4
+    TowerBlue = 5
+    TowerRed = 6
+    TowerGreen = 7
+    TowerYellow = 8
+
+
 # endregion
 
 
@@ -951,6 +1011,22 @@ class ErrorCode(IntEnum):
 # endregion
 
 
+# region Shop
+
+
+class ShopGuerrillaPackRankType(IntEnum):
+    Rank1 = 1
+    Rank2 = 2
+    Rank3 = 3
+    Rank4 = 4
+    Rank5 = 5
+    Rank6 = 6
+    Rank7 = 7
+
+
+# endregion
+
+
 # region Items
 
 
@@ -996,6 +1072,20 @@ class ItemType(IntEnum):
     StripeCoupon = 1_001
 
 
+class ItemRarityFlags(IntEnum):
+    NONE = 0
+    D = 1
+    C = 2
+    B = 4
+    A = 8
+    S = 16
+    R = 32
+    SR = 64
+    SSR = 128
+    UR = 256
+    LR = 512
+
+
 # endregion
 
 
@@ -1038,6 +1128,13 @@ class BaseParameterType(IntEnum):
     Health = 4
 
 
+class SacredTreasureType(IntEnum):
+    NONE = 0
+    Matchless = 1
+    Legend = 2
+    DualStatus = 3
+
+
 # endregion
 
 
@@ -1045,6 +1142,7 @@ class BaseParameterType(IntEnum):
 
 
 class Element(IntEnum):
+    NONE = 0
     AZURE = 1
     CRIMSON = 2
     EMERALD = 3
@@ -1090,6 +1188,26 @@ class CharacterType(IntEnum):
     ColorChange = 2
 
 
+class DeckUseContentType(IntEnum):
+    NONE = 0
+    Auto = 1
+    Boss = 2
+    Infinite = 3
+    DungeonBattle = 4
+    LocalRaid = 5
+    BattleLeagueOffense = 6
+    BattleLeagueDefense = 7
+    LegendLeagueOffense = 8
+    LegendLeagueDefense = 9
+    GuildHunt = 10
+    BlueTower = 11
+    RedTower = 12
+    GreenTower = 13
+    YellowTower = 14
+    GuildBattle = 1_000
+    GrandBattle = 2_000
+
+
 # endregion
 
 
@@ -1127,6 +1245,663 @@ class LegendLeagueClassType(IntEnum):
     Royal = 4
     Legend = 5
     WorldRuler = 6
+
+
+class LockEquipmentDeckType(IntEnum):
+    NONE = 0
+    League = 1
+    GuildTowerLatestBattle = 2
+    GuildTowerLatestRegistration = 3
+
+
+class LeadLockEquipmentDialogType(IntEnum):
+    NONE = 0
+    NewCharacter = 1
+    PassedDays = 2
+
+
+# endregion
+
+
+# region Battle
+
+
+class BattleType(IntEnum):
+    NONE = 0
+    Auto = 1
+    Boss = 2
+    GuildBattle = 3
+    GrandBattle = 4
+    BattleLeague = 5
+    LegendLeague = 6
+    LocalRaid = 7
+    TowerBattle = 8
+    DungeonBattle = 9
+    GuildRaid = 11
+    GuildTower = 12
+
+
+class UnitType(IntEnum):
+    Character = 0
+    AutoBattleEnemy = 1
+    DungeonBattleEnemy = 2
+    GuildRaidBoss = 3
+    BossBattleEnemy = 4
+    TowerBattleEnemy = 5
+    LocalRaidEnemy = 6
+    GuildTowerEnemy = 7
+
+
+class BattleFieldCharacterGroupType(IntEnum):
+    Attacker = 0
+    Receiver = 1
+
+
+class HitType(IntEnum):
+    Ignore = 0
+    Hit = 1
+    Miss = 2
+    Critical = 3
+    Shield1 = 4
+    Shield1Critical = 5
+    Shield2 = 6
+    Shield2Critical = 7
+    ShieldBreak = 8
+    ShieldBreakCritical = 9
+
+
+class SkillCategory(IntEnum):
+    Heal = 1
+    Buff = 2
+    DeBuff = 3
+    SpecialBuff = 4
+    SpecialDeBuff = 5
+    PhysicalAttack = 10
+    MagicAttack = 11
+    PhysicalNoDefense = 12
+    MagicNoDefense = 13
+    PhysicalDirectDamage = 14
+    MagicDirectDamage = 15
+    PhysicalFixDamage = 16
+    MagicFixDamage = 17
+    SelfInjuryDamage = 18
+    Resurrection = 50
+    StatusDrain = 100
+    SkillMark = 200
+    RemoveBuffEffect = 500
+    RemoveDebuffEffect = 501
+    RemoveOtherEffect = 502
+    BuffTransfer = 600
+    DeBuffTransfer = 601
+    BurstBuffEffect = 1_000
+    BurstDeBuffEffect = 1_001
+
+
+class EffectGroupType(IntEnum):
+    NONE = 0
+    Stun = 1
+
+
+class RemoveEffectType(IntEnum):
+    TurnCountEnd = 0
+    TurnCountEndAndReceiveDamage = 1
+
+
+class SubSkillResultType(IntEnum):
+    NONE = 0
+    Damage = 1
+    Effect = 2
+    Passive = 3
+    Temp = 4
+
+
+class SubSetType(IntEnum):
+    Live2DBefore = 0
+    DefaultLive2D = 1
+    DefaultLive2DAfter = 2
+    UnderFiveLive2DInSubSet = 3
+    UnderFiveLive2DAfterInSubSet = 4
+    AboveFourLive2DInSubSet = 5
+    AboveFourLive2DAfterInSubSet = 6
+    UnderFiveLive2DOutOfSubSet = 7
+    UnderFiveLive2DAfterOutOfSubSet = 8
+    AboveFourLive2DOutOfSubSet = 9
+    AboveFourLive2DAfterOutOfSubSet = 10
+
+
+class SkillDisplayType(IntEnum):
+    NONE = 0
+    Heal = 1
+    PhysicalAttack = 2
+    MagicAttack = 3
+    PhysicalDirectDamage = 4
+    MagicDirectDamage = 5
+    HpDrain = 6
+    Buff = 7
+    DeBuff = 8
+    PhysicalCounterAttack = 9
+    MagicCounterAttack = 10
+    PhysicalResonanceAttack = 11
+    MagicResonanceAttack = 12
+    RemoveEffect = 13
+    BurstEffect = 14
+    SelfInjuryDamage = 15
+    Resurrection = 20
+
+
+class PassiveTrigger(IntEnum):
+    NONE = 0
+    TurnStart = 1
+    TurnEnd = 2
+    BeforeCalculation = 3
+    InstantDeathDamage = 5
+    SelfDead = 6
+    AllyDead = 7
+    ReceiveDamage = 8
+    GiveDamage = 9
+    AllyReceiveDamage = 10
+    ReceiveDebuff = 11
+    GiveDeBuff = 12
+    AllyReceiveDeBuff = 13
+    GiveHeal = 14
+    AllyReceiveHeal = 15
+    GiveBuff = 16
+    AllyGiveBuff = 17
+    EnemyRecovery = 18
+    SelfRecovery = 19
+    OtherEnemyDead = 20
+    EnemyDead = 21
+    AllyGiveDamage = 22
+    EnemyReceiveHeal = 23
+    ReceiveBuff = 24
+    EnemyGiveBuff = 25
+    BattleStart = 26
+    BattleEnd = 27
+    TurnStartBeforeSpeedCheck = 28
+    TargetAttack = 29
+    ReceiveHeal = 30
+    ReceiveResonanceDamage = 31
+    ActionStart = 32
+    ActionEnd = 33
+    SelfInjury = 34
+    AllySelfInjury = 35
+    CheckReceiveDamageSelf = 41
+    CheckReceiveDamage = 42
+    NextCheckReceiveDamageSelf = 43
+    NextCheckReceiveDamage = 44
+    RecoveryFromInstantDeathDamage = 52
+    SpecialDamageDead = 62
+
+
+class EffectType(IntEnum):
+    NONE = 0
+    SpeedUp = 1_001
+    MaxHpUp = 1_002
+    AttackPowerUp = 1_003
+    DefenseUp = 1_004
+    PhysicalDamageRelaxUp = 1_005
+    MagicDamageRelaxUp = 1_006
+    DefensePenetrationUp = 1_007
+    DamageEnhanceUp = 1_008
+    HitUp = 1_009
+    AvoidanceUp = 1_010
+    CriticalUp = 1_011
+    CriticalResistUp = 1_012
+    HpDrainUp = 1_013
+    DamageReflectUp = 1_014
+    CriticalDamageEnhanceUp = 1_015
+    PhysicalCriticalDamageRelaxUp = 1_016
+    MagicCriticalDamageRelaxUp = 1_017
+    DebuffHitUp = 1_018
+    DebuffResistUp = 1_019
+    GiveHealRateUp = 1_020
+    ReceiveHealRateUp = 1_021
+    GiveDamageUp = 1_022
+    ReceiveDamageDown = 1_023
+    CoolTimeRecoveryUp = 1_024
+    ElementBonusUp = 1_025
+    GiveDamageStandardUp = 1_026
+    ReceiveDamageStandardDown = 1_027
+    HitRateUp = 1_500
+    AvoidanceRateUp = 1_501
+    CriticalRateUp = 1_502
+    CriticalResistRateUp = 1_503
+    DebuffHitRateUp = 1_504
+    DebuffResistRateUp = 1_505
+    DamageGuard = 2_001
+    Shield1 = 2_002
+    Shield2 = 2_003
+    DebuffGuard = 2_004
+    ConfuseActionDebuffGuard = 2_005
+    Taunt = 2_006
+    Stealth = 2_007
+    NonTarget = 2_008
+    GiveDebuff = 2_009
+    NormalSkillEnhance = 2_011
+    HealOverTime = 2_012
+    NonHit = 2_013
+    Immortal = 2_014
+    SkillMark = 2_015
+    DamageBlock = 2_016
+    TransientDamageBlock = 2_017
+    ActiveSkill1Enhance = 2_100
+    ActiveSkill2Enhance = 2_101
+    DamageReflectEnhance11 = 2_111
+    DamageReflectEnhance12 = 2_112
+    DamageReflectEnhance13 = 2_113
+    DamageReflectEnhance14 = 2_114
+    DamageReflectEnhance21 = 2_121
+    DamageReflectEnhance22 = 2_122
+    DamageReflectEnhance23 = 2_123
+    DamageReflectEnhance24 = 2_124
+    DamageReflectEnhance31 = 2_131
+    DamageReflectEnhance32 = 2_132
+    DamageReflectEnhance33 = 2_133
+    DamageReflectEnhance34 = 2_134
+    AllSkillCoolTimeRecovery = 3_001
+    Skill1CoolTimeRecovery = 3_002
+    Skill2CoolTimeRecovery = 3_003
+    AllSkillCoolTimeIncrease = 3_004
+    Skill1CoolTimeIncrease = 3_005
+    Skill2CoolTimeIncrease = 3_006
+    ExtendAllBuffTurn = 3_041
+    ExtendAllDeBuffTurn = 3_042
+    ExtendStunTurn = 3_043
+    ReduceAllBuffTurn = 3_044
+    ReduceAllDeBuffTurn = 3_045
+    ExtendEffectGroup = 3_046
+    ReduceEffectGroup = 3_047
+    IncreaseEffectStack = 3_048
+    DecreaseEffectStack = 3_049
+    RemoveAllBuff = 3_050
+    RemoveAllDeBuff = 3_060
+    RemoveAllConfuseActionGroupDebuff = 3_061
+    RemoveEffectGroup = 3_101
+    RemoveEffectType = 3_102
+    RemoveBuff = 3_103
+    RemoveDeBuff = 3_104
+    RemoveSpecialEffectType = 3_105
+    CopyArchiveBuff = 3_200
+    CopyArchiveDeBuff = 3_201
+    CopyAllBuffTargetToSelf = 3_202
+    CopyAllDeBuffSelfToTarget = 3_203
+    MoveBuffToMeFromEnemy = 3_204
+    MoveDebuffToEnemyFromMe = 3_205
+    SpeedDown = 5_001
+    MaxHpDown = 5_002
+    AttackPowerDown = 5_003
+    DefenseDown = 5_004
+    PhysicalDamageRelaxDown = 5_005
+    MagicDamageRelaxDown = 5_006
+    DefensePenetrationDown = 5_007
+    DamageEnhanceDown = 5_008
+    HitDown = 5_009
+    AvoidanceDown = 5_010
+    CriticalDown = 5_011
+    CriticalResistDown = 5_012
+    HpDrainDown = 5_013
+    DamageReflectDown = 5_014
+    CriticalDamageEnhanceDown = 5_015
+    PhysicalCriticalDamageRelaxDown = 5_016
+    MagicCriticalDamageRelaxDown = 5_017
+    DebuffHitDown = 5_018
+    DebuffResistDown = 5_019
+    GiveHealRateDown = 5_020
+    ReceiveHealRateDown = 5_021
+    GiveDamageDown = 5_022
+    ReceiveDamageUp = 5_023
+    CoolTimeRecoveryDown = 5_024
+    GiveDamageStandardDown = 5_025
+    ReceiveDamageStandardUp = 5_026
+    HitRateDown = 5_500
+    AvoidanceRateDown = 5_501
+    CriticalRateDown = 5_502
+    CriticalResistRateDown = 5_503
+    DebuffHitRateDown = 5_504
+    DebuffResistRateDown = 5_505
+    Stun = 6_001
+    Confuse = 6_002
+    Silence = 6_003
+    Stubborn = 6_004
+    HpRecoveryForbidden = 7_002
+    BuffForbidden = 7_003
+    AvoidanceForbidden = 7_004
+    LockOnSelf = 7_111
+    LockOnAllAlly = 7_121
+    LockOnBlueAlly = 7_131
+    LockOnRedAlly = 7_132
+    LockOnGreenAlly = 7_133
+    LockOnYellowAlly = 7_134
+    LockOnLightAlly = 7_135
+    LockOnDarkAlly = 7_136
+    LockOnWarriorAlly = 7_141
+    LockOnSniperAlly = 7_142
+    LockOnSorcererAlly = 7_143
+    LockOnAttack1Ally = 7_151
+    LockOnAttack2Ally = 7_152
+    LockOnAttack3Ally = 7_153
+    Poison = 8_001
+    Bleeding = 8_002
+    Combustion = 8_003
+    Burn = 8_004
+    SelfInjuryPoison = 8_101
+    SelfInjuryBleeding = 8_102
+    SelfInjuryCombustion = 8_103
+    DamageResonanceFromSelfAndDamageReduction = 8_111
+    DamageResonanceFromHighHpEnemy = 8_121
+    DamageResonanceFromLowHpEnemy = 8_122
+    DamageResonanceFromHighDefenseEnemy = 8_123
+    DamageResonanceFromLowDefenseEnemy = 8_124
+    DamageResonanceFromRandomEnemy = 8_125
+    DamageResonanceFromHighBaseMaxHpEnemy = 8_126
+    DamageResonanceFromLowBaseMaxHpEnemy = 8_127
+    DamageResonanceFromHighBaseDefenseEnemy = 8_128
+    DamageResonanceFromLowBaseDefenseEnemy = 8_129
+    DamageResonanceFromAllEnemy = 8_131
+    DamageResonanceFromAllAllyAndDamageReduction = 8_141
+    SpeedDrain = 9_001
+    AttackPowerDrain = 9_003
+    DefenseDrain = 9_004
+
+
+# endregion
+
+
+# region Guild Raid
+
+
+class GuildRaidBossType(IntEnum):
+    Normal = 0
+    Releasable = 1
+    Event = 2
+
+
+# endregion
+
+
+# region Trials
+
+
+class TowerType(IntEnum):
+    NONE = 0
+    Infinite = 1
+    Blue = 2
+    Red = 3
+    Green = 4
+    Yellow = 5
+
+
+class BountyQuestType(IntEnum):
+    Solo = 0
+    Team = 1
+    Guerrilla = 2
+
+
+class BountyQuestRarityFlags(IntEnum):
+    NONE = 0
+    NInit = 1
+    N = 2
+    R = 4
+    SR = 8
+    SSR = 16
+    UR = 32
+    LR = 64
+
+
+class DungeonBattleGridState(IntEnum):
+    Done = 0
+    Selected = 1
+    Reward = 2
+    SkipShop = 3
+
+
+# endregion
+
+
+# region Missions
+
+
+class MissionGroupType(IntEnum):
+    Main = 0
+    Daily = 1
+    Weekly = 2
+    Beginner = 3
+    Comeback = 4
+    NewCharacter = 5
+    Limited = 6
+    Panel = 9
+    Guild = 10
+    GuildTower = 11
+
+
+class MissionStatusType(IntEnum):
+    Locked = 0
+    Progress = 1
+    NotReceived = 2
+    Received = 3
+
+
+class MissionActivityRewardStatusType(IntEnum):
+    Locked = 0
+    NotReceived = 1
+    Received = 2
+
+
+class MissionType(IntEnum):
+    Main = 0
+    Daily = 1
+    Weekly = 2
+    BeginnerFirstDay = 311
+    BeginnerFirstDayLevel = 312
+    BeginnerFirstDayStage = 313
+    BeginnerFirstDayBuy = 314
+    BeginnerSecondDay = 321
+    BeginnerSecondDayQuick = 322
+    BeginnerSecondDayBattleLeague = 323
+    BeginnerSecondDayBuy = 324
+    BeginnerThirdDay = 331
+    BeginnerThirdDayForge = 332
+    BeginnerThirdDayDungeonBattle = 333
+    BeginnerThirdDayBuy = 334
+    BeginnerFourthDay = 341
+    BeginnerFourthDayReinforceEquipment = 342
+    BeginnerFourthDayTowerBattle = 343
+    BeginnerFourthDayBuy = 344
+    BeginnerFifthDay = 351
+    BeginnerFifthDayBountyQuest = 352
+    BeginnerFifthDayTotalCharacter = 353
+    BeginnerFifthDayBuy = 354
+    BeginnerSixthDay = 361
+    BeginnerSixthDaySphere = 362
+    BeginnerSixthDayCharacterEvolution = 363
+    BeginnerSixthDayBuy = 364
+    BeginnerSeventhDay = 371
+    BeginnerSeventhDayTraining = 372
+    BeginnerSeventhDayLocalRaid = 373
+    BeginnerSeventhDayBuy = 374
+    ComebackLogin = 401
+    ComebackActivity = 402
+    ComebackConsumeCurrency = 403
+    NewCharacter = 5
+    LimitedFirstDayTab1 = 611
+    LimitedFirstDayTab2 = 612
+    LimitedFirstDayTab3 = 613
+    LimitedFirstDayTab4 = 614
+    LimitedSecondDayTab1 = 621
+    LimitedSecondDayTab2 = 622
+    LimitedSecondDayTab3 = 623
+    LimitedSecondDayTab4 = 624
+    LimitedThirdDayTab1 = 631
+    LimitedThirdDayTab2 = 632
+    LimitedThirdDayTab3 = 633
+    LimitedThirdDayTab4 = 634
+    LimitedFourthDayTab1 = 641
+    LimitedFourthDayTab2 = 642
+    LimitedFourthDayTab3 = 643
+    LimitedFourthDayTab4 = 644
+    LimitedFifthDayTab1 = 651
+    LimitedFifthDayTab2 = 652
+    LimitedFifthDayTab3 = 653
+    LimitedFifthDayTab4 = 654
+    LimitedSixthDayTab1 = 661
+    LimitedSixthDayTab2 = 662
+    LimitedSixthDayTab3 = 663
+    LimitedSixthDayTab4 = 664
+    LimitedSeventhDayTab1 = 671
+    LimitedSeventhDayTab2 = 672
+    LimitedSeventhDayTab3 = 673
+    LimitedSeventhDayTab4 = 674
+    PanelSheet1 = 901
+    PanelSheet2 = 902
+    PanelSheet3 = 903
+    Guild = 10
+    GuildTower = 11
+
+
+class MissionAchievementType(IntEnum):
+    NONE = 0
+    Login = 100
+    BoughtByCurrency = 200
+    UseFriendCode = 300
+    NewCharacter = 1_000
+    MissionTotalActivityAtComeback = 1_010_100
+    MissionTotalActivityAtNewCharacterMission = 1_010_200
+    MissionTotalActivityAtEvent = 1_010_300
+    MissionTotalActivityAtPanelMission = 1_010_400
+    PlayerInfoEditComment = 2_010_100
+    FriendMaxFriendCount = 3_010_100
+    FriendSendFriendPointCount = 3_010_200
+    SocialAuthAccount = 4_010_100
+    SocialFollowOfficialTwitter = 4_020_100
+    SocialFollowOfficialYoutube = 4_020_200
+    ExchangeLegendForgeMergeCount = 5_010_100
+    ExchangeEquipmentForgeMergeCount = 5_020_200
+    ExchangeAllBuyCount = 5_030_100
+    ExchangeRegularBuyCount = 5_030_200
+    ExchangeGvGBuyCount = 5_040_100
+    ExchangeDungeonBattleBuyCount = 5_050_100
+    ShopTotalBuyCurrency = 6_010_100
+    CharacterLevelUpCount = 7_010_100
+    CharacterLevelLinkMaxLevel = 7_010_200
+    CharacterEquipmentMaxLevel = 7_010_300
+    CharacterSphereMaxEquipCountLevel1 = 7_010_401
+    CharacterSphereMaxEquipCountLevel2 = 7_010_402
+    CharacterSphereMaxEquipCountLevel3 = 7_010_403
+    CharacterSphereMaxEquipCountLevel4 = 7_010_404
+    CharacterSphereMaxEquipCountLevel5 = 7_010_405
+    CharacterSphereMaxEquipCountLevel6 = 7_010_406
+    CharacterSphereMaxEquipCountLevel7 = 7_010_407
+    CharacterSphereMaxEquipCountLevel8 = 7_010_408
+    CharacterSphereMaxEquipCountLevel9 = 7_010_409
+    CharacterMatchlessSacredTreasureMaxLevel = 7_010_500
+    CharacterLegendSacredTreasureMaxLevel = 7_010_600
+    CharacterEquipmentTrainingCount = 7_010_700
+    CharacterEquipmentReinforceMaxLevel = 7_010_800
+    CharacterEquipmentMergeCount = 7_010_900
+    CharacterMaxBattlePower = 7_011_000
+    CharacterCharacterMaxLevel = 7_011_100
+    CharacterAllEquipmentReinforceMaxLevel = 7_011_200
+    CharacterRankUpMaxRarity = 7_020_100
+    CharacterRankUpEvolutionCount = 7_020_200
+    CharacterLevelLinkOpenSlotCount = 7_030_100
+    EquipmentSphereMaxLevel = 8_010_100
+    EquipmentSphereComposeCount = 8_010_200
+    EquipmentForgeCount = 8_020_100
+    EquipmentComposeCountR = 8_030_101
+    EquipmentComposeCountSR = 8_030_102
+    EquipmentComposeCountSSR = 8_030_103
+    AutoBattleMaxPlayerLevel = 9_010_100
+    AutoBattleAddPopulation = 9_010_200
+    BossBattleVictoryCount = 9_010_300
+    AutoBattleMaxClearQuest = 9_010_400
+    AutoBattledMaxClearChapter = 9_010_500
+    AutoBattleGetRewardCount = 9_010_600
+    AutoBattleQuickCount = 9_020_100
+    DungeonBattleClearThirdFloorCount = 10_010_100
+    DungeonBattleClearFirstFloorCount = 10_010_200
+    DungeonBattleClearUnitJobTypeBase = 10_010_300
+    DungeonBattleClear1UnitWarriorType = 10_010_311
+    DungeonBattleClear1UnitSniperType = 10_010_312
+    DungeonBattleClear1UnitSorcererType = 10_010_314
+    DungeonBattleClear2UnitWarriorType = 10_010_321
+    DungeonBattleClear2UnitSniperType = 10_010_322
+    DungeonBattleClear2UnitSorcererType = 10_010_324
+    DungeonBattleClear3UnitWarriorType = 10_010_331
+    DungeonBattleClear3UnitSniperType = 10_010_332
+    DungeonBattleClear3UnitSorcererType = 10_010_334
+    DungeonBattleClear4UnitWarriorType = 10_010_341
+    DungeonBattleClear4UnitSniperType = 10_010_342
+    DungeonBattleClear4UnitSorcererType = 10_010_344
+    DungeonBattleClear5UnitWarriorType = 10_010_351
+    DungeonBattleClear5UnitSniperType = 10_010_352
+    DungeonBattleClear5UnitSorcererType = 10_010_354
+    DungeonBattleNewCharacter = 10_011_000
+    TowerBattleMaxClearFloor = 11_010_100
+    TowerBattleMinClearElementTower = 11_010_200
+    TowerBattleTotalWinCount = 11_010_300
+    BattleLeagueChallengeCount = 12_010_100
+    BattleLeagueMaxRanking = 12_010_200
+    LocalRaidVictoryCount = 13_010_100
+    LocalRaidVictoryUnitElementTypeBase = 13_010_200
+    LocalRaidVictory1UnitLightAndDarkType = 13_010_210
+    LocalRaidVictory1UnitBlueType = 13_010_211
+    LocalRaidVictory1UnitRedType = 13_010_212
+    LocalRaidVictory1UnitGreenType = 13_010_213
+    LocalRaidVictory1UnitYellowType = 13_010_214
+    LocalRaidVictory1UnitLightType = 13_010_215
+    LocalRaidVictory1UnitDarkType = 13_010_216
+    LocalRaidVictory2UnitLightAndDarkType = 13_010_220
+    LocalRaidVictory2UnitBlueType = 13_010_221
+    LocalRaidVictory2UnitRedType = 13_010_222
+    LocalRaidVictory2UnitGreenType = 13_010_223
+    LocalRaidVictory2UnitYellowType = 13_010_224
+    LocalRaidVictory2UnitLightType = 13_010_225
+    LocalRaidVictory2UnitDarkType = 13_010_226
+    LocalRaidVictory3UnitLightAndDarkType = 13_010_230
+    LocalRaidVictory3UnitBlueType = 13_010_231
+    LocalRaidVictory3UnitRedType = 13_010_232
+    LocalRaidVictory3UnitGreenType = 13_010_233
+    LocalRaidVictory3UnitYellowType = 13_010_234
+    LocalRaidVictory3UnitLightType = 13_010_235
+    LocalRaidVictory3UnitDarkType = 13_010_236
+    LocalRaidVictory4UnitLightAndDarkType = 13_010_240
+    LocalRaidVictory4UnitBlueType = 13_010_241
+    LocalRaidVictory4UnitRedType = 13_010_242
+    LocalRaidVictory4UnitGreenType = 13_010_243
+    LocalRaidVictory4UnitYellowType = 13_010_244
+    LocalRaidVictory4UnitLightType = 13_010_245
+    LocalRaidVictory4UnitDarkType = 13_010_246
+    LocalRaidVictory5UnitLightAndDarkType = 13_010_250
+    LocalRaidVictory5UnitBlueType = 13_010_251
+    LocalRaidVictory5UnitRedType = 13_010_252
+    LocalRaidVictory5UnitGreenType = 13_010_253
+    LocalRaidVictory5UnitYellowType = 13_010_254
+    LocalRaidVictory5UnitLightType = 13_010_255
+    LocalRaidVictory5UnitDarkType = 13_010_256
+    BountyQuestAllStartQuestCount = 14_010_100
+    BountyQuestNewCharacter = 14_011_000
+    BountyQuestTeamStartQuestCount = 14_020_100
+    GachaNewJoinCharacter = 15_010_100
+    GachaDrawCount = 15_010_200
+    ConsumeCurrencyCount = 15_010_300
+    GuildJoinCount = 16_010_100
+    GuildLoginCount = 16_010_200
+    GuildGuildRaidChallengeCount = 16_020_100
+    ChatSayWorldChatCount = 17_010_100
+    OsStoreUpdateCount = 18_010_100
+    PictureBookTransitionPanel = 21_010_100
+    MusicPlayerTransitionCount = 22_010_100
+    GuildTowerWinUnitSameJobTypeBase = 23_010_100
+    GuildTowerWin1UnitSameJobType = 23_010_101
+    GuildTowerWin2UnitSameJobType = 23_010_102
+    GuildTowerWin3UnitSameJobType = 23_010_103
+    GuildTowerWin4UnitSameJobType = 23_010_104
+    GuildTowerWin5UnitSameJobType = 23_010_105
+    GuildTowerWinCount = 23_010_200
+    GuildTowerMaxComboCount = 23_010_300
+    GuildTowerGetJobReinforcementMaterialCount = 23_010_400
+    GuildTowerMaxJobLevel = 23_020_100
+    GuildTowerMinJobLevel = 23_020_200
 
 
 # endregion

@@ -70,6 +70,8 @@ class MB:
 
     @cached_property
     def _mb_raw_cache(self):
+        # TODO: Move mb cache from DataClient to this class, and only check for file existence here instead of keeping
+        #  all of these raw values in memory
         return {name: data for name in self.file_map if (data := self._client.get_mb_data_if_cached(name)) is not None}
 
     def populate_cache(self, parallel: int = 4):
