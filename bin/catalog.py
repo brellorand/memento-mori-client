@@ -108,7 +108,7 @@ class MBContent(Save, choice='mb_content', help='Download all files listed in th
 
         log.info(f'Downloading {len(file_names):,d} files using {self.parallel} threads')
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
-            futures = {executor.submit(self.mm_session.data_client.get_mb_data, name): name for name in file_names}
+            futures = {executor.submit(self.mm_session.mb.get_raw_data, name): name for name in file_names}
             with FutureWaiter(executor)(futures, add_bar=not self.verbose, unit=' files') as waiter:
                 for future in waiter:
                     self._save_data(futures[future], future.result())

@@ -599,33 +599,16 @@ class ApiClient(OrtegaClient):
         return self._post_msg('user/loginPlayer', data)
 
 
-class DataClient(RequestsClient):
-    def __init__(
-        self,
-        auth_client: AuthClient = None,
-        system: str = 'Android',
-        use_data_cache: bool = True,
-        use_mb_cache: bool = True,
-        **kwargs,
-    ):
-        self.system = system
-        self.auth = auth_client or AuthClient(**kwargs)
-        self.game_data = self.auth.game_data
-        headers = {
-            'content-type': 'application/json; charset=UTF-8',
-            'accept-encoding': 'gzip',
-            'User-Agent': 'UnityPlayer/2021.3.10f1 (UnityWebRequest/1.0, libcurl/7.80.0-DEV)',
-            'X-Unity-Version': '2021.3.10f1',
-        }
-        super().__init__(urlparse(self.game_data.asset_catalog_uri_fmt).hostname, scheme='https', headers=headers)
+class DataClientWrapper:
+    def __init__(self, auth_client: AuthClient = None, *, use_data_cache: bool = True, **kwargs):
+        self._auth_client = auth_client
+        self._data_client_kwargs = kwargs
         self.cache = FileCache('data', use_cache=use_data_cache)
-        self._mb_cache = FileCache(
-            'mb', use_cache=use_mb_cache, app_version=self.auth.config.app_version_manager.get_version()
-        )
 
-    def _get_asset(self, name: str) -> Response:
-        url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
-        return self.get(url, relative=False)
+    @cached_property
+    def _data_client(self) -> DataClient:
+        # This allows the client to be initialized lazily, only if there is a cache miss
+        return DataClient(self._auth_client, **self._data_client_kwargs)
 
     def get_asset(self, name: str) -> bytes:
         """
@@ -637,30 +620,53 @@ class DataClient(RequestsClient):
         :param name: The name of the file/bundle to download
         :return: The content of the specified file
         """
-        return self._get_asset(name).content
+        return self._data_client.get_asset(name).content
+
+    def get_mb_data(self, name: str):
+        return self._data_client.get_mb_data(name)
+
+    def get_raw_data(self, name: str):
+        return self._data_client.get_raw_data(name)
+
+    def _get_asset_catalog(self):
+        try:
+            return self.cache.get('asset-catalog.json')
+        except CacheMiss:
+            catalog = self._data_client.get_asset(f'{self._data_client.auth.ortega_info.asset_version}.json').json()
+            self.cache.store(catalog, 'asset-catalog.json')
+            return catalog
+
+    def _get_mb_catalog(self):
+        try:
+            return self.cache.get('master-catalog.msgpack')
+        except CacheMiss:
+            catalog = self._data_client.get_mb_data('master-catalog')
+            self.cache.store(catalog, 'master-catalog.msgpack')
+            return catalog
+
+
+class DataClient(RequestsClient):
+    def __init__(self, auth_client: AuthClient = None, *, system: str = 'Android', **kwargs):
+        self.system = system
+        self.auth = auth_client or AuthClient(**kwargs)
+        self.game_data = self.auth.game_data
+        headers = {
+            'content-type': 'application/json; charset=UTF-8',
+            'accept-encoding': 'gzip',
+            'User-Agent': 'UnityPlayer/2021.3.10f1 (UnityWebRequest/1.0, libcurl/7.80.0-DEV)',
+            'X-Unity-Version': '2021.3.10f1',
+        }
+        super().__init__(urlparse(self.game_data.asset_catalog_uri_fmt).hostname, scheme='https', headers=headers)
+
+    def get_asset(self, name: str) -> Response:
+        url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
+        return self.get(url, relative=False)
 
     # def get_asset_etag(self, name: str) -> str:
     #     url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
     #     return self.head(url, relative=False).headers['etag'].strip('"')
 
-    def get_mb_data_if_cached(self, name: str):
-        try:
-            return self._mb_cache.get(f'{name}.msgpack')
-        except CacheMiss:
-            return None
-
-    def get_mb_data(self, name: str, refresh: bool = False):
-        if not refresh:
-            try:
-                return self._mb_cache.get(f'{name}.msgpack')
-            except CacheMiss:
-                pass
-
-        data = self._get_mb_data(name)
-        self._mb_cache.store(data, f'{name}.msgpack')
-        return data
-
-    def _get_mb_data(self, name: str):
+    def get_mb_data(self, name: str):
         url = self.game_data.mb_uri_fmt.format(self.auth.ortega_info.mb_version, name)
         resp = self.get(url, relative=False)
         return msgpack.unpackb(resp.content, timestamp=3)
@@ -669,19 +675,3 @@ class DataClient(RequestsClient):
         url = self.game_data.raw_data_uri_fmt.format(name)
         resp = self.get(url, relative=False)
         return resp.content
-
-    def _get_asset_catalog(self):
-        try:
-            return self.cache.get('asset-catalog.json')
-        except CacheMiss:
-            catalog = self._get_asset(f'{self.auth.ortega_info.asset_version}.json').json()
-            self.cache.store(catalog, 'asset-catalog.json')
-            return catalog
-
-    def _get_mb_catalog(self):
-        try:
-            return self.cache.get('master-catalog.msgpack')
-        except CacheMiss:
-            catalog = self.get_mb_data('master-catalog')
-            self.cache.store(catalog, 'master-catalog.msgpack')
-            return catalog

@@ -9,8 +9,8 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from .assets import AssetCatalog
-from .config import ConfigFile
-from .http_client import AuthClient, DataClient
+from .config import ConfigFile, AccountConfig
+from .http_client import AuthClient, DataClient, DataClientWrapper
 from .mb_models import MB
 
 if TYPE_CHECKING:
@@ -51,10 +51,8 @@ class MementoMoriSession:
         return AuthClient(config=self.config, use_cache=self._use_cache['auth'], save_dir=self._http_save_dir)
 
     @cached_property
-    def data_client(self) -> DataClient:
-        return DataClient(
-            auth_client=self.auth_client, use_data_cache=self._use_cache['data'], use_mb_cache=self._use_cache['mb']
-        )
+    def data_client(self) -> DataClientWrapper:
+        return DataClientWrapper(auth_client=self.auth_client, use_data_cache=self._use_cache['data'])
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
@@ -66,26 +64,31 @@ class MementoMoriSession:
 
     def get_mb(self, **kwargs) -> MB:
         kwargs.setdefault('json_cache_map', self._mb_json_cache_map)
+        kwargs.setdefault('use_cache', self._use_cache['mb'])
         if 'locale' not in kwargs:
             kwargs['locale'] = self._mb_locale or self.config.mb.locale
-        return MB(self.data_client, **kwargs)
+        return MB(self, **kwargs)
+
+    def get_account_config_by_id(self, user_id: int) -> AccountConfig:
+        try:
+            return self.config.accounts[str(user_id)]
+        except KeyError as e:
+            raise ValueError(f'Invalid {user_id=} - pick from: {", ".join(sorted(self.config.accounts))}') from e
+
+    def get_account_config_by_name(self, name: str) -> AccountConfig:
+        for account in self.config.accounts.values():
+            if account.name == name:
+                return account
+
+        names = ', '.join(sorted(a.name for a in self.config.accounts.values()))
+        raise ValueError(f'Unable to find an account with {name=} - pick from: {names}')
 
     def get_account_by_id(self, user_id: int) -> PlayerAccount:
         from .account import PlayerAccount
 
-        try:
-            account_config = self.config.accounts[str(user_id)]
-        except KeyError as e:
-            raise ValueError(f'Invalid {user_id=} - pick from: {", ".join(sorted(self.config.accounts))}') from e
-        else:
-            return PlayerAccount(self, account_config)
+        return PlayerAccount(self, self.get_account_config_by_id(user_id))
 
     def get_account_by_name(self, name: str) -> PlayerAccount:
         from .account import PlayerAccount
 
-        for account in self.config.accounts.values():
-            if account.name == name:
-                return PlayerAccount(self, account)
-
-        names = ', '.join(sorted(a.name for a in self.config.accounts.values()))
-        raise ValueError(f'Unable to find an account with {name=} - pick from: {names}')
+        return PlayerAccount(self, self.get_account_config_by_name(name))

@@ -43,19 +43,19 @@ class TestUserSyncData(TestCase):
         self.assertIsNone(usd.cleared_tutorial_ids)
         self.assertIsNone(usd.has_vip_daily_gift)
         self.assertIsNone(usd.has_transitioned_panel_picture_book)
-        self.assertIsNone(usd.local_raid_challenge_count)
-        self.assertEqual([], usd.user_character_book_dto_infos)
+        self.assertIsNone(usd.guild_raid_challenge_count)
+        self.assertEqual([], usd.character_index_info)
 
         usd.update(self._get_sync_data('get_user_data')['UserSyncData'])
 
         self.assertEqual(CLEARED_TUTORIAL_IDS, usd.cleared_tutorial_ids)
         self.assertTrue(usd.has_vip_daily_gift)
         self.assertIs(False, usd.has_transitioned_panel_picture_book)  # assertFalse only checks truthiness
-        self.assertEqual(6, usd.local_raid_challenge_count)
-        self.assertEqual(15, len(usd.user_character_book_dto_infos))
+        self.assertEqual(6, usd.guild_raid_challenge_count)
+        self.assertEqual(15, len(usd.character_index_info))
         self.assertEqual(
             {"CharacterId": 1, "MaxCharacterLevel": 1, "MaxCharacterRarityFlags": 1, "MaxEpisodeId": 0},
-            usd.user_character_book_dto_infos[0],
+            usd.character_index_info[0],
         )
 
     def test_world_user_sync_data_automatically_updated(self):

@@ -42,7 +42,15 @@ class FileCache:
         self.root = get_user_cache_dir(f'{subdir}/{app_version}' if app_version else subdir)
         self.app_version = app_version
 
-    def get(self, name: str):
+    def get(self, name: str, default=_NotSet):
+        try:
+            return self[name]
+        except CacheMiss:
+            if default is _NotSet:
+                raise
+            return default
+
+    def __getitem__(self, name: str):
         if not self.use_cache:
             raise CacheMiss
 

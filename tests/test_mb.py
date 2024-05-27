@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import Mock, patch
 
+from mm.fs import CacheMiss
 from mm.mb_models import MB
 
 
@@ -32,7 +33,8 @@ class TestMB(TestCase):
         return self._mb_data[name]
 
     def _init_mb(self) -> MB:
-        return MB(client=Mock(get_mb_data=self._get_mb_data))
+        with patch('mm.mb_models.base.FileCache', return_value=Mock(get=Mock(side_effect=CacheMiss))):
+            return MB(session=Mock(data_client=Mock(get_mb_data=self._get_mb_data)), use_cache=False)
 
     def test_char_from_short_name(self):
         mb = self._init_mb()
@@ -62,4 +64,8 @@ class TestMB(TestCase):
 
 
 if __name__ == '__main__':
+    from mm.logging import init_logging
+
+    init_logging(10)
+
     main(verbosity=2)

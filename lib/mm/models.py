@@ -55,7 +55,7 @@ class Equipment(WorldEntity):
 
     def __repr__(self) -> str:
         equip = self.equipment
-        level, slot_type, rarity = equip.level, equip.slot_type, equip.rarity_flags
+        level, slot_type, rarity = equip.level, equip.slot_type.name, equip.rarity_flags.name
         guid = self.guid
         return f'<{self.__class__.__name__}[{equip.name}, {rarity=}, {level=}, {slot_type=}, {guid=}]>'
 

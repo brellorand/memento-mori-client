@@ -11,14 +11,15 @@ from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
-from mm.enums import Locale
 from mm.data import DictWrapper
+from mm.enums import Locale
+from mm.fs import FileCache, CacheMiss
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from mm.http_client import DataClient
+    from mm.session import MementoMoriSession
     from .characters import Character, CharacterProfile
     from .items import Item, EquipmentSetMaterial, ChangeItem, EquipmentPart, Equipment, EquipmentUpgradeRequirements
     from .items import EquipmentEnhanceRequirements
@@ -34,17 +35,19 @@ MBE = TypeVar('MBE', bound='MBEntity')
 class MB:
     def __init__(
         self,
-        client: DataClient,
+        session: MementoMoriSession,
         *,
         data: dict[str, Any] = None,
+        use_cache: bool = True,
         json_cache_map: dict[str, Path] = None,
         locale: Locale = Locale.EnUs,
     ):
-        self._client = client
+        self._session = session
         self.__data = data
         self._json_cache_map = json_cache_map or {}
         self.locale = Locale(locale)
         self._locale_text_resource_map = {}
+        self._cache = FileCache('mb', use_cache=use_cache, app_version=session.config.app_version_manager.get_version())
 
     # region Base MB data
 
@@ -52,7 +55,7 @@ class MB:
     def _data(self) -> dict[str, Any]:
         if self.__data:
             return self.__data
-        return self._client._get_mb_catalog()
+        return self._session.data_client._get_mb_catalog()
 
     @cached_property
     def file_map(self) -> dict[str, FileInfo]:
@@ -70,9 +73,8 @@ class MB:
 
     @cached_property
     def _mb_raw_cache(self):
-        # TODO: Move mb cache from DataClient to this class, and only check for file existence here instead of keeping
-        #  all of these raw values in memory
-        return {name: data for name in self.file_map if (data := self._client.get_mb_data_if_cached(name)) is not None}
+        # TODO: Only check for file existence here instead of keeping all of these raw values in memory
+        return {name: data for name in self.file_map if (data := self._cache.get(f'{name}.msgpack', None)) is not None}
 
     def populate_cache(self, parallel: int = 4):
         file_names = set(self.file_map).difference(self._mb_raw_cache)
@@ -82,7 +84,7 @@ class MB:
 
         log.log(19, f'Downloading {len(file_names):,d} files using {parallel} threads')
         with ThreadPoolExecutor(max_workers=parallel) as executor:
-            futures = {executor.submit(self._client.get_mb_data, name, refresh=True): name for name in file_names}
+            futures = {executor.submit(self._get_mb_data, name, refresh=True): name for name in file_names}
             for future in as_completed(futures):
                 self._mb_raw_cache[futures[future]] = future.result()
 
@@ -94,13 +96,25 @@ class MB:
     def _mb_entity_classes(self) -> dict[str, Type[MBEntity]]:
         return MBEntity._name_cls_map
 
+    def _get_mb_data(self, name: str, refresh: bool = False):
+        if not refresh:
+            try:
+                return self._cache.get(f'{name}.msgpack')
+            except CacheMiss:
+                pass
+
+        data = self._session.data_client.get_mb_data(name)
+        self._cache.store(data, f'{name}.msgpack')
+        return data
+
     def get_raw_data(self, name: str):
         if mb_raw_cache := self.__dict__.get('_mb_raw_cache'):
             # Avoid populating the cache if `populate_cache` was not called
             return mb_raw_cache[name]
         elif json_path := self._json_cache_map.get(name):
             return json.loads(json_path.read_text('utf-8'))
-        return self._client.get_mb_data(name)
+        else:
+            return self._get_mb_data(name)
 
     def get_data(self, cls: Type[MBEntity], locale: Locale = None):
         return self.get_raw_data(cls._file_name_fmt.format(locale=locale or self.locale))
