@@ -8,7 +8,7 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-from .enums import CharacterRarityFlags
+from .enums import CharacterRarity
 from .mb_models import Character as MBCharacter, Equipment as MBEquipment
 from .properties import DataProperty
 
@@ -29,6 +29,12 @@ class Equipment(WorldEntity):
     guid: str = DataProperty('Guid')
     char_guid: str = DataProperty('CharacterGuid')
     equipment_id: int = DataProperty('EquipmentId')
+    upgrade_level: int = DataProperty('ReinforcementLv')
+    rune_id_1: int = DataProperty('SphereId1')
+    rune_id_2: int = DataProperty('SphereId2')
+    rune_id_3: int = DataProperty('SphereId3')
+    rune_id_4: int = DataProperty('SphereId4')
+    rune_slots_unlocked: int = DataProperty('SphereUnlockedCount')
 
     """
     TODO:
@@ -36,16 +42,11 @@ class Equipment(WorldEntity):
     "AdditionalParameterIntelligence": 0,
     "AdditionalParameterMuscle": 25,
     "AdditionalParameterEnergy": 0,
-    "SphereId1": 0,
-    "SphereId2": 0,
-    "SphereId3": 0,
-    "SphereId4": 0,
-    "SphereUnlockedCount": 0,
+
     "LegendSacredTreasureExp": 0,
     "LegendSacredTreasureLv": 0,
     "MatchlessSacredTreasureExp": 0,
     "MatchlessSacredTreasureLv": 0,
-    "ReinforcementLv": 0
     """
 
     @cached_property
@@ -64,7 +65,7 @@ class Character(WorldEntity):
     char_id: int = DataProperty('CharacterId')
     level: int = DataProperty('Level')
     experience: int = DataProperty('Exp')
-    rarity: CharacterRarityFlags = DataProperty('RarityFlags', type=CharacterRarityFlags)
+    rarity: CharacterRarity = DataProperty('RarityFlags', type=CharacterRarity)
 
     @cached_property
     def equipment(self) -> list[Equipment]:

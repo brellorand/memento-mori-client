@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from functools import cached_property
 
+from mm.enums import EquipmentSlotType, EquipmentRarityFlags, Job, EquipmentCategory
 from mm.properties import DataProperty, DictAttrFieldNotFoundError
 from .base import MB, MBEntity, NamedEntity, FullyNamedEntity
 
@@ -160,22 +161,24 @@ class Equipment(NamedEntity, file_name_fmt='EquipmentMB'):
     part_id: int = DataProperty('CompositeId')  # ID for this item's part (ItemType=5)
     enhance_id: int = DataProperty('EquipmentEvolutionId')
 
-    slot_type: int = DataProperty('SlotType')
-    effect_id: int = DataProperty('ExclusiveEffectId')
-    icon_id: int = DataProperty('IconId')
-    quality_level: int = DataProperty('QualityLv')  # Likely enum for SR/SSR/UR/LR?
-    job_flags: int = DataProperty('EquippedJobFlags')
-    rarity_flags: int = DataProperty('RarityFlags')
-    after_level_enhance_id: int = DataProperty('AfterLevelEvolutionEquipmentId')
-    after_rarity_enhance_id: int = DataProperty('AfterRarityEvolutionEquipmentId')
-    category: int = DataProperty('Category')
-    exclusive_skill_desc_id: int = DataProperty('EquipmentExclusiveSkillDescriptionId')
-    forge_id: int = DataProperty('EquipmentForgeId')
-    reinforce_material_id: int = DataProperty('EquipmentReinforcementMaterialId')
+    slot_type: EquipmentSlotType = DataProperty('SlotType', EquipmentSlotType)
+    job_flags: Job = DataProperty('EquippedJobFlags', Job)
+    rarity_flags: EquipmentRarityFlags = DataProperty('RarityFlags', EquipmentRarityFlags)
+    category: EquipmentCategory = DataProperty('Category', EquipmentCategory)
+
+    quality_level: int = DataProperty('QualityLv')
     additional_param_total: int = DataProperty('AdditionalParameterTotal')
     performance_point: int = DataProperty('PerformancePoint')
     first_rune_slot_cost: int = DataProperty('GoldRequiredToOpeningFirstSphereSlot')
     subsequent_rune_slot_cost: int = DataProperty('GoldRequiredToTraining')  # This name is a guess
+
+    icon_id: int = DataProperty('IconId')
+    forge_id: int = DataProperty('EquipmentForgeId')
+    effect_id: int = DataProperty('ExclusiveEffectId')
+    after_level_enhance_id: int = DataProperty('AfterLevelEvolutionEquipmentId')
+    after_rarity_enhance_id: int = DataProperty('AfterRarityEvolutionEquipmentId')
+    exclusive_skill_desc_id: int = DataProperty('EquipmentExclusiveSkillDescriptionId')
+    reinforce_material_id: int = DataProperty('EquipmentReinforcementMaterialId')
 
     @cached_property
     def enhance_requirements(self) -> EquipmentEnhancement | None:

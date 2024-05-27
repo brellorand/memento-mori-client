@@ -9,7 +9,7 @@ import logging
 from functools import cached_property
 from typing import Any
 
-from mm.enums import Element, Job, CharacterRarity, Locale
+from mm.enums import Element, Job, CharacterRarity, Locale, CharacterType
 from mm.properties import DataProperty
 from .base import MBEntity, NamedEntity
 from .utils import LocalizedString
@@ -51,7 +51,7 @@ class Character(NamedEntity, file_name_fmt='CharacterMB'):
     name_en: str | None = LocalizedString('NameKey', locale=Locale.EnUs)
     sub_name_en: str | None = LocalizedString('Name2Key', None, locale=Locale.EnUs)
 
-    type_id: int = DataProperty('CharacterType')  # 0 (56 matches), 1 (11), or 2 (7); not clear what this indicates
+    char_type: CharacterType = DataProperty('CharacterType', CharacterType)
     element: Element = DataProperty('ElementType', Element)
 
     job: Job = DataProperty('JobFlags', Job)
@@ -94,7 +94,7 @@ class Character(NamedEntity, file_name_fmt='CharacterMB'):
         summary = {
             'id': self.full_id,
             'name': self.full_name,
-            'type': self.type_id,
+            'type': self.char_type.name,
             'element': self.element.name.title(),
             'job': self.job.name.title(),
             'rarity': self.rarity.name,

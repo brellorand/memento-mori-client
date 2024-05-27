@@ -7,8 +7,11 @@ from __future__ import annotations
 import logging
 from enum import StrEnum, IntEnum, IntFlag, CONFORM
 
-__all__ = ['Rarity', 'RuneRarity', 'Region', 'Locale', 'LOCALES']
+__all__ = ['Region', 'Locale', 'LOCALES']
 log = logging.getLogger(__name__)
+
+
+# region Locale / Region
 
 
 class Locale(StrEnum):
@@ -74,32 +77,6 @@ class Locale(StrEnum):
 LOCALES = list(Locale)
 
 
-class Rarity(StrEnum):
-    R = 'R'
-    R_PLUS = 'R+'
-    SR = 'SR'
-    SR_PLUS = 'SR+'
-    SSR = 'SSR'
-    SSR_PLUS = 'SSR+'
-    UR = 'UR'
-    UR_PLUS = 'UR+'
-    LR = 'LR'
-    LR_1 = 'LR+1'
-    LR_2 = 'LR+2'
-    LR_3 = 'LR+3'
-    LR_4 = 'LR+4'
-    LR_5 = 'LR+5'
-    LR_6 = 'LR+6'
-
-
-class RuneRarity(StrEnum):
-    R = 'R'
-    SR = 'SR'
-    SSR = 'SSR'
-    UR = 'UR'
-    LR = 'LR'
-
-
 class Region(IntEnum):
     JAPAN = 1
     KOREA = 2
@@ -122,25 +99,24 @@ class Region(IntEnum):
         return (self._value_ * 1000) + world_id
 
 
-class Element(IntEnum):
-    AZURE = 1
-    CRIMSON = 2
-    EMERALD = 3
-    AMBER = 4
-    RADIANCE = 5
-    CHAOS = 6
+# endregion
 
 
-class Job(IntEnum):
-    WARRIOR = 1
-    SNIPER = 2
-    SORCERER = 4
+# region Runes
 
 
-class CharacterRarity(IntEnum):
-    N = 1
-    R = 2
-    SR = 8
+class RuneRarity(StrEnum):
+    R = 'R'
+    SR = 'SR'
+    SSR = 'SSR'
+    UR = 'UR'
+    LR = 'LR'
+
+
+# endregion
+
+
+# region Game Client Internals
 
 
 class SnsType(IntEnum):
@@ -154,20 +130,16 @@ class SnsType(IntEnum):
     GooglePlay = 6
 
 
+# endregion
+
+
+# region Errors
+
+
 class ErrorLogType(IntEnum):
     NONE = 0
     ErrorCode = 1
     ClientErrorCode = 2
-
-
-class LegendLeagueClassType(IntEnum):
-    NONE = 0
-    Chevalier = 1
-    Paladin = 2
-    Duke = 3
-    Royal = 4
-    Legend = 5
-    WorldRuler = 6
 
 
 class ErrorCode(IntEnum):
@@ -976,6 +948,12 @@ class ErrorCode(IntEnum):
     StripeNotFoundSession = 5_010_013
 
 
+# endregion
+
+
+# region Items
+
+
 class ItemType(IntEnum):
     NONE = 0
     CurrencyFree = 1
@@ -1018,6 +996,12 @@ class ItemType(IntEnum):
     StripeCoupon = 1_001
 
 
+# endregion
+
+
+# region Equipment
+
+
 class EquipmentRarityFlags(IntFlag, boundary=CONFORM):
     NONE = 0
     D = 1
@@ -1032,7 +1016,51 @@ class EquipmentRarityFlags(IntFlag, boundary=CONFORM):
     LR = 512
 
 
-class CharacterRarityFlags(IntFlag, boundary=CONFORM):
+class EquipmentSlotType(IntEnum):
+    Weapon = 1
+    Sub = 2
+    Gauntlet = 3
+    Helmet = 4
+    Armor = 5
+    Shoes = 6
+
+
+class EquipmentCategory(IntEnum):
+    Normal = 1
+    Set = 2
+    Exclusive = 3
+
+
+class BaseParameterType(IntEnum):
+    Muscle = 1
+    Energy = 2
+    Intelligence = 3
+    Health = 4
+
+
+# endregion
+
+
+# region Character
+
+
+class Element(IntEnum):
+    AZURE = 1
+    CRIMSON = 2
+    EMERALD = 3
+    AMBER = 4
+    RADIANCE = 5
+    CHAOS = 6
+
+
+class Job(IntEnum):
+    NONE = 0
+    WARRIOR = 1
+    SNIPER = 2
+    SORCERER = 4
+
+
+class CharacterRarity(IntFlag, boundary=CONFORM):
     NONE = 0
     N = 1
     R = 2
@@ -1056,17 +1084,49 @@ class CharacterRarityFlags(IntFlag, boundary=CONFORM):
     LRPlus10 = 524_288
 
 
-class BaseParameterType(IntEnum):
-    Muscle = 1
-    Energy = 2
-    Intelligence = 3
-    Health = 4
+class CharacterType(IntEnum):
+    Normal = 0
+    Qlipha = 1
+    ColorChange = 2
 
 
-class EquipmentSlotType(IntEnum):
-    Weapon = 1
-    Sub = 2
-    Gauntlet = 3
-    Helmet = 4
-    Armor = 5
-    Shoes = 6
+# endregion
+
+
+# region Friends
+
+
+class FriendStatusType(IntEnum):
+    NONE = 0
+    Stranger = 1
+    Friend = 2
+    Applying = 3
+    Receive = 4
+
+
+class FriendInfoType(IntEnum):
+    NONE = 0
+    Friend = 1
+    ApprovalPending = 2
+    Applying = 3
+    Block = 4
+    Recommend = 5
+
+
+# endregion
+
+
+# region PvP
+
+
+class LegendLeagueClassType(IntEnum):
+    NONE = 0
+    Chevalier = 1
+    Paladin = 2
+    Duke = 3
+    Royal = 4
+    Legend = 5
+    WorldRuler = 6
+
+
+# endregion
