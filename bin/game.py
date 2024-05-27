@@ -24,6 +24,7 @@ class GameCLI(Command, description='Memento Mori Game Manager', option_name_mode
     config_file = Option(
         '-cf', type=IPath(type='file'), help='Config file path (default: ~/.config/memento-mori-client)'
     )
+    http_save_dir = Option('-hsd', type=IPath(type='dir'), help='Save HTTP requests and responses to files in this dir')
 
     def _init_command_(self):
         from mm.logging import init_logging
@@ -32,7 +33,7 @@ class GameCLI(Command, description='Memento Mori Game Manager', option_name_mode
 
     @cached_property
     def mm_session(self) -> MementoMoriSession:
-        return MementoMoriSession(self.config_file, use_auth_cache=False)
+        return MementoMoriSession(self.config_file, use_auth_cache=False, http_save_dir=self.http_save_dir)
 
 
 class Login(GameCLI, help='Log in for the first time'):

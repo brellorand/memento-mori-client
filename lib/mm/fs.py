@@ -12,8 +12,9 @@ from getpass import getuser
 from pathlib import Path
 from string import printable
 from tempfile import gettempdir
-from typing import Mapping
-from urllib.parse import quote
+from time import time_ns
+from typing import Mapping, Any
+from urllib.parse import quote, urlparse
 
 import msgpack
 
@@ -84,6 +85,38 @@ class FileCache:
             path.write_bytes(msgpack.packb(data))
         else:
             raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
+
+
+class HTTPSaver:
+    __slots__ = ('dir',)
+
+    def __init__(self, directory: PathLike):
+        self.dir = Path(directory).resolve()
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+    def save_request(self, method: str, url: str, headers: dict[str, Any], data=None):
+        self._save('req', method, url, headers, data)
+
+    def save_response(self, method: str, url: str, headers: dict[str, Any], data: bytes):
+        # 0=Timestamp, 1=float (Seconds from the EPOCH), 2=int (ns from the EPOCH), 3=datetime.datetime (UTC)
+        self._save('resp', method, url, headers, msgpack.unpackb(data, timestamp=2, strict_map_key=False))
+
+    @classmethod
+    def _prep_data(cls, data):
+        if isinstance(data, dict):
+            # msgpack supports int keys, but json does not
+            return {str(k): cls._prep_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [cls._prep_data(v) for v in data]
+        else:
+            return data
+
+    def _save(self, kind: str, method: str, url: str, headers, data):
+        to_save = {'headers': dict(headers), 'data': self._prep_data(data)}
+        parsed = urlparse(url)
+        name = f'{time_ns()}_{method}_{kind}_{parsed.hostname}{"__".join(parsed.path.split("/"))}.json'
+        with self.dir.joinpath(name).open('w', encoding='utf-8') as f:
+            json.dump(to_save, f, indent=4, ensure_ascii=False)
 
 
 def get_config_dir(mode: int = 0o755) -> Path:

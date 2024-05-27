@@ -19,7 +19,7 @@ from requests import Session, Response, HTTPError
 from .config import ConfigFile, AccountConfig
 from .data import GameData, OrtegaInfo
 from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
-from .fs import FileCache, PathLike
+from .fs import FileCache, HTTPSaver, PathLike
 from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
 
 if TYPE_CHECKING:
@@ -349,16 +349,21 @@ class AppVersionManager:
 
 class OrtegaClient(RequestsClient):
     __config: ConfigFile
+    _http_saver: HTTPSaver = None
 
-    def __init__(self, host: str, *, config: PathLike | ConfigFile = None, **kwargs):
+    def __init__(self, host: str, *, config: PathLike | ConfigFile = None, save_dir: PathLike = None, **kwargs):
         super().__init__(host, **kwargs)
         if config is not None:
             self.config = config
+        if save_dir:
+            self._http_saver = HTTPSaver(save_dir)
 
     @classmethod
     def child_client(cls, parent_client: OrtegaClient, host: str, **kwargs) -> Self:
         child = cls(host, config=parent_client.config, shared_session=True, **kwargs)
         child.session = parent_client.session
+        if parent_client._http_saver:
+            child._http_saver = parent_client._http_saver
         return child
 
     @property
@@ -393,8 +398,15 @@ class OrtegaClient(RequestsClient):
             self.session.headers['ortegaaccesstoken'] = next_token
 
     def _post_msg(self, uri_path: str, to_pack, **kwargs):
+        if self._http_saver:
+            self._http_saver.save_request('POST', self.url_for(uri_path), self.session.headers, to_pack)
+
         resp = self.post(uri_path, data=msgpack.packb(to_pack), **kwargs)
+        # 0=Timestamp, 1=float (Seconds from the EPOCH), 2=int (ns from the EPOCH), 3=datetime.datetime (UTC)
         data = msgpack.unpackb(resp.content, timestamp=3, strict_map_key=False)
+        if self._http_saver:
+            self._http_saver.save_response('POST', self.url_for(uri_path), resp.headers, resp.content)
+
         if (status_code := resp.headers.get('ortegastatuscode')) and status_code != '0':
             # TODO: If the error code in the resp body is 103 / CommonRequireClientUpdate, automatically update?
             raise ApiResponseError(resp, data)
@@ -409,6 +421,7 @@ class AuthClient(OrtegaClient):
         ortega_uuid: str = None,
         use_cache: bool = True,
         config: PathLike | ConfigFile = None,
+        **kwargs,
     ):
         self.config = config
         if app_version:
@@ -423,7 +436,7 @@ class AuthClient(OrtegaClient):
             'accept-encoding': 'gzip',
             'User-Agent': 'BestHTTP/2 v2.3.0',
         }
-        super().__init__(AUTH_HOST, scheme='https', path_prefix='api', headers=headers)
+        super().__init__(AUTH_HOST, scheme='https', path_prefix='api', headers=headers, **kwargs)
         self.cache = FileCache('auth', use_cache=use_cache)
         self.__made_first_req = False
 
