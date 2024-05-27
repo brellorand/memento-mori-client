@@ -4,8 +4,10 @@ Classes representing player / player + world accounts
 
 from __future__ import annotations
 
+import json
 import logging
 from functools import cached_property, partial
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .data import UserSyncData
@@ -38,14 +40,23 @@ class PlayerAccount:
     """A player account, which may contain one or more :class:`.WorldAccount`s"""
 
     session: MementoMoriSession
-    config: ConfigFile
-    account_config: AccountConfig
+    config: ConfigFile = None
+    account_config: AccountConfig = None
     _last_world: WorldAccount = None
 
-    def __init__(self, session: MementoMoriSession, config: AccountConfig):
+    def __init__(self, session: MementoMoriSession, config: AccountConfig | None):
         self.session = session
-        self.config = config.parent
-        self.account_config = config
+        if config is not None:
+            self.config = config.parent
+            self.account_config = config
+
+    @classmethod
+    def from_cached_login(cls, path: Path, session: MementoMoriSession, config: AccountConfig = None) -> PlayerAccount:
+        self = cls(session, config)
+        if config is None:
+            self.config = session.config
+        self.__dict__['login_data'] = _load_cached_data(path)
+        return self
 
     @cached_property
     def login_data(self) -> LoginResponse:
@@ -151,6 +162,14 @@ class WorldAccount(ClearableCachedPropertyMixin):
         self.player = player
         self._world_id = world_id
         self._is_logged_in = False
+
+    @classmethod
+    def from_cached_sync_data(cls, path: Path, player: PlayerAccount) -> WorldAccount:
+        data = _load_cached_data(path)
+        player_id = data['UserSyncData']['UserStatusDtoInfo']['PlayerId']
+        self = cls(player, player.region.normalize_world(player_id % 1000))
+        self.user_sync_data = UserSyncData(data['UserSyncData'])
+        return self
 
     # region General Properties
 
@@ -317,3 +336,13 @@ class WorldAccount(ClearableCachedPropertyMixin):
         )
 
     # endregion
+
+
+def _load_cached_data(path: Path):
+    with path.open('r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    if len(data) == 2 and set(data) == {'headers', 'data'}:
+        return data['data']
+    else:
+        return data

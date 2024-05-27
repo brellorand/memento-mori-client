@@ -1,10 +1,14 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 import json
 import logging
 from abc import ABC
 from functools import cached_property
 from getpass import getpass
+from operator import itemgetter
+from typing import TYPE_CHECKING, Iterator
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, after_main, main
 from cli_command_parser.inputs import Path as IPath
@@ -15,6 +19,9 @@ from mm.account import PlayerAccount, WorldAccount
 from mm.session import MementoMoriSession
 from mm.config import AccountConfig
 from mm.output import CompactJSONEncoder
+
+if TYPE_CHECKING:
+    from mm.models import Equipment
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +61,9 @@ class WorldCommand(GameCLI, ABC):
     with ParamGroup('Account', required=True, mutually_exclusive=True):
         user_id = Option('-i', type=int, help='Numeric user ID')
         name = Option('-n', help='Friendly name associated with the account')
+        with ParamGroup(mutually_dependent=True):
+            player_login_path = Option('-PL', type=IPath(type='file', exists=True), help='Cached player login response')
+            user_sync_path = Option('-US', type=IPath(type='file', exists=True), help='Cached user sync data response')
 
     world: int
     sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
@@ -64,12 +74,16 @@ class WorldCommand(GameCLI, ABC):
     def player_account(self) -> PlayerAccount:
         if self.user_id:
             return self.mm_session.get_account_by_id(self.user_id)
-        else:
+        elif self.name:
             return self.mm_session.get_account_by_name(self.name)
+        else:
+            return PlayerAccount.from_cached_login(self.player_login_path, self.mm_session)
 
     @cached_property
     def world_account(self) -> WorldAccount:
-        if not self.world:
+        if self.user_sync_path:
+            return WorldAccount.from_cached_sync_data(self.user_sync_path, self.player_account)
+        elif not self.world:
             raise UsageError('Missing required parameter: --world / -w')
         return self.player_account.get_world(self.world)
 
@@ -88,6 +102,10 @@ class Show(WorldCommand, help='Show info'):
 
     world: int = Option('-w', help='The world to log in to (required for some items)')
     # sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
+    sort_by = Option(
+        '-S', nargs='+', choices=('Name', 'Rarity', 'Level', 'Slot', 'Quantity'),
+        help='Sort the equipment table by the specified columns',
+    )
 
     # region Actions
 
@@ -117,7 +135,56 @@ class Show(WorldCommand, help='Show info'):
             for item in char.equipment:
                 print(f'    - {item}')
 
+    @item
+    def unequipped(self):
+        self.print_equipment_rows('Unequipped Gear', self.get_equipment_rows(unequipped=True))
+
+    @item
+    def all_equipment(self):
+        self.print_equipment_rows('All Equipment', self.get_equipment_rows(unequipped=False))
+
     # endregion
+
+    def print_equipment_rows(self, title: str, rows):
+        from rich.console import Console
+        from rich.table import Table, Column
+
+        columns = ('Name', 'Rarity', 'Level', 'Slot', Column('Quantity', justify='right'))
+        table = Table(*columns, title=title)
+        for row in rows:
+            table.add_row(*map(str, row.values()))
+
+        Console().print(table)
+
+    def get_equipment_rows(self, unequipped: bool):
+        gear = {}
+        for item in self.iter_equipment(unequipped=unequipped):
+            try:
+                row = gear[item.equipment_id]
+            except KeyError:
+                eq = item.equipment
+                gear[item.equipment_id] = {
+                    'Name': eq.name, 'Rarity': eq.rarity_flags, 'Level': eq.level, 'Slot': eq.slot_type, 'Quantity': 1
+                }
+            else:
+                row['Quantity'] += 1
+
+        rows = sorted(gear.values(), key=itemgetter(*(self.sort_by or ['Level', 'Rarity', 'Name'])))
+        for row in rows:
+            row['Rarity'] = row['Rarity'].name
+            row['Slot'] = row['Slot'].name
+
+        return rows
+
+    def iter_equipment(self, unequipped: bool) -> Iterator[Equipment]:
+        self.mm_session.mb.populate_cache()
+        if not self.user_sync_path:
+            self.world_account.get_user_sync_data()
+
+        if unequipped:
+            yield from self.world_account.char_guid_equipment_map.get('', ())
+        else:
+            yield from self.world_account.equipment.values()
 
 
 class Dailies(WorldCommand, help='Perform daily tasks'):
@@ -139,6 +206,7 @@ class Dailies(WorldCommand, help='Perform daily tasks'):
                 log.info('[DRY RUN] Would claim daily VIP gift')
             else:
                 log.info('Claiming daily VIP gift')
+                # TODO: Only print the items that were received
                 self.print(self.world_account.get_daily_vip_gift())
         else:
             log.info('The daily VIP gift was already claimed')
