@@ -35,11 +35,12 @@ PathLike = str | Path
 
 
 class FileCache:
-    __slots__ = ('use_cache', 'root')
+    __slots__ = ('use_cache', 'root', 'app_version')
 
-    def __init__(self, subdir: str = None, use_cache: bool = True):
+    def __init__(self, subdir: str = None, use_cache: bool = True, app_version: str = None):
         self.use_cache = use_cache
-        self.root = get_user_cache_dir(subdir)
+        self.root = get_user_cache_dir(f'{subdir}/{app_version}' if app_version else subdir)
+        self.app_version = app_version
 
     def get(self, name: str):
         if not self.use_cache:
@@ -51,7 +52,9 @@ class FileCache:
         except OSError as e:
             raise CacheMiss from e
 
-        if mod_time.date() != date.today():
+        # Ignore modification date if this cache is based on app version.
+        # The date is still obtained above in this case to verify the existence of the file.
+        if not self.app_version and mod_time.date() != date.today():
             raise CacheMiss
 
         try:

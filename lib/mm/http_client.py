@@ -619,8 +619,9 @@ class DataClient(RequestsClient):
         }
         super().__init__(urlparse(self.game_data.asset_catalog_uri_fmt).hostname, scheme='https', headers=headers)
         self.cache = FileCache('data', use_cache=use_data_cache)
-        self._mb_cache = FileCache('mb')
-        self._use_mb_cache = use_mb_cache
+        self._mb_cache = FileCache(
+            'mb', use_cache=use_mb_cache, app_version=self.auth.config.app_version_manager.get_version()
+        )
 
     def _get_asset(self, name: str) -> Response:
         url = self.game_data.asset_catalog_uri_fmt.format(f'{self.system}/{name}')
@@ -643,17 +644,13 @@ class DataClient(RequestsClient):
     #     return self.head(url, relative=False).headers['etag'].strip('"')
 
     def get_mb_data_if_cached(self, name: str):
-        if not self._use_mb_cache:
-            return None
         try:
             return self._mb_cache.get(f'{name}.msgpack')
         except CacheMiss:
             return None
 
     def get_mb_data(self, name: str, refresh: bool = False):
-        if not self._use_mb_cache:
-            return self._get_mb_data(name)
-        elif not refresh:
+        if not refresh:
             try:
                 return self._mb_cache.get(f'{name}.msgpack')
             except CacheMiss:
