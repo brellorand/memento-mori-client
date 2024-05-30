@@ -10,18 +10,20 @@ from getpass import getpass
 from operator import itemgetter
 from typing import TYPE_CHECKING, Iterator
 
-from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, after_main, main
+from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, main
 from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.account import PlayerAccount, WorldAccount
-from mm.session import MementoMoriSession
 from mm.config import AccountConfig
+from mm.enums import ItemRarityFlags, EquipmentType, ITEM_PAGE_TYPE_MAP
 from mm.output import CompactJSONEncoder
+from mm.session import MementoMoriSession
 
 if TYPE_CHECKING:
-    from mm.models import Equipment
+    from mm.models import Equipment, ItemAndCount
+    from mm.mb_models import Equipment as MBEquipment
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +95,163 @@ class WorldCommand(GameCLI, ABC):
         print(json.dumps(data, indent=4, sort_keys=self.sort_keys, ensure_ascii=False, cls=CompactJSONEncoder))
 
 
+class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory'):
+    view = Action(help='The view to show')
+    world: int = Option('-w', help='The world to log in to')
+    sort_by = Option(
+        '-S', nargs='+', choices=('Name', 'Rarity', 'Level', 'Slot', 'Quantity'),
+        help='Sort the equipment table by the specified columns',
+    )
+    show_ids = Flag('-I', help='Show item and type IDs')
+    include_zero = Flag('-z', help='Include items with quantity=0')
+    page = Option('-p', choices=ITEM_PAGE_TYPE_MAP, help='Show only items that appear on the specified inventory page')
+
+    # region View Actions
+
+    @view
+    def unequipped(self):
+        self.print_item_rows('Unequipped Gear', self.get_equipment_rows(unequipped=True))
+
+    @view
+    def all_equipment(self):
+        self.print_item_rows('All Equipment', self.get_equipment_rows(unequipped=False))
+
+    @view
+    def inventory(self):
+        rows = self.get_inventory_rows()
+        rows = sorted(rows, key=itemgetter(*(self.sort_by or ['Type', 'Level', 'Slot', 'Rarity', 'Name'])))
+        for row in rows:
+            row['Quantity'] = f'{row["Quantity"]:,d}'
+            row['Rarity'] = '' if row['Rarity'] == ItemRarityFlags.NONE else row['Rarity'].name
+            row['Slot'] = '' if row['Slot'] == EquipmentType.NONE else row['Slot'].name
+            if row['Level'] == -1:
+                row['Level'] = ''
+
+        self.print_item_rows('Inventory', rows)
+
+    # endregion
+
+    # region Print Table
+
+    def print_item_rows(self, title: str, rows):
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(*self._table_columns(), title=title)
+        for row in rows:
+            table.add_row(*map(str, row.values()))
+
+        Console().print(table)
+
+    def _table_columns(self):
+        from rich.table import Column
+
+        if self.view == 'inventory':
+            if self.show_ids:
+                yield Column('Type ID', justify='right')
+            yield 'Type'
+
+        if self.show_ids:
+            yield Column('Item ID', justify='right')
+
+        yield 'Name'
+        yield Column('Quantity', justify='right')
+        yield 'Rarity'
+        yield Column('Level', justify='right')
+        yield 'Slot'
+
+    # endregion
+
+    def _ensure_user_sync_data_is_loaded(self):
+        self.mm_session.mb.populate_cache()
+        if not self.user_sync_path:
+            self.world_account.get_user_sync_data()
+
+    # region Equipment
+
+    def get_equipment_rows(self, unequipped: bool):
+        gear = {}
+        for item in self.iter_equipment(unequipped=unequipped):
+            try:
+                row = gear[item.equipment_id]
+            except KeyError:
+                gear[item.equipment_id] = self._get_equipment_row(item.equipment)
+            else:
+                row['Quantity'] += 1
+
+        rows = sorted(gear.values(), key=itemgetter(*(self.sort_by or ['Level', 'Slot', 'Rarity', 'Name'])))
+        for row in rows:
+            row['Rarity'] = row['Rarity'].name
+            row['Slot'] = row['Slot'].name
+
+        return rows
+
+    def _get_equipment_row(self, eq: MBEquipment):
+        if self.show_ids:
+            return {
+                'Item ID': eq.item_id, 'Name': eq.name, 'Rarity': eq.rarity_flags,
+                'Level': eq.level, 'Slot': eq.gear_type, 'Quantity': 1,
+            }
+        else:
+            return {'Name': eq.name, 'Rarity': eq.rarity_flags, 'Level': eq.level, 'Slot': eq.gear_type, 'Quantity': 1}
+
+    def iter_equipment(self, unequipped: bool) -> Iterator[Equipment]:
+        self._ensure_user_sync_data_is_loaded()
+        if unequipped:
+            yield from self.world_account.char_guid_equipment_map.get('', ())
+        else:
+            yield from self.world_account.equipment.values()
+
+    # endregion
+
+    # region Inventory
+
+    def get_inventory_rows(self):
+        self._ensure_user_sync_data_is_loaded()
+
+        inventory = self.world_account.inventory
+        if not self.include_zero:
+            inventory = (i for i in inventory if i.count != 0)
+        if self.page:
+            types = ITEM_PAGE_TYPE_MAP[self.page]
+            inventory = (i for i in inventory if i.item_type in types)
+
+        return [self._get_inventory_row(item_and_count) for item_and_count in inventory]
+
+    def _get_inventory_row(self, item_and_count: ItemAndCount):
+        try:
+            item = item_and_count.item
+        except KeyError:
+            name = f'id={item_and_count.item_id}'
+            level, rarity, slot = -1, ItemRarityFlags.NONE, EquipmentType.NONE
+        else:
+            name = getattr(item, 'display_name', item.name)
+            level = getattr(item, 'level', -1)
+            rarity = getattr(item, 'rarity_flags', ItemRarityFlags.NONE)
+            slot = getattr(item, 'gear_type', EquipmentType.NONE)
+
+        if self.show_ids:
+            row = {
+                'Type ID': item_and_count.item_type.value,
+                'Type': item_and_count.item_type.name,
+                'Item ID': item_and_count.item_id,
+            }
+        else:
+            row = {'Type': item_and_count.item_type.name}
+
+        # TODO: The count for runes and some other items is 0 for many rows - does it just indicate that the user has
+        #  obtained that item at least once, but consumed it?
+        return row | {
+            'Name': name,
+            'Quantity': item_and_count.count,
+            'Rarity': rarity,
+            'Level': level,
+            'Slot': slot,
+        }
+
+    # endregion
+
+
 class Show(WorldCommand, help='Show info'):
     item = Action(help='The item to show')
 
@@ -101,11 +260,6 @@ class Show(WorldCommand, help='Show info'):
     #     name = Option('-n', help='Friendly name associated with the account')
 
     world: int = Option('-w', help='The world to log in to (required for some items)')
-    # sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
-    sort_by = Option(
-        '-S', nargs='+', choices=('Name', 'Rarity', 'Level', 'Slot', 'Quantity'),
-        help='Sort the equipment table by the specified columns',
-    )
 
     # region Actions
 
@@ -135,60 +289,11 @@ class Show(WorldCommand, help='Show info'):
             for item in char.equipment:
                 print(f'    - {item}')
 
-    @item
-    def unequipped(self):
-        self.print_equipment_rows('Unequipped Gear', self.get_equipment_rows(unequipped=True))
-
-    @item
-    def all_equipment(self):
-        self.print_equipment_rows('All Equipment', self.get_equipment_rows(unequipped=False))
-
     # endregion
-
-    def print_equipment_rows(self, title: str, rows):
-        from rich.console import Console
-        from rich.table import Table, Column
-
-        columns = ('Name', 'Rarity', 'Level', 'Slot', Column('Quantity', justify='right'))
-        table = Table(*columns, title=title)
-        for row in rows:
-            table.add_row(*map(str, row.values()))
-
-        Console().print(table)
-
-    def get_equipment_rows(self, unequipped: bool):
-        gear = {}
-        for item in self.iter_equipment(unequipped=unequipped):
-            try:
-                row = gear[item.equipment_id]
-            except KeyError:
-                eq = item.equipment
-                gear[item.equipment_id] = {
-                    'Name': eq.name, 'Rarity': eq.rarity_flags, 'Level': eq.level, 'Slot': eq.slot_type, 'Quantity': 1
-                }
-            else:
-                row['Quantity'] += 1
-
-        rows = sorted(gear.values(), key=itemgetter(*(self.sort_by or ['Level', 'Rarity', 'Name'])))
-        for row in rows:
-            row['Rarity'] = row['Rarity'].name
-            row['Slot'] = row['Slot'].name
-
-        return rows
-
-    def iter_equipment(self, unequipped: bool) -> Iterator[Equipment]:
-        self.mm_session.mb.populate_cache()
-        if not self.user_sync_path:
-            self.world_account.get_user_sync_data()
-
-        if unequipped:
-            yield from self.world_account.char_guid_equipment_map.get('', ())
-        else:
-            yield from self.world_account.equipment.values()
 
 
 class Dailies(WorldCommand, help='Perform daily tasks'):
-    world: int = Option('-w', required=True, help='The world to log in to (required for some items)')
+    world: int = Option('-w', required=True, help='The world to log in to')
     actions = Option('-a', choices=('vip_gift',), required=True, help='The actions to take')
     dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
 

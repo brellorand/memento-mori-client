@@ -8,8 +8,8 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-from .enums import CharacterRarity
-from .mb_models import Character as MBCharacter, Equipment as MBEquipment
+from .enums import CharacterRarity, ItemType
+from .mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipment
 from .properties import DataProperty
 
 if TYPE_CHECKING:
@@ -29,25 +29,24 @@ class Equipment(WorldEntity):
     guid: str = DataProperty('Guid')
     char_guid: str = DataProperty('CharacterGuid')  # Empty string indicates this item is not equipped
     equipment_id: int = DataProperty('EquipmentId')
+
     upgrade_level: int = DataProperty('ReinforcementLv')
+
+    reforged_str: int = DataProperty('AdditionalParameterMuscle')
+    reforged_dex: int = DataProperty('AdditionalParameterEnergy')
+    reforged_mag: int = DataProperty('AdditionalParameterIntelligence')
+    reforged_sta: int = DataProperty('AdditionalParameterHealth')
+
+    holy_augment_level: int = DataProperty('LegendSacredTreasureLv')
+    holy_augment_exp: int = DataProperty('LegendSacredTreasureExp')
+    dark_augment_level: int = DataProperty('MatchlessSacredTreasureLv')
+    dark_augment_exp: int = DataProperty('MatchlessSacredTreasureExp')
+
     rune_id_1: int = DataProperty('SphereId1')
     rune_id_2: int = DataProperty('SphereId2')
     rune_id_3: int = DataProperty('SphereId3')
     rune_id_4: int = DataProperty('SphereId4')
     rune_slots_unlocked: int = DataProperty('SphereUnlockedCount')
-
-    """
-    TODO:
-    "AdditionalParameterHealth": 0,
-    "AdditionalParameterIntelligence": 0,
-    "AdditionalParameterMuscle": 25,
-    "AdditionalParameterEnergy": 0,
-
-    "LegendSacredTreasureExp": 0,
-    "LegendSacredTreasureLv": 0,
-    "MatchlessSacredTreasureExp": 0,
-    "MatchlessSacredTreasureLv": 0,
-    """
 
     @cached_property
     def equipment(self) -> MBEquipment:
@@ -58,6 +57,17 @@ class Equipment(WorldEntity):
         level, slot_type, rarity = equip.level, equip.slot_type.name, equip.rarity_flags.name
         guid = self.guid
         return f'<{self.__class__.__name__}[{equip.name}, {rarity=}, {level=}, {slot_type=}, {guid=}]>'
+
+
+class ItemAndCount(WorldEntity):
+    item_type: ItemType = DataProperty('ItemType', ItemType)
+    item_id: int = DataProperty('ItemId')
+    count: int = DataProperty('ItemCount')
+    player_id: int = DataProperty('PlayerId')
+
+    @cached_property
+    def item(self) -> AnyItem:
+        return self.world.session.mb.get_item(self.item_type, self.item_id)
 
 
 class Character(WorldEntity):

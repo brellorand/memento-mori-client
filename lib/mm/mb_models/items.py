@@ -6,10 +6,18 @@ from __future__ import annotations
 
 import logging
 from functools import cached_property
+from typing import TYPE_CHECKING
 
-from mm.enums import EquipmentSlotType, EquipmentRarityFlags, Job, EquipmentCategory
+from mm.enums import (
+    EquipmentSlotType, EquipmentRarityFlags, Job, EquipmentCategory, ItemType, SphereType, BaseParameterType,
+    ChangeParameterType, EquipmentType,
+)
 from mm.properties import DataProperty, DictAttrFieldNotFoundError
 from .base import MB, MBEntity, NamedEntity, FullyNamedEntity
+from .utils import LocalizedString
+
+if TYPE_CHECKING:
+    from .characters import Character
 
 __all__ = [
     'Item',
@@ -25,8 +33,31 @@ log = logging.getLogger(__name__)
 
 
 class TypedItem:
-    item_id: int = DataProperty('ItemId')
-    item_type: int = DataProperty('ItemType')
+    _item_type: ItemType = None
+    _item_type_cls_map = {}
+    item_type: ItemType
+
+    def __init_subclass__(cls, item_type: ItemType = None, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if item_type is not None:
+            cls._item_type = item_type
+            cls._item_type_cls_map[item_type] = cls
+            cls.item_type = DataProperty('ItemType', ItemType, default=item_type)  # noqa
+        else:
+            cls.item_type = DataProperty('ItemType', ItemType)  # noqa
+
+        cls.item_type.name = 'item_type'
+
+    @classmethod
+    def get_type_class(cls, item_type: ItemType):
+        return cls._item_type_cls_map.get(item_type, Item)
+
+    @cached_property
+    def item_id(self) -> int:
+        try:
+            return self.data['ItemId']  # noqa
+        except KeyError:
+            return self.data['Id']  # noqa
 
 
 class Item(TypedItem, FullyNamedEntity, file_name_fmt='ItemMB'):
@@ -57,12 +88,12 @@ class Item(TypedItem, FullyNamedEntity, file_name_fmt='ItemMB'):
 class ItemAndCount(MBEntity):
     """A row in a list of reward/required items"""
 
-    item_type: int = DataProperty('ItemType')
+    item_type: ItemType = DataProperty('ItemType', ItemType)
     item_id: int = DataProperty('ItemId')
     count: int = DataProperty('ItemCount')
 
     @cached_property
-    def item(self) -> Item | TypedItem:
+    def item(self) -> AnyItem:
         return self.mb.get_item(self.item_type, self.item_id)
 
     def __str__(self) -> str:
@@ -78,7 +109,9 @@ class ItemAndCount(MBEntity):
         return f'{name} x {self.count:,d}'
 
 
-class EquipmentSetMaterial(FullyNamedEntity, file_name_fmt='EquipmentSetMaterialMB'):
+class EquipmentSetMaterial(
+    TypedItem, FullyNamedEntity, file_name_fmt='EquipmentSetMaterialMB', item_type=ItemType.EquipmentSetMaterial
+):
     """
     Represents an entry in ``EquipmentSetMaterialMB`` (an Adamantite material).
 
@@ -102,7 +135,7 @@ class EquipmentSetMaterial(FullyNamedEntity, file_name_fmt='EquipmentSetMaterial
         return f'Lv {self.level} {self.name}'
 
 
-class ChangeItem(TypedItem, MBEntity, file_name_fmt='ChangeItemMB'):
+class ChangeItem(TypedItem, MBEntity, file_name_fmt='ChangeItemMB'):  # Each entry has its own type
     """
     Represents an entry in ``ChangeItemMB``.  Most entries appear to be related to Adamantite materials.
     """
@@ -115,7 +148,7 @@ class ChangeItem(TypedItem, MBEntity, file_name_fmt='ChangeItemMB'):
         return [ItemAndCount(self.mb, ic) for ic in self.data['ChangeItems']]
 
 
-class EquipmentPart(TypedItem, MBEntity):
+class EquipmentPart(TypedItem, MBEntity, item_type=ItemType.EquipmentFragment):
     """Pseudo MBEntity that represents parts of upgradable equipment."""
 
     def __init__(self, mb: MB, equipment: Equipment):
@@ -124,7 +157,7 @@ class EquipmentPart(TypedItem, MBEntity):
         self.name = f'{equipment.name} Parts'
 
 
-class Equipment(NamedEntity, file_name_fmt='EquipmentMB'):
+class Equipment(TypedItem, NamedEntity, file_name_fmt='EquipmentMB', item_type=ItemType.Equipment):
     """
     Represents a row in EquipmentMB
 
@@ -181,6 +214,10 @@ class Equipment(NamedEntity, file_name_fmt='EquipmentMB'):
     reinforce_material_id: int = DataProperty('EquipmentReinforcementMaterialId')
 
     @cached_property
+    def gear_type(self) -> EquipmentType:
+        return EquipmentType.for_slot_and_job(self.slot_type, self.job_flags)
+
+    @cached_property
     def enhance_requirements(self) -> EquipmentEnhancement | None:
         try:
             return self.mb.equipment_enhance_reqs[self.enhance_id].level_enhancement_map[self.level]
@@ -230,3 +267,69 @@ class EquipmentEnhanceRequirements(MBEntity, file_name_fmt='EquipmentEvolutionMB
             row['BeforeEquipmentLv']: EquipmentEnhancement(self.mb, row)
             for row in self.data['EquipmentEvolutionInfoList']
         }
+
+
+class Rune(TypedItem, NamedEntity, file_name_fmt='SphereMB', item_type=ItemType.Rune):
+    """
+    Example:
+        "Id": 15,
+        "IsIgnore": null,
+        "Memo": "腕力Lv15",
+        "BaseParameterChangeInfo": {"BaseParameterType": 1, "ChangeParameterType": 1, "Value": 250000.0},
+        "BattleParameterChangeInfo": null,
+        "CategoryId": 1,
+        "DescriptionKey": "[SphereDescription1]",
+        "IsAttackType": true,
+        "ItemListRequiredToCombine": [{"ItemCount": 99999, "ItemId": 1, "ItemType": 1}],
+        "Lv": 15,
+        "NameKey": "[SphereName1]",
+        "RarityFlags": 256,
+        "SphereType": 3
+    """
+
+    level: int = DataProperty('Lv')
+    description: str = LocalizedString('DescriptionKey', default_to_key=True)
+    rarity_flags: EquipmentRarityFlags = DataProperty('RarityFlags', EquipmentRarityFlags)
+    sphere_type: SphereType = DataProperty('SphereType', SphereType)
+    is_attack_type: bool = DataProperty('IsAttackType')  # Offensive (as opposed to defensive)
+
+    param_type: BaseParameterType = DataProperty('BaseParameterChangeInfo.BaseParameterType', BaseParameterType)
+    change_type: ChangeParameterType = DataProperty('BaseParameterChangeInfo.ChangeParameterType', ChangeParameterType)
+    change_amount: float = DataProperty('BaseParameterChangeInfo.Value')
+
+    category_id: int = DataProperty('CategoryId')
+
+    @cached_property
+    def display_name(self) -> str:
+        return f'Lv {self.level} {self.name}'
+
+
+class TreasureChest(TypedItem, FullyNamedEntity, file_name_fmt='TreasureChestMB', item_type=ItemType.TreasureChest):
+    """
+    Represents a row in ``TreasureChestMB``.
+
+    Note: TreasureChestItemMB appears to contain reward info for each of these
+    """
+
+    display_name: str = LocalizedString('DisplayNameKey', default_to_key=True)
+    rarity_flags: EquipmentRarityFlags = DataProperty('ItemRarityFlags', EquipmentRarityFlags)
+    key_item_id: int = DataProperty('ChestKeyItemId')  # Very few rows have this; I assume `0` means no key is needed
+
+    @cached_property
+    def key(self) -> Item | None:
+        if self.key_item_id == 0:
+            return None
+        return self.mb.get_item(ItemType.TreasureChestKey, self.key_item_id)
+
+
+class CharacterFragment(TypedItem, MBEntity, item_type=ItemType.CharacterFragment):
+    """Pseudo MBEntity that represents character fragments."""
+
+    def __init__(self, mb: MB, character: Character):
+        # TODO: Confirm whether this is accurate
+        super().__init__(mb, {'Id': character.id, 'ItemType': 7})
+        self.character = character
+        self.name = f'{character.full_name} Parts'
+
+
+AnyItem = Item | Equipment | EquipmentPart | EquipmentSetMaterial | Rune | TreasureChest | CharacterFragment

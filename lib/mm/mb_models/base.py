@@ -7,12 +7,12 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, wait, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
 from mm.data import DictWrapper
-from mm.enums import Locale
+from mm.enums import Locale, ItemType
 from mm.fs import FileCache, CacheMiss
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from mm.session import MementoMoriSession
     from .characters import Character, CharacterProfile
     from .items import Item, EquipmentSetMaterial, ChangeItem, EquipmentPart, Equipment, EquipmentUpgradeRequirements
-    from .items import EquipmentEnhanceRequirements
+    from .items import EquipmentEnhanceRequirements, Rune, AnyItem, TreasureChest, CharacterFragment
     from .player import PlayerRank, VipLevel
     from .world_group import WorldGroup
 
@@ -145,20 +145,36 @@ class MB:
 
     # region Items & Equipment
 
-    def get_item(self, item_type: int, item_id: int) -> Item | EquipmentPart | EquipmentSetMaterial:
+    # @cached_property
+    # def _get_item_type_class(self) -> Callable[[ItemType], Type[AnyItem]]:
+    #     from .items import TypedItem
+    #
+    #     return TypedItem.get_type_class
+
+    def get_item(self, item_type: ItemType | int, item_id: int) -> AnyItem:
         # ItemType=3: Gold
         # ItemType=5: object parts for a given slot/set
         # ItemType=9: Adamantite material for a given slot/level
         if type_group := self.items.get(item_type):
             return type_group[item_id]
-        elif item_type == 5:
+        elif item_type == ItemType.Equipment:  # 4
+            return self.equipment[item_id]
+        elif item_type == ItemType.EquipmentFragment:  # 5
             return self.equipment_parts[item_id]
-        elif item_type == 9:
+        elif item_type == ItemType.EquipmentSetMaterial:  # 9
             return self.adamantite[item_id]
+        elif item_type == ItemType.Rune:  # 14
+            return self.runes[item_id]
+        elif item_type == ItemType.TreasureChest:  # 17
+            return self.treasure_chests[item_id]
+        elif item_type == ItemType.CharacterFragment:  # 7
+            return self.character_fragments[item_id]
         raise KeyError(f'Unable to find item with {item_type=}, {item_id=}')
 
     @cached_property
     def items(self) -> dict[int, dict[int, Item]]:
+        from .items import Item
+
         return self._get_typed_items(Item)
 
     @cached_property
@@ -172,12 +188,15 @@ class MB:
                 type_id_item_map[item.item_type][item.item_id] = item
             except KeyError:
                 type_id_item_map[item.item_type] = {item.item_id: item}
+
         return type_id_item_map
 
     adamantite: dict[int, EquipmentSetMaterial] = MBEntityMap('EquipmentSetMaterial')
     equipment: dict[int, Equipment] = MBEntityMap('Equipment')
     equipment_enhance_reqs: dict[int, EquipmentEnhanceRequirements] = MBEntityMap('EquipmentEnhanceRequirements')
     _equipment_upgrade_reqs: dict[int, EquipmentUpgradeRequirements] = MBEntityMap('EquipmentUpgradeRequirements')
+    runes: dict[int, Rune] = MBEntityMap('Rune')
+    treasure_chests: dict[int, TreasureChest] = MBEntityMap('TreasureChest')
 
     @cached_property
     def equipment_parts(self) -> dict[int, EquipmentPart]:
@@ -198,6 +217,12 @@ class MB:
     @cached_property
     def armor_upgrade_requirements(self) -> EquipmentUpgradeRequirements:
         return self._equipment_upgrade_reqs[2]
+
+    @cached_property
+    def character_fragments(self) -> dict[int, CharacterFragment]:
+        from .items import CharacterFragment
+
+        return {char.id: CharacterFragment(self, char) for char in self.characters.values()}
 
     # endregion
 

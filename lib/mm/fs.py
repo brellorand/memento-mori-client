@@ -19,6 +19,7 @@ from urllib.parse import quote, urlparse
 import msgpack
 
 from .exceptions import CacheError, CacheMiss
+from .output import CompactJSONEncoder
 from .properties import cached_classproperty
 
 __all__ = [
@@ -127,7 +128,7 @@ class HTTPSaver:
         parsed = urlparse(url)
         name = f'{time_ns()}_{method}_{kind}_{parsed.hostname}{"__".join(parsed.path.split("/"))}.json'
         with self.dir.joinpath(name).open('w', encoding='utf-8') as f:
-            json.dump(to_save, f, indent=4, ensure_ascii=False)
+            json.dump(to_save, f, indent=4, ensure_ascii=False, cls=CompactJSONEncoder)
 
 
 def get_config_dir(mode: int = 0o755) -> Path:

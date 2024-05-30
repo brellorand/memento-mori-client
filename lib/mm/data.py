@@ -193,7 +193,7 @@ class UserSyncData(DictWrapper):
     # region Items & Equipment
 
     equipment: list[UserEquipmentDtoInfo] = DataProperty('UserEquipmentDtoInfos')
-    items: list[UserItemDtoInfo] = DataProperty('UserItemDtoInfo')
+    inventory: list[UserItemDtoInfo] = DataProperty('UserItemDtoInfo')
 
     deleted_equipment_guids: list[str] = DataProperty('DeletedEquipmentGuidList')
     item_counts: list[UserItem] = DataProperty('GivenItemCountInfoList')

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from enum import StrEnum, IntEnum, IntFlag, CONFORM
+from math import log as _log
 
 __all__ = ['Region', 'Locale', 'LOCALES']
 log = logging.getLogger(__name__)
@@ -1087,7 +1088,7 @@ class ItemType(IntEnum):
     CharacterTrainingMaterial = 11
     EquipmentReinforcementItem = 12
     ExchangePlaceItem = 13
-    Sphere = 14
+    Rune = 14  # Renamed from `Sphere`
     MatchlessSacredTreasureExpItem = 15
     GachaTicket = 16
     TreasureChest = 17
@@ -1112,6 +1113,56 @@ class ItemType(IntEnum):
     GuildTowerJobReinforcementMaterial = 36
     EventExchangePlaceItem = 50
     StripeCoupon = 1_001
+
+
+ITEM_PAGE_TYPE_MAP = {
+    '_unsorted': {
+        ItemType.Character,
+        ItemType.DungeonBattleRelic,
+        ItemType.EquipmentSetMaterial,
+        ItemType.EquipmentRarityCrystal,
+        ItemType.LevelLinkExp,
+        ItemType.ActivityMedal,
+        ItemType.PanelGetJudgmentItem,
+        ItemType.UnlockPanelGridItem,
+        ItemType.PanelUnlockItem,
+        ItemType.MusicTicket,
+        ItemType.IconFragment,
+        ItemType.EventExchangePlaceItem,
+        ItemType.StripeCoupon,
+    },
+    'Gear': {ItemType.Equipment},
+    'Consumables': {
+        ItemType.CharacterFragment,
+        ItemType.QuestQuickTicket,
+        ItemType.TreasureChest,
+        ItemType.TreasureChestKey,
+    },
+    'Materials': {
+        ItemType.CharacterTrainingMaterial,  # EXP/Kindling orbs
+        ItemType.EquipmentReinforcementItem,
+        ItemType.ExchangePlaceItem,
+        ItemType.FriendPoint,
+        ItemType.MatchlessSacredTreasureExpItem,
+        ItemType.GachaTicket,
+        ItemType.TowerBattleTicket,
+        ItemType.BossChallengeTicket,
+        ItemType.DungeonRecoveryItem,
+    },
+    'Runes': {ItemType.Rune},
+    'Parts': {ItemType.EquipmentFragment},
+    'Other': {
+        ItemType.CurrencyFree,  # Diamonds
+        ItemType.CurrencyPaid,
+        ItemType.Gold,
+        ItemType.PlayerExp,
+        ItemType.GuildFame,
+        ItemType.GuildExp,
+        ItemType.VipExp,
+        ItemType.SpecialIcon,
+        ItemType.GuildTowerJobReinforcementMaterial,
+    },
+}
 
 
 class ItemRarityFlags(IntEnum):
@@ -1149,12 +1200,31 @@ class EquipmentRarityFlags(IntFlag, boundary=CONFORM):
 
 
 class EquipmentSlotType(IntEnum):
+    NONE = 0
     Weapon = 1
-    Sub = 2
+    Accessory = 2  # Renamed from `Sub`
     Gauntlet = 3
     Helmet = 4
     Armor = 5
     Shoes = 6
+
+
+class EquipmentType(IntEnum):  # This is a custom enum, not one from the game
+    NONE = 0
+    Sword = 1
+    Gun = 2
+    Book = 3
+    Accessory = 4
+    Gauntlet = 5
+    Helmet = 6
+    Armor = 7
+    Shoes = 8
+
+    @classmethod
+    def for_slot_and_job(cls, slot_type: EquipmentSlotType, job: Job) -> EquipmentType:
+        if slot_type != EquipmentSlotType.Weapon:
+            return cls(slot_type.value + 2)
+        return cls(int(_log(job.value, 2)) + 1)  # noqa
 
 
 class EquipmentCategory(IntEnum):
@@ -1164,10 +1234,16 @@ class EquipmentCategory(IntEnum):
 
 
 class BaseParameterType(IntEnum):
-    Muscle = 1
-    Energy = 2
-    Intelligence = 3
-    Health = 4
+    STR = 1  # Renamed from `Muscle`
+    DEX = 2  # Renamed from `Energy`
+    MAG = 3  # Renamed from `Intelligence`
+    STA = 4  # Renamed from `Health`
+
+
+class ChangeParameterType(IntEnum):
+    Addition = 1
+    AdditionPercent = 2
+    CharacterLevelConstantMultiplicationAddition = 3
 
 
 class SacredTreasureType(IntEnum):
@@ -1175,6 +1251,13 @@ class SacredTreasureType(IntEnum):
     Matchless = 1
     Legend = 2
     DualStatus = 3
+
+
+class SphereType(IntEnum):
+    EquipmentIcon = 0
+    Small = 1
+    Medium = 2
+    Large = 3
 
 
 # endregion
@@ -1193,7 +1276,7 @@ class Element(IntEnum):
     CHAOS = 6
 
 
-class Job(IntEnum):
+class Job(IntFlag, boundary=CONFORM):
     NONE = 0
     WARRIOR = 1
     SNIPER = 2

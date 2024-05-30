@@ -14,7 +14,7 @@ from .data import UserSyncData
 from .enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
 from .http_client import ApiClient
 from .properties import ClearableCachedPropertyMixin
-from .models import Character, Equipment
+from .models import Character, Equipment, ItemAndCount
 
 if TYPE_CHECKING:
     from .config import AccountConfig, ConfigFile
@@ -257,7 +257,7 @@ class WorldAccount(ClearableCachedPropertyMixin):
     # region Character / Equipment Data
 
     def _reset_user_sync_data_properties(self):
-        self.clear_cached_properties('characters', 'equipment', 'char_guid_equipment_map')
+        self.clear_cached_properties('characters', 'equipment', 'char_guid_equipment_map', 'inventory')
 
     @cached_property
     def characters(self) -> dict[str, Character]:
@@ -281,6 +281,10 @@ class WorldAccount(ClearableCachedPropertyMixin):
             else:
                 char_items.append(item)
         return char_guid_equipment_map
+
+    @cached_property
+    def inventory(self) -> list[ItemAndCount]:
+        return [ItemAndCount(self, row) for row in self.user_sync_data.inventory]
 
     # endregion
 
