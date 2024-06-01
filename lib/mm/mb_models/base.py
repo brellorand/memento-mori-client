@@ -37,13 +37,13 @@ class MB:
         self,
         session: MementoMoriSession,
         *,
-        data: dict[str, Any] = None,
+        catalog: dict[str, Any] = None,
         use_cache: bool = True,
         json_cache_map: dict[str, Path] = None,
         locale: Locale = Locale.EnUs,
     ):
         self._session = session
-        self.__data = data
+        self.__catalog = catalog
         self._json_cache_map = json_cache_map or {}
         self.locale = Locale(locale)
         self._locale_text_resource_map = {}
@@ -52,9 +52,9 @@ class MB:
     # region Base MB data
 
     @cached_property
-    def _data(self) -> dict[str, Any]:
-        if self.__data:
-            return self.__data
+    def catalog(self) -> dict[str, Any]:
+        if self.__catalog:
+            return self.__catalog
         return self._session.data_client._get_mb_catalog()
 
     @cached_property
@@ -69,7 +69,7 @@ class MB:
             'WorldGroupMB': {'Hash': '34afb2d419e8153a451d53b54d9829ae', 'Name': 'WorldGroupMB', 'Size': 20907}
         }
         """
-        return {name: FileInfo(data) for name, data in self._data['MasterBookInfoMap'].items()}
+        return {name: FileInfo(data) for name, data in self.catalog['MasterBookInfoMap'].items()}
 
     @cached_property
     def _mb_raw_cache(self):

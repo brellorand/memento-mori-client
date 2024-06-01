@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
-from cli_command_parser import Command, Positional, SubCommand, Flag, Counter, Option, Action, main
+from cli_command_parser import Command, ParamUsageError, main
+from cli_command_parser.parameters import SubCommand, Flag, Counter, Option, Action, ParamGroup
 from cli_command_parser.inputs import Path as IPath, NumRange, File as IFile, FileWrapper
 
 from mm.__version__ import __author_email__, __version__  # noqa
@@ -14,7 +16,7 @@ from mm.session import MementoMoriSession
 from mm.enums import Region, Locale
 from mm.fs import path_repr, sanitize_file_name
 from mm.mb_models import RANK_BONUS_STATS, WorldGroup, Character as MBCharacter
-from mm.output import OUTPUT_FORMATS, YAML, pprint
+from mm.output import OUTPUT_FORMATS, YAML, CompactJSONEncoder, pprint
 from mm.utils import FutureWaiter
 
 log = logging.getLogger(__name__)
@@ -52,51 +54,82 @@ class MBDataCLI(Command, description='Memento Mori MB Data Viewer / Downloader',
 # region Save Commands
 
 
-class Save(MBDataCLI, help='Save data referenced by a MB file'):
+class Save(MBDataCLI, help='Save MB-related data'):
     item = SubCommand()
-    mb_path: Path = Option(
-        '-m', type=IN_FILE, help='JSON file containing DownloadRawDataMB data (default: download latest)'
-    )
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
-    force = Flag('-F', help='Force files to be re-downloaded even if they already exist')
-
-    @cached_property
-    def raw_data_info(self) -> list[dict[str, int | str | bool]]:
-        mb = self.mm_session.get_mb(json_cache_map={'DownloadRawDataMB': self.mb_path} if self.mb_path else None)
-        return mb.get_raw_data('DownloadRawDataMB')
-
-    def _save(self, name: str, data: bytes, log_lvl: int = logging.DEBUG):
-        path = self.output.joinpath(name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        log.log(log_lvl, f'Saving {path_repr(path)}')
-        path.write_bytes(data)
+    force = Flag('-F', help='Force files to be overwritten even if they already exist')
 
 
-class File(Save, help='Download and save a single file'):
-    name = Positional(help='The relative FilePath from DownloadRawDataMB')
-    skip_validation = Flag('-V', help='Skip path validation against DownloadRawDataMB entries')
+class Catalog(Save, help='Save the MB catalog, which lists MB files and their hashes'):
+    def main(self):
+        path = self.output.joinpath('mb-catalog.json')
+        if not self.force and path.exists():
+            log.warning(f'{path_repr(path)} already exists - use --force to overwrite')
+        else:
+            data = self.mm_session.mb.catalog
+            path.parent.mkdir(parents=True, exist_ok=True)
+            log.info(f'Saving {path_repr(path)}')
+            with path.open('w', encoding='utf-8', newline='\n') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder)
+
+
+class Mbs(Save, help='Save the MB files listed in the MB catalog'):
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
+    limit: int = Option('-L', type=NumRange(min=1), help='Limit the number of files to download')
 
     def main(self):
-        if not self.force and self.output.joinpath(self.name).exists():
-            raise RuntimeError(f'{self.name} already exists - use --force to download anyways')
-        elif not self.skip_validation and not any(row['FilePath'] == self.name for row in self.raw_data_info):
-            raise ValueError(f'Invalid file={self.name!r} - does not match any DownloadRawDataMB FilePath')
+        if file_names := self._get_names():
+            self.save_files(file_names)
+        else:
+            log.info('All MB files have already been downloaded (use --force to force them to be re-downloaded)')
 
-        self._save(self.name, self.mm_session.data_client.get_raw_data(self.name), log_lvl=logging.INFO)
+    def save_files(self, file_names: list[str]):
+        self.output.mkdir(parents=True, exist_ok=True)
+        log.info(f'Downloading {len(file_names):,d} files using {self.parallel} threads')
+        with ThreadPoolExecutor(max_workers=self.parallel) as executor:
+            futures = {executor.submit(self.mm_session.mb.get_raw_data, name): name for name in file_names}
+            with FutureWaiter(executor)(futures, add_bar=not self.verbose, unit=' files') as waiter:
+                for future in waiter:
+                    self._save_data(futures[future], future.result())
+
+    def _get_names(self) -> list[str]:
+        to_download = list(self.mm_session.mb.file_map)
+        if not self.force and self.output.exists():
+            to_download = [name for name in to_download if not self.output.joinpath(name + '.json').exists()]
+
+        if self.limit:
+            return to_download[:self.limit]
+        return to_download
+
+    def _save_data(self, name: str, data):
+        out_path = self.output.joinpath(name + '.json')
+        log.debug(f'Saving {path_repr(out_path)}')
+        with out_path.open('w', encoding='utf-8', newline='\n') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4, cls=CompactJSONEncoder, max_line_len=119)
 
 
-class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
-    pattern = Option('-p', metavar='GLOB', help='If specified, only download files matching this glob pattern')
+class RawData(Save, help='Download files listed in the DownloadRawDataMB list'):
+    with ParamGroup('File', mutually_exclusive=True, required=True):
+        name = Option(
+            '-n', metavar='FilePath', nargs='+', help='One or more relative FilePath values from DownloadRawDataMB'
+        )
+        pattern = Option(
+            '-p', metavar='GLOB', help='Download files listed in DownloadRawDataMB that match this glob pattern'
+        )
+        all = Flag('-a', help='Download all files listed in DownloadRawDataMB')
+
+    skip_validation = Flag('-V', help='Skip path validation against DownloadRawDataMB entries (only applies to --name)')
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
     limit: int = Option('-L', type=NumRange(min=1), help='Limit the number of files to download')
     dry_run = Flag('-D', help='Print the names of the files that would be downloaded instead of downloading them')
 
     def main(self):
-        paths = self._get_paths()
-        if not paths:
+        if paths := self._get_paths():
+            self.save_files(paths)
+        else:
             log.info('All files have already been downloaded (use --force to force them to be re-downloaded)')
-            return
 
+    def save_files(self, paths: list[str]):
         prefix = '[DRY RUN] Would download' if self.dry_run else 'Downloading'
         log.info(f'{prefix} {len(paths):,d} files using {self.parallel} threads')
         if self.dry_run:
@@ -113,21 +146,44 @@ class All(Save, help='Download all files listed in the DownloadRawDataMB list'):
                 for future in waiter:
                     self._save(futures[future], future.result())
 
-    def _get_paths(self) -> list[str]:
-        rows = self.raw_data_info
-        if self.force:
-            to_download = [row['FilePath'] for row in rows]
-        else:
-            to_download = [row['FilePath'] for row in rows if not self.output.joinpath(row['FilePath']).exists()]
+    @cached_property
+    def raw_data_info(self) -> list[dict[str, int | str | bool]]:
+        # mb = self.mm_session.get_mb(json_cache_map={'DownloadRawDataMB': self.mb_path} if self.mb_path else None)
+        return self.mm_session.mb.get_raw_data('DownloadRawDataMB')
 
+    def _get_paths(self) -> list[str]:
         if self.pattern:
             from fnmatch import filter
 
-            to_download = filter(to_download, self.pattern)
+            to_download = filter((row['FilePath'] for row in self.raw_data_info), self.pattern)
+        elif self.name:
+            if self.skip_validation:
+                to_download = self.name
+            else:
+                names = set(self.name)
+                to_download = {row['FilePath'] for row in self.raw_data_info}.intersection(names)
+                if bad := names.difference(to_download):
+                    bad_str = ", ".join(sorted(bad))
+                    raise ParamUsageError(
+                        self.__class__.name,
+                        f'Invalid values - they do not match FilePath values specified in DownloadRawDataMB: {bad_str}'
+                    )
+                to_download = sorted(to_download)
+        else:  # --all
+            to_download = [row['FilePath'] for row in self.raw_data_info]
+
+        if not self.force and self.output.exists():
+            to_download = [path for path in to_download if not self.output.joinpath(path).exists()]
 
         if self.limit:
             return to_download[:self.limit]
         return to_download
+
+    def _save(self, name: str, data: bytes, log_lvl: int = logging.DEBUG):
+        path = self.output.joinpath(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        log.log(log_lvl, f'Saving {path_repr(path)}')
+        path.write_bytes(data)
 
 
 class Lyrics(Save, help='Save lament lyrics'):

@@ -1,13 +1,21 @@
 """
-Asset Catalog and related classes
+Asset Catalog and related classes.
+
+Deserialization of data in m_KeyDataString, m_BucketDataString, m_EntryDataString, and m_ExtraDataString is based on
+this project: https://github.com/nesrak1/AddressablesTools/blob/master/AddressablesTools/Catalog/ContentCatalogData.cs
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from base64 import b64decode
+from dataclasses import dataclass
+from enum import IntEnum
 from functools import cached_property
-from typing import Any, Iterator, Sequence
+from io import BytesIO
+from struct import Struct
+from typing import Any, Iterator, Sequence, NamedTuple
 
 from mm.data import DictWrapper
 from mm.properties import DataProperty
@@ -113,6 +121,76 @@ class AssetCatalog(DictWrapper):
     def bundle_names(self) -> list[str]:
         return [name[3:] for name in self.internal_ids if name.startswith('0#/')]
 
+    # region Decoded DataString Properties
+
+    @cached_property
+    def buckets(self) -> list[Bucket]:
+        int32, int32x2 = Struct('i'), Struct('ii')
+        reader = BinaryReader(self.bucket_data)
+        buckets = []
+        for i in range(reader.read(int32)):
+            offset, entry_count = reader.read_multi(int32x2)
+            buckets.append(Bucket(offset, reader.read_num(int32, entry_count)))
+        return buckets
+
+    @cached_property
+    def keys(self):
+        # Appears to mostly contain the same data that is in `internal_ids`
+        return SerializedObjectDecoder(self.key_data).decode_buckets(self.buckets)
+
+    @cached_property
+    def locations(self) -> list[ResourceLocation]:
+        extra_decoder = SerializedObjectDecoder(self.extra_data)
+        return [
+            ResourceLocation(
+                internal_id=self.internal_ids[int_id_idx],
+                provider_id=self.provider_ids[prov_idx],
+                dependency_key_idx=dep_key_idx,
+                dependency_key=self.keys[dep_key_idx] if dep_key_idx >= 0 else None,  # bundle file name
+                data=extra_decoder.decode(data_idx) if data_idx >= 0 else None,
+                primary_key_idx=pk_idx,
+                primary_key=self.keys[pk_idx],  # `internal_id_prefixes` entry + file name stem
+                serialized_type=self.resource_types[r_type_idx],
+            )
+            for int_id_idx, prov_idx, dep_key_idx, dep_hash, data_idx, pk_idx, r_type_idx in self._iter_entry_data()
+        ]
+
+    def _iter_entry_data(self) -> Iterator[tuple[int, int, int, int, int, int, int]]:
+        int32x7 = Struct('7i')
+        entry_reader = BinaryReader(self.entry_data)
+        for _ in range(entry_reader.read(Struct('i'))):
+            yield entry_reader.read_multi(int32x7)
+
+    @cached_property
+    def bundle_path_map(self) -> dict[str, list[str]]:
+        bundle_path_map = {}
+        for int_id_idx, _, dep_key_idx, _, _, pk_idx, _ in self._iter_entry_data():
+            if dep_key_idx < 0:
+                continue
+
+            # bundle_name = self.keys[dep_key_idx]  # Bundle file name, without a leading `0#/`
+            try:
+                # Order for bundles in internal_ids matches `self.keys`, but is less expensive to compute
+                bundle_name = self.internal_ids[dep_key_idx][3:]
+            except IndexError:
+                continue  # Not a bundle (there are some integer entries in `self.keys` after bundles/prefixes
+
+            try:
+                bundle_paths = bundle_path_map[bundle_name]
+            except KeyError:
+                bundle_path_map[bundle_name] = bundle_paths = []
+
+            # primary_key = self.keys[pk_idx]  # `internal_id_prefixes` entry + file name stem
+            prefix_index, name = self.internal_ids[int_id_idx].split('#', 1)
+            bundle_paths.append(self.internal_id_prefixes[int(prefix_index)] + name)
+
+        return bundle_path_map
+
+    # endregion
+
+
+# region Asset + AssetDir
+
 
 class Asset:
     __slots__ = ('name', 'parent')
@@ -199,3 +277,127 @@ class AssetDir(Asset):
 
     def __len__(self) -> int:
         return len(self.children)
+
+
+# endregion
+
+
+# region DataString Decoding
+
+
+class Bucket(NamedTuple):
+    offset: int
+    entries: Sequence[int]
+
+
+@dataclass(slots=True)
+class ResourceLocation:
+    internal_id: str
+    provider_id: str
+    dependency_key_idx: int
+    dependency_key: Any
+    data: Any
+    # dependency_hash_code: int
+    primary_key_idx: int
+    primary_key: str
+    serialized_type: dict[str, str]
+
+    def as_dict(self):
+        return {
+            'internal_id': self.internal_id,
+            'provider_id': self.provider_id,
+            'dependency_key_idx': self.dependency_key_idx,
+            'dependency_key': self.dependency_key,
+            'data': self.data,
+            'primary_key_idx': self.primary_key_idx,
+            'primary_key': self.primary_key,
+            'serialized_type': self.serialized_type,
+        }
+
+
+class ObjectType(IntEnum):
+    AsciiString = 0
+    UnicodeString = 1
+    UInt16 = 2
+    UInt32 = 3
+    Int32 = 4
+    Hash128 = 5
+    Type = 6
+    JsonObject = 7
+
+
+class BinaryReader:
+    __slots__ = ('_bio',)
+
+    def __init__(self, data: bytes | bytearray | BytesIO):
+        self._bio = data if isinstance(data, BytesIO) else BytesIO(data)
+
+    def read(self, struct: Struct):
+        return struct.unpack(self._bio.read(struct.size))[0]
+
+    def read_multi(self, struct: Struct):
+        return struct.unpack(self._bio.read(struct.size))
+
+    def read_num(self, struct: Struct, n: int):
+        if n == 1:
+            return self.read_multi(struct)
+        else:
+            return self.read_multi(Struct(f'{n}{struct.format}'))
+
+
+class SerializedObjectDecoder:
+    __slots__ = ('_bio',)
+    _int8 = Struct('b')
+    _int32 = Struct('i')
+    _type_struct_map = {
+        ObjectType.AsciiString: Struct('i'),    ObjectType.UnicodeString: Struct('i'),
+        ObjectType.UInt32: Struct('I'),         ObjectType.Int32: Struct('i'),
+        ObjectType.Hash128: Struct('b'),        ObjectType.Type: Struct('b'),
+        ObjectType.UInt16: Struct('H'),
+    }
+    _type_encoding_map = {
+        ObjectType.AsciiString: 'ascii', ObjectType.UnicodeString: 'utf-8',
+        ObjectType.Hash128: 'ascii', ObjectType.Type: 'ascii',
+    }
+
+    def __init__(self, data: bytes | bytearray | BytesIO):
+        self._bio = data if isinstance(data, BytesIO) else BytesIO(data)
+
+    def decode_buckets(self, buckets: Sequence[Bucket]):
+        return [self.decode(bucket.offset) for bucket in buckets]
+
+    def decode(self, offset: int):
+        self._bio.seek(offset)
+        obj_type = ObjectType(self._int8.unpack(self._bio.read(1))[0])
+        if struct := self._type_struct_map.get(obj_type):
+            if encoding := self._type_encoding_map.get(obj_type):
+                return self._read_string(struct, encoding)
+            else:
+                return struct.unpack(self._bio.read(struct.size))[0]
+        else:
+            return self.read_json()
+
+    def _read_string(self, struct: Struct, encoding: str) -> str:
+        str_len = struct.unpack(self._bio.read(struct.size))[0]
+        return self._bio.read(str_len).decode(encoding)
+
+    def _read_byte_str(self, struct: Struct) -> bytes:
+        str_len = struct.unpack(self._bio.read(struct.size))[0]
+        return self._bio.read(str_len)
+
+    def read_string_1(self) -> str:
+        return self._read_string(self._int8, 'ascii')
+
+    def read_string_4(self, encoding: str = 'utf-8') -> str:
+        return self._read_string(self._int32, encoding)
+
+    def read_json(self):
+        # Note: The order of the following calls is important
+        return {
+            'assembly_name': self.read_string_1(),
+            'class_name': self.read_string_1(),
+            'json': json.loads(self._read_byte_str(self._int32)),
+        }
+
+
+# endregion
