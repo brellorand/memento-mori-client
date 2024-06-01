@@ -146,7 +146,7 @@ class AssetCatalog(DictWrapper):
                 internal_id=self.internal_ids[int_id_idx],
                 provider_id=self.provider_ids[prov_idx],
                 dependency_key_idx=dep_key_idx,
-                dependency_key=self.keys[dep_key_idx] if dep_key_idx >= 0 else None,  # bundle file name
+                dependency_key=self.keys[dep_key_idx] if dep_key_idx >= 0 else None,  # bundle file name (usually)
                 data=extra_decoder.decode(data_idx) if data_idx >= 0 else None,
                 primary_key_idx=pk_idx,
                 primary_key=self.keys[pk_idx],  # `internal_id_prefixes` entry + file name stem

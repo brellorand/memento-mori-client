@@ -210,7 +210,7 @@ class SaveBundles(SaveBundlesCmd, choice='bundles', help='Download raw bundles')
 
 
 class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and extract assets from them'):
-    with ParamGroup(mutually_exclusive=True):
+    with ParamGroup(mutually_exclusive=True, required=True):
         apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
         bundle_dir = Option(
             '-b', type=DIR, help='Path to a dir that contains .bundle files, or that should be used to store them'
