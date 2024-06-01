@@ -10,23 +10,30 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, Action, ParamGroup, main
 from cli_command_parser.inputs import Path as IPath, NumRange
 from cli_command_parser.inputs.time import DateTime, DEFAULT_DATE_FMT, DEFAULT_DT_FMT
 
 from mm.__version__ import __author_email__, __version__  # noqa
+from mm.assets.processing import AssetBundleFinder, BundleFinder, AssetConverter, AssetExtractor
 from mm.session import MementoMoriSession
 from mm.fs import path_repr
 from mm.logging import init_logging, log_initializer
 from mm.output import CompactJSONEncoder, pprint
 from mm.utils import FutureWaiter
 
+if TYPE_CHECKING:
+    from mm.assets.catalog import AssetCatalog
+
 log = logging.getLogger(__name__)
 
 DIR = IPath(type='dir')
+REAL_DIR = IPath(type='dir', exists=True)
 NEW_FILE = IPath(type='file', exists=False)
 FILES = IPath(type='file|dir', exists=True)
+FILE = IPath(type='file', exists=True)
 DATE_OR_DT = DateTime(DEFAULT_DATE_FMT, DEFAULT_DT_FMT)
 
 
@@ -48,6 +55,16 @@ class AssetCLI(Command, description='Memento Mori Asset Manager', option_name_mo
 
 class List(AssetCLI, help='List asset paths'):
     item = SubCommand(help='What to list')
+    apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+
+    @cached_property
+    def asset_catalog(self) -> AssetCatalog:
+        if self.apk_path:
+            from mm.assets.apk import ApkArchive
+
+            return ApkArchive(self.apk_path).asset_pack_apk.catalog
+        else:
+            return self.mm_session.asset_catalog
 
 
 class ListAssets(List, choice='assets', help='List asset paths'):
@@ -55,8 +72,7 @@ class ListAssets(List, choice='assets', help='List asset paths'):
     depth: int = Option('-d', help='Show assets up to the specified depth')
 
     def main(self):
-        asset_catalog = self.mm_session.asset_catalog
-        tree = asset_catalog.get_asset(self.path) if self.path else asset_catalog.asset_tree
+        tree = self.asset_catalog.get_asset(self.path) if self.path else self.asset_catalog.asset_tree
         for asset in tree.iter_flat(self.depth):
             print(asset)
 
@@ -67,9 +83,7 @@ class ListExtensions(List, choices=('extensions', 'exts'), help='List file exten
         from os.path import splitext
 
         counter = Counter(
-            splitext(entry)[-1]
-            for entry in self.mm_session.asset_catalog.internal_ids
-            if not entry.startswith('0#/')
+            splitext(entry)[-1] for entry in self.asset_catalog.internal_ids if not entry.startswith('0#/')
         )
         pprint('json-pretty', counter)
 
@@ -101,6 +115,7 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
 
 class Catalog(Save, help='Save the asset catalog, which contains metadata about game assets'):
     section = Action()
+    apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
     split = Flag('-s', help='Split the catalog into separate files for each top-level key')
     decode = Flag('-d', help='Decode base64-encoded content (only applies when --split / -s is specified)')
 
@@ -109,10 +124,18 @@ class Catalog(Save, help='Save the asset catalog, which contains metadata about 
         for name_parts, data, raw in self.iter_names_and_data():
             self.save_data(data, *name_parts, raw=raw)
 
+    @cached_property
+    def asset_catalog(self) -> AssetCatalog:
+        if self.apk_path:
+            from mm.assets.apk import ApkArchive
+
+            return ApkArchive(self.apk_path).asset_pack_apk.catalog
+        else:
+            return self.mm_session.asset_catalog
+
     def iter_names_and_data(self):
-        asset_catalog = self.mm_session.asset_catalog
         if not self.split:
-            yield ('asset-catalog.json',), asset_catalog.data, False
+            yield ('asset-catalog.json',), self.asset_catalog.data, False
         else:
             dir_name = 'asset-catalog'
             decoded_map = {
@@ -121,31 +144,31 @@ class Catalog(Save, help='Save the asset catalog, which contains metadata about 
                 'm_EntryDataString': 'entry_data',
                 'm_ExtraDataString': 'extra_data',
             }
-            for key, val in asset_catalog.data.items():
+            for key, val in self.asset_catalog.data.items():
                 if self.decode and (attr := decoded_map.get(key)):
-                    yield (dir_name, f'{key}.dat'), getattr(asset_catalog, attr), True
+                    yield (dir_name, f'{key}.dat'), getattr(self.asset_catalog, attr), True
                 else:
                     yield (dir_name, f'{key}.json'), val, False
 
     @section(help='Save the deserialized keys from the asset catalog')
     def keys(self):
         path = self.output.joinpath('asset-catalog-keys.json')
-        self._save_data(path, self.mm_session.asset_catalog.keys)
+        self._save_data(path, self.asset_catalog.keys)
 
     @section(help='Save the deserialized locations from the asset catalog')
     def locations(self):
         path = self.output.joinpath('asset-catalog-locations.json')
-        data = [row.as_dict() for row in self.mm_session.asset_catalog.locations]
+        data = [row.as_dict() for row in self.asset_catalog.locations]
         self._save_data(path, data)
 
     @section(help='Save the deserialized locations from the asset catalog')
     def bundle_path_map(self):
         path = self.output.joinpath('asset-catalog-bundle_path_map.json')
-        self._save_data(path, self.mm_session.asset_catalog.bundle_path_map)
+        self._save_data(path, self.asset_catalog.bundle_path_map)
 
 
 class SaveBundlesCmd(Save, ABC):
-    with ParamGroup('File'):
+    with ParamGroup('Asset File'):
         asset_path = Option(
             '-p', nargs='+', metavar='GLOB',
             help='One or more asset paths for which bundles should be included (supports wildcards)',
@@ -158,7 +181,10 @@ class SaveBundlesCmd(Save, ABC):
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of download threads to use in parallel')
 
     def download_bundles(self, save_dir: Path):
-        if bundle_names := self._get_bundle_names(save_dir):
+        finder = BundleFinder(
+            self.mm_session, save_dir, limit=self.limit, asset_path_pats=self.asset_path, extensions=self.extension
+        )
+        if bundle_names := finder.get_bundle_names(save_dir, self.force):
             self._download_bundles(save_dir, bundle_names)
         else:
             log.info('All bundles have already been downloaded (use --force to force them to be re-downloaded)')
@@ -177,34 +203,6 @@ class SaveBundlesCmd(Save, ABC):
         log.debug(f'Saving {bundle_name}')
         out_path.write_bytes(data)
 
-    def _get_bundle_names(self, save_dir: Path) -> list[str]:
-        to_download = self._get_bundle_candidates()
-        log.debug(f'Found {len(to_download):,d} total bundles to download')
-
-        if not (self.force or not save_dir.exists()):
-            to_download = [name for name in to_download if not save_dir.joinpath(name).exists()]
-            log.debug(f'Filtered to {len(to_download):,d} new bundles to download')
-
-        if self.limit:
-            return to_download[:self.limit]
-        return to_download
-
-    def _get_bundle_candidates(self):
-        bundle_path_map = self.mm_session.asset_catalog.bundle_path_map
-        if path_pats := self.asset_path:
-            from fnmatch import fnmatch
-
-            bundle_path_map = {
-                bundle: filtered
-                for bundle, files in bundle_path_map.items()
-                if (filtered := [f for f in files if any(fnmatch(f, pat) for pat in path_pats)])
-            }
-
-        if exts := tuple(self.extension):
-            return [bundle for bundle, files in bundle_path_map.items() if any(f.endswith(exts) for f in files)]
-
-        return bundle_path_map
-
 
 class SaveBundles(SaveBundlesCmd, choice='bundles', help='Download raw bundles'):
     def main(self):
@@ -212,32 +210,38 @@ class SaveBundles(SaveBundlesCmd, choice='bundles', help='Download raw bundles')
 
 
 class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and extract assets from them'):
-    bundle_dir = Option(
-        '-b', type=DIR, help='Path to a dir that contains .bundle files, or that should be used to store them'
-    )
+    with ParamGroup(mutually_exclusive=True):
+        apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+        bundle_dir = Option(
+            '-b', type=DIR, help='Path to a dir that contains .bundle files, or that should be used to store them'
+        )
+
     debug = Flag('-d', help='Enable logging in bundle processing workers')
     allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
+    convert_to_flac = Flag('-c', help='[Requires ffmpeg to be installed separately] Convert audio files to flac')
+    ffmpeg_path = Option('-f', type=FILE, help='Path to ffmpeg, if it is not in your $PATH')
 
     def main(self):
-        self.download_bundles(self.bundle_dir)
+        if self.bundle_dir:
+            self.download_bundles(self.bundle_dir)
+
         self.extract_assets()
 
+        if self.convert_to_flac:
+            converter = AssetConverter(self.output, self.ffmpeg_path, self.force, self.debug)
+            converter.convert_audio()
+
     def extract_assets(self):
-        from mm.assets import find_bundles
-
-        dst_dir, force, allow_raw = self.output, self.force, self.allow_raw
-        with self.executor() as executor:
-            futures = [
-                executor.submit(bundle.extract, dst_dir, force, allow_raw) for bundle in find_bundles(self.bundle_dir)
-            ]
-            log.info(f'Extracting assets from {len(futures):,d} bundles...')
-            FutureWaiter.wait_for(executor, futures, add_bar=not self.debug)
-
-    def executor(self) -> ProcessPoolExecutor:
-        return ProcessPoolExecutor(
-            max_workers=self.parallel,
-            initializer=log_initializer(self.verbose) if self.debug else None,
+        finder = AssetBundleFinder(
+            self.mm_session,
+            self.bundle_dir,
+            apk_path=self.apk_path,
+            limit=self.limit,
+            asset_path_pats=self.asset_path,
+            extensions=self.extension,
         )
+        extractor = AssetExtractor(finder, self.output, self.parallel, self.verbose, self.debug)
+        extractor.extract_assets(self.force, self.allow_raw)
 
 
 # endregion
@@ -247,32 +251,43 @@ class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and
 
 
 class BundleCommand(AssetCLI, ABC):
-    input = Option('-i', type=FILES, nargs='+', help='Bundle file(s) or dir(s) containing .bundle files', required=True)
+    with ParamGroup('Asset File'):
+        asset_path = Option(
+            '-p', nargs='+', metavar='GLOB',
+            help='One or more asset paths for which bundles should be included (supports wildcards)',
+        )
+        extension = Option(
+            '-x', nargs='+', help='One or more asset file extensions for which bundles should be included'
+        )
+
+    with ParamGroup(mutually_exclusive=True, required=True):
+        apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+        bundle_dir = Option(
+            '-b', type=DIR, help='Path to a dir that contains .bundle files, or that should be used to store them'
+        )
+
     earliest: datetime = Option('-e', type=DATE_OR_DT, help='Only include assets from bundles modified after this time')
 
-    def find_bundles(self):
-        from mm.assets import find_bundles
-
-        yield from find_bundles(self.input, mod_after=self.earliest)
-
-
-class ParallelBundleCommand(BundleCommand, ABC):
-    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
-    debug = Flag('-d', help='Enable logging in bundle processing workers')
-
-    def executor(self) -> ProcessPoolExecutor:
-        return ProcessPoolExecutor(
-            max_workers=self.parallel,
-            initializer=log_initializer(self.verbose) if self.debug else None,
+    @cached_property
+    def finder(self) -> AssetBundleFinder:
+        return AssetBundleFinder(
+            self.mm_session,
+            self.bundle_dir,
+            apk_path=self.apk_path,
+            asset_path_pats=self.asset_path,
+            extensions=self.extension,
+            earliest=self.earliest,
         )
 
 
-class Index(ParallelBundleCommand, help='Create a bundle index to facilitate bundle discovery for specific assets'):
+class Index(BundleCommand, help='Create a bundle index to facilitate bundle discovery for specific assets'):
     output: Path = Option('-o', type=NEW_FILE, help='Output path', required=True)
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
+    debug = Flag('-d', help='Enable logging in bundle processing workers')
 
     def main(self):
         with self.executor() as executor:
-            futures = {executor.submit(bundle.get_content_paths): bundle for bundle in self.find_bundles()}
+            futures = {executor.submit(bundle.get_content_paths): bundle for bundle in self.finder.find_bundles()}
             log.info(f'Processing {len(futures):,d} bundles...')
             with FutureWaiter(executor)(futures, add_bar=not self.debug) as waiter:
                 bundle_contents = {futures[future].path.name: future.result() for future in waiter}
@@ -280,6 +295,12 @@ class Index(ParallelBundleCommand, help='Create a bundle index to facilitate bun
         log.info(f'Saving {path_repr(self.output)}')
         with self.output.open('w', encoding='utf-8') as f:
             json.dump(bundle_contents, f, indent=4, sort_keys=True, ensure_ascii=False)
+
+    def executor(self) -> ProcessPoolExecutor:
+        return ProcessPoolExecutor(
+            max_workers=self.parallel,
+            initializer=log_initializer(self.verbose) if self.debug else None,
+        )
 
 
 class Find(BundleCommand, help='Find bundles containing the specified paths/files'):
@@ -291,7 +312,7 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
             print(f'Bundle {path_repr(src_path)} contains: {content_path}')
 
     def iter_bundle_contents(self):
-        for bundle in self.find_bundles():
+        for bundle in self.finder.find_bundles():
             for path in bundle.contents:
                 yield bundle.path, path
 
@@ -311,20 +332,32 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
                     yield src_path, content_path
 
 
-class Extract(ParallelBundleCommand, help='Extract assets from a .bundle file'):
+class Extract(BundleCommand, help='Extract assets from a .bundle file'):
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
+
     force = Flag('-F', help='Force re-extraction even if output files already exist (default: skip existing files)')
     allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
 
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
+    debug = Flag('-d', help='Enable logging in bundle processing workers')
+
     def main(self):
-        dst_dir, force, allow_raw = self.output, self.force, self.allow_raw
-        with self.executor() as executor:
-            futures = [executor.submit(bundle.extract, dst_dir, force, allow_raw) for bundle in self.find_bundles()]
-            log.info(f'Extracting assets from {len(futures):,d} bundles...')
-            FutureWaiter.wait_for(executor, futures, add_bar=not self.debug)
+        extractor = AssetExtractor(self.finder, self.output, self.parallel, self.verbose, self.debug)
+        extractor.extract_assets(self.force, self.allow_raw)
 
 
 # endregion
+
+
+class Convert(AssetCLI, help='Convert extracted audio assets to FLAC'):
+    asset_dir = Option('-a', type=REAL_DIR, help='Directory containing assets to possibly be converted', required=True)
+    parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
+    force = Flag('-F', help='Force re-extraction even if output files already exist (default: skip existing files)')
+    debug = Flag('-d', help='Enable logging in bundle processing workers')
+    ffmpeg_path = Option('-f', type=FILE, help='Path to ffmpeg, if it is not in your $PATH')
+
+    def main(self):
+        AssetConverter(self.asset_dir, self.ffmpeg_path, self.force, self.debug, self.parallel).convert_audio()
 
 
 if __name__ == '__main__':

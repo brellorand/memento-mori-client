@@ -34,14 +34,17 @@ T = TypeVar('T')
 
 
 class BundleExtractor:
-    __slots__ = ('dst_dir', 'force', 'exported', '_exporters', 'unknown_as_raw')
+    __slots__ = ('dst_dir', 'force', 'exported', '_exporters', 'unknown_as_raw', 'include_exts')
 
-    def __init__(self, dst_dir: Path, force: bool = False, unknown_as_raw: bool = False):
+    def __init__(
+        self, dst_dir: Path, force: bool = False, unknown_as_raw: bool = False, include_exts: tuple[str] = None
+    ):
         self.dst_dir = dst_dir
         self.force = force
         self.exported = set()
         self._exporters = {}
         self.unknown_as_raw = unknown_as_raw
+        self.include_exts = include_exts
 
     def _get_exporter(self, id_type: ClassIDType) -> AssetExporter:
         if exporter := self._exporters.get(id_type):
@@ -59,11 +62,14 @@ class BundleExtractor:
     def extract_bundle(self, bundle: Bundle):
         log.debug(f'Loaded {len(bundle)} file(s) from {bundle.path_str}')
         for obj_path, obj in bundle.env.container.items():
+            if self.include_exts and not obj_path.endswith(self.include_exts):
+                continue
+
             try:
                 self.save_asset(obj_path, obj)
             except MissingExporter:
                 log.warning(
-                    f'No exporter is configured for {obj=} with {obj.type=} from {bundle.path_str}',
+                    f'No exporter is configured for {obj_path} in {obj=} with {obj.type=} from {bundle.path_str}',
                     extra={'color': 'yellow'},
                 )
 

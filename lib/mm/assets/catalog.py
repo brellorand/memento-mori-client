@@ -168,12 +168,11 @@ class AssetCatalog(DictWrapper):
             if dep_key_idx < 0:
                 continue
 
-            # bundle_name = self.keys[dep_key_idx]  # Bundle file name, without a leading `0#/`
-            try:
-                # Order for bundles in internal_ids matches `self.keys`, but is less expensive to compute
-                bundle_name = self.internal_ids[dep_key_idx][3:]
-            except IndexError:
-                continue  # Not a bundle (there are some integer entries in `self.keys` after bundles/prefixes
+            # Note: While it appears as though it would be fine to use `self.internal_ids` with the `dep_key_idx`,
+            # in the apk catalog.json, there are some mismatches.
+            bundle_name = self.keys[dep_key_idx]  # Bundle file name, without a leading `0#/`
+            if not isinstance(bundle_name, str) or not bundle_name.endswith('.bundle'):
+                continue
 
             try:
                 bundle_paths = bundle_path_map[bundle_name]
