@@ -4,7 +4,6 @@ Classes that wrap API responses
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,12 +12,11 @@ from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
 from mm.data import DictWrapper
 from mm.enums import Locale, ItemType
-from mm.fs import FileCache, CacheMiss
+from mm.fs import MBFileCache, CacheMiss
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from mm.session import MementoMoriSession
     from .characters import Character, CharacterProfile
     from .items import Item, EquipmentSetMaterial, ChangeItem, EquipmentPart, Equipment, EquipmentUpgradeRequirements
@@ -39,15 +37,13 @@ class MB:
         *,
         catalog: dict[str, Any] = None,
         use_cache: bool = True,
-        json_cache_map: dict[str, Path] = None,
         locale: Locale = Locale.EnUs,
     ):
         self._session = session
         self.__catalog = catalog
-        self._json_cache_map = json_cache_map or {}
         self.locale = Locale(locale)
         self._locale_text_resource_map = {}
-        self._cache = FileCache('mb', use_cache=use_cache, app_version=session.config.app_version_manager.get_version())
+        self._cache = MBFileCache(self, 'mb', use_cache=use_cache)
 
     # region Base MB data
 
@@ -74,7 +70,7 @@ class MB:
     @cached_property
     def _mb_raw_cache(self):
         # TODO: Only check for file existence here instead of keeping all of these raw values in memory
-        return {name: data for name in self.file_map if (data := self._cache.get(f'{name}.msgpack', None)) is not None}
+        return {name: data for name in self.file_map if (data := self._cache.get(name, None)) is not None}
 
     def populate_cache(self, parallel: int = 4):
         file_names = set(self.file_map).difference(self._mb_raw_cache)
@@ -99,20 +95,18 @@ class MB:
     def _get_mb_data(self, name: str, refresh: bool = False):
         if not refresh:
             try:
-                return self._cache.get(f'{name}.msgpack')
+                return self._cache.get(name)
             except CacheMiss:
                 pass
 
         data = self._session.data_client.get_mb_data(name)
-        self._cache.store(data, f'{name}.msgpack')
+        self._cache.store(data, name)
         return data
 
     def get_raw_data(self, name: str):
         if mb_raw_cache := self.__dict__.get('_mb_raw_cache'):
             # Avoid populating the cache if `populate_cache` was not called
             return mb_raw_cache[name]
-        elif json_path := self._json_cache_map.get(name):
-            return json.loads(json_path.read_text('utf-8'))
         else:
             return self._get_mb_data(name)
 
@@ -271,7 +265,7 @@ class MB:
 
 
 class FileInfo(DictWrapper):
-    hash: str = DataProperty('Hash')
+    hash: str = DataProperty('Hash', str.lower)
     name: str = DataProperty('Name')
     size: int = DataProperty('Size', int)
 

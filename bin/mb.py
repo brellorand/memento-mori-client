@@ -148,7 +148,6 @@ class RawData(Save, help='Download files listed in the DownloadRawDataMB list'):
 
     @cached_property
     def raw_data_info(self) -> list[dict[str, int | str | bool]]:
-        # mb = self.mm_session.get_mb(json_cache_map={'DownloadRawDataMB': self.mb_path} if self.mb_path else None)
         return self.mm_session.mb.get_raw_data('DownloadRawDataMB')
 
     def _get_paths(self) -> list[str]:
@@ -227,7 +226,6 @@ class Show(MBDataCLI, help='Show info from MB files'):
 
 
 class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
-    mb_path: Path = Option('-m', type=IN_FILE, help='JSON file containing WorldGroupMB data (default: download latest)')
     region = Option('-r', type=Region, default=Region.NORTH_AMERICA, help='Filter output to the specified region')
     past = Flag('-p', help='Include past Grand Battle dates (default: only current/future dates)')
 
@@ -235,9 +233,8 @@ class WorldGroups(Show, help='Show Grand Battle / Legend League world groups'):
         self.pprint(self.get_groups())
 
     def get_groups(self):
-        mb = self.mm_session.get_mb(json_cache_map={'WorldGroupMB': self.mb_path} if self.mb_path else None)
         groups = []
-        for i, group in enumerate(mb.world_groups):
+        for i, group in enumerate(self.mm_session.mb.world_groups):
             if self.region and group.region != self.region:
                 log.debug(f'Skipping row {i} with region={group.region}')
                 continue

@@ -34,14 +34,12 @@ class MementoMoriSession:
         use_data_cache: bool = True,
         use_mb_cache: bool = True,
         mb_locale: Locale = None,
-        mb_json_cache_map: dict[str, Path] = None,
         populate_mb_cache: bool = False,
         http_save_dir: PathLike = None,
     ):
         self.config = config if isinstance(config, ConfigFile) else ConfigFile(config)
         self._use_cache = {'auth': use_auth_cache, 'data': use_data_cache, 'mb': use_mb_cache}
         self._mb_locale = mb_locale
-        self._mb_json_cache_map = mb_json_cache_map
         self._http_save_dir = http_save_dir
         if populate_mb_cache:
             self.mb.populate_cache()
@@ -63,7 +61,6 @@ class MementoMoriSession:
         return self.get_mb()
 
     def get_mb(self, **kwargs) -> MB:
-        kwargs.setdefault('json_cache_map', self._mb_json_cache_map)
         kwargs.setdefault('use_cache', self._use_cache['mb'])
         if 'locale' not in kwargs:
             kwargs['locale'] = self._mb_locale or self.config.mb.locale

@@ -9,11 +9,12 @@ import logging
 import os
 from datetime import datetime, date
 from getpass import getuser
+from hashlib import md5
 from pathlib import Path
 from string import printable
 from tempfile import gettempdir
 from time import time_ns
-from typing import Mapping, Any
+from typing import TYPE_CHECKING, Mapping, Any
 from urllib.parse import quote, urlparse
 
 import msgpack
@@ -21,6 +22,9 @@ import msgpack
 from .exceptions import CacheError, CacheMiss
 from .output import CompactJSONEncoder
 from .properties import cached_classproperty
+
+if TYPE_CHECKING:
+    from .mb_models import MB
 
 __all__ = [
     'get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr', 'get_config_dir',
@@ -36,22 +40,21 @@ PathLike = str | Path
 
 
 class FileCache:
-    __slots__ = ('use_cache', 'root', 'app_version')
+    __slots__ = ('use_cache', 'root')
 
-    def __init__(self, subdir: str = None, use_cache: bool = True, app_version: str = None):
+    def __init__(self, subdir: str = None, use_cache: bool = True):
         self.use_cache = use_cache
-        self.root = get_user_cache_dir(f'{subdir}/{app_version}' if app_version else subdir)
-        self.app_version = app_version
+        self.root = get_user_cache_dir(subdir)
 
     def get(self, name: str, default=_NotSet):
         try:
-            return self[name]
+            return self._get(name)
         except CacheMiss:
             if default is _NotSet:
                 raise
             return default
 
-    def __getitem__(self, name: str):
+    def _get(self, name: str):
         if not self.use_cache:
             raise CacheMiss
 
@@ -63,11 +66,11 @@ class FileCache:
 
         # Ignore modification date if this cache is based on app version.
         # The date is still obtained above in this case to verify the existence of the file.
-        if not self.app_version and mod_time.date() != date.today():
+        if mod_time.date() != date.today():
             raise CacheMiss
 
         try:
-            value = self._get(path)
+            value = self._read(path)
         except CacheError:
             raise
         except Exception as e:
@@ -78,7 +81,7 @@ class FileCache:
             return value
 
     @classmethod
-    def _get(cls, path: Path):
+    def _read(cls, path: Path):
         if path.suffix == '.json':
             return json.loads(path.read_text('utf-8'))
         elif path.suffix in ('.mpk', '.msgpack'):
@@ -97,6 +100,43 @@ class FileCache:
             path.write_bytes(msgpack.packb(data))
         else:
             raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
+
+
+class MBFileCache(FileCache):
+    __slots__ = ('mb',)
+
+    def __init__(self, mb: MB, subdir: str = None, use_cache: bool = True):
+        super().__init__(subdir, use_cache)
+        self.mb = mb
+
+    def _get(self, name: str):
+        if not self.use_cache:
+            raise CacheMiss
+
+        path = self.root.joinpath(f'{name}.msgpack')
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            raise CacheMiss from e
+
+        # The MB catalog contains MD5 hashes of the msgpack serialized MB files, which can be used for cache
+        # invalidation.  This helps to avoid re-downloading files that have not changed between versions.
+        cached_hash = md5(data, usedforsecurity=False).hexdigest().lower()
+        if (expected_hash := self.mb.file_map[name].hash) != cached_hash:
+            log.debug(f'Data in {name} changed - {cached_hash=} != {expected_hash=}')
+            raise CacheMiss
+
+        try:
+            value = msgpack.unpackb(data, timestamp=3)
+        except Exception as e:
+            log.warning(f'Error deserializing cached data from path={path.as_posix()}')
+            raise CacheMiss from e
+        else:
+            log.debug(f'Loaded cached data from {path.relative_to(self.root).as_posix()}')
+            return value
+
+    def store(self, data, name: str, raw: bool = False):
+        super().store(data, f'{name}.msgpack', raw)
 
 
 class HTTPSaver:

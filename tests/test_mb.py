@@ -33,7 +33,7 @@ class TestMB(TestCase):
         return self._mb_data[name]
 
     def _init_mb(self) -> MB:
-        with patch('mm.mb_models.base.FileCache', return_value=Mock(get=Mock(side_effect=CacheMiss))):
+        with patch('mm.mb_models.base.MBFileCache', return_value=Mock(get=Mock(side_effect=CacheMiss))):
             return MB(session=Mock(data_client=Mock(get_mb_data=self._get_mb_data)), use_cache=False)
 
     def test_char_from_short_name(self):
