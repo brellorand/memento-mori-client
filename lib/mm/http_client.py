@@ -632,9 +632,25 @@ class DataClientWrapper:
         try:
             return self.cache.get('asset-catalog.json')
         except CacheMiss:
-            catalog = self._data_client.get_asset(f'{self._data_client.auth.ortega_info.asset_version}.json').json()
-            self.cache.store(catalog, 'asset-catalog.json')
-            return catalog
+            pass
+
+        asset_version = self._data_client.auth.ortega_info.asset_version
+        if not self.cache.use_cache or asset_version != self.cache.get('asset-version.txt', None, ignore_age=True):
+            return self._get_new_asset_catalog(asset_version)
+
+        if self.cache.touch('asset-catalog.json'):  # This marks the cached data as still fresh
+            try:
+                return self.cache.get('asset-catalog.json')
+            except CacheMiss:  # Technically, it may still fail to be loaded for some reason
+                pass
+
+        return self._get_new_asset_catalog(asset_version)
+
+    def _get_new_asset_catalog(self, asset_version: str):
+        catalog = self._data_client.get_asset(f'{asset_version}.json').json()
+        self.cache.store(catalog, 'asset-catalog.json')
+        self.cache.store(asset_version, 'asset-version.txt')
+        return catalog
 
     def _get_mb_catalog(self):
         try:

@@ -46,15 +46,15 @@ class FileCache:
         self.use_cache = use_cache
         self.root = get_user_cache_dir(subdir)
 
-    def get(self, name: str, default=_NotSet):
+    def get(self, name: str, default=_NotSet, ignore_age: bool = False):
         try:
-            return self._get(name)
+            return self._get(name, ignore_age)
         except CacheMiss:
             if default is _NotSet:
                 raise
             return default
 
-    def _get(self, name: str):
+    def _get(self, name: str, ignore_age: bool = False):
         if not self.use_cache:
             raise CacheMiss
 
@@ -66,7 +66,7 @@ class FileCache:
 
         # Ignore modification date if this cache is based on app version.
         # The date is still obtained above in this case to verify the existence of the file.
-        if mod_time.date() != date.today():
+        if not ignore_age and mod_time.date() != date.today():
             raise CacheMiss
 
         try:
@@ -86,18 +86,32 @@ class FileCache:
             return json.loads(path.read_text('utf-8'))
         elif path.suffix in ('.mpk', '.msgpack'):
             return msgpack.unpackb(path.read_bytes(), timestamp=3)
+        elif path.suffix == '.txt':
+            return path.read_text('utf-8')
         else:
             raise CacheError(f'Unexpected extension for cache path={path.as_posix()}')
+
+    def touch(self, name: str) -> bool:
+        """Mark the cached content for the specified file as still fresh by updating the last modified timestamp."""
+        path = self.root.joinpath(name)
+        try:
+            path.touch()
+        except OSError:
+            return False
+        else:
+            return True
 
     def store(self, data, name: str, raw: bool = False):
         path = self.root.joinpath(name)
         if raw:
             path.write_bytes(data)
         elif path.suffix == '.json':
-            with path.open('w', encoding='utf-8') as f:
+            with path.open('w', encoding='utf-8', newline='\n') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
         elif path.suffix in ('.mpk', '.msgpack'):
             path.write_bytes(msgpack.packb(data))
+        elif path.suffix == '.txt':
+            path.write_text(data, encoding='utf-8', newline='\n')
         else:
             raise ValueError(f'Unexpected extension for cache path={path.as_posix()}')
 
@@ -109,7 +123,7 @@ class MBFileCache(FileCache):
         super().__init__(subdir, use_cache)
         self.mb = mb
 
-    def _get(self, name: str):
+    def _get(self, name: str, ignore_age: bool = False):
         if not self.use_cache:
             raise CacheMiss
 
