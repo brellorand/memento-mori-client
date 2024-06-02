@@ -9,11 +9,12 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Collection
+from typing import TYPE_CHECKING, Collection, Iterator
 
 from mm.fs import path_repr
 from mm.logging import log_initializer
 from mm.utils import FutureWaiter
+from .bundles import FileBundle, Bundle, find_bundles
 
 if TYPE_CHECKING:
     from mm.session import MementoMoriSession
@@ -41,21 +42,19 @@ class BundleFinder:
         self.extensions = tuple(extensions) if extensions else None
 
     def find_bundles(self):
-        from mm.assets import find_bundles
-
         yield from find_bundles(self.bundle_dir)
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
         return self.mm_session.asset_catalog
 
-    def get_bundle_names(self, save_dir: Path, force: bool = False) -> list[str]:
+    def get_bundle_names(self, save_dir: Path = None, force: bool = False, action: str = 'download') -> list[str]:
         to_download = self._get_bundle_candidates()
-        log.debug(f'Found {len(to_download):,d} total bundles to download')
+        log.debug(f'Found {len(to_download):,d} total bundles to {action}')
 
-        if not (force or not save_dir.exists()):
+        if save_dir and not (force or not save_dir.exists()):
             to_download = [name for name in to_download if not save_dir.joinpath(name).exists()]
-            log.debug(f'Filtered to {len(to_download):,d} new bundles to download')
+            log.debug(f'Filtered to {len(to_download):,d} new bundles to {action}')
 
         if self.limit:
             return to_download[:self.limit]
@@ -94,15 +93,20 @@ class AssetBundleFinder(BundleFinder):
         self.apk_path = apk_path
         self.earliest = earliest
 
-    def find_bundles(self):
-        if self.bundle_dir:
-            from mm.assets import find_bundles
-
+    def find_bundles(self) -> Iterator[Bundle]:
+        if (bundle_dir := self.bundle_dir) and not (self.asset_path_pats or self.extensions):
             yield from find_bundles(self.bundle_dir, mod_after=self.earliest)
-        else:
-            bundle_names = self.get_bundle_names(self._asset_pack_apk.bundle_dir, force=True)
-            for name in bundle_names:
-                yield self._asset_pack_apk.get_bundle(name)
+        elif bundle_names := self.get_bundle_names(action='extract'):
+            if bundle_dir:
+                paths = (bundle_dir.joinpath(name) for name in bundle_names)
+                if self.earliest:
+                    earliest = self.earliest.timestamp()
+                    paths = (path for path in paths if path.stat().st_mtime >= earliest)
+
+                for path in paths:
+                    yield FileBundle(path)
+            else:
+                yield from self._asset_pack_apk.iter_bundles(bundle_names)
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:

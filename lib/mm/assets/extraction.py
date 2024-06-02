@@ -60,16 +60,17 @@ class BundleExtractor:
         return exporter
 
     def extract_bundle(self, bundle: Bundle):
-        log.debug(f'Loaded {len(bundle)} file(s) from {bundle.path_str}')
+        log.debug(f'Loaded {len(bundle)} file(s) from {bundle}')
         for obj_path, obj in bundle.env.container.items():
             if self.include_exts and not obj_path.endswith(self.include_exts):
+                log.debug(f'Skipping {obj_path} from {bundle}')
                 continue
 
             try:
                 self.save_asset(obj_path, obj)
             except MissingExporter:
                 log.warning(
-                    f'No exporter is configured for {obj_path} in {obj=} with {obj.type=} from {bundle.path_str}',
+                    f'No exporter is configured for {obj_path} in {obj=} with {obj.type=} from {bundle}',
                     extra={'color': 'yellow'},
                 )
 

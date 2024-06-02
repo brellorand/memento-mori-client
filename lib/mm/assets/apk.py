@@ -8,11 +8,12 @@ import logging
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+from typing import Iterator, Iterable
 from weakref import finalize
 from zipfile import ZipFile, ZipInfo
 
 from mm.fs import get_user_cache_dir
-from .bundles import Bundle
+from .bundles import DataBundle
 from .catalog import AssetCatalog
 
 __all__ = ['ApkArchive', 'AssetPackApk', 'ApkType']
@@ -80,21 +81,12 @@ class AssetPackApk(ApkArchive):
             path.write_bytes(self._zip_file.read('assets/aa/catalog.json'))
         return AssetCatalog(json.loads(path.read_text('utf-8')))
 
-    @cached_property
-    def bundle_dir(self) -> Path:
-        return self._cache_dir.joinpath('bundles')
+    def get_bundle(self, name: str) -> DataBundle:
+        return DataBundle(name, self._zip_file.read(f'assets/aa/Android/{name}'))
 
-    def get_bundle(self, name: str) -> Bundle:
-        return Bundle(self.get_bundle_path(name))
-
-    def get_bundle_path(self, name: str) -> Path:
-        path = self.bundle_dir.joinpath(name)
-        if path.exists():
-            return path
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(self._zip_file.read(f'assets/aa/Android/{name}'))
-        return path
+    def iter_bundles(self, names: Iterable[str]) -> Iterator[DataBundle]:
+        for name in names:
+            yield DataBundle(name, self._zip_file.read(f'assets/aa/Android/{name}'))
 
 
 class ApkType(Enum):

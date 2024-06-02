@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+from abc import ABC, abstractmethod
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, Iterable
@@ -19,27 +20,21 @@ if TYPE_CHECKING:
     from datetime import datetime
     from UnityPy.environment import Environment
 
-__all__ = ['Bundle', 'find_bundles']
+__all__ = ['Bundle', 'DataBundle', 'FileBundle', 'find_bundles']
 log = logging.getLogger(__name__)
 
 PathLike = Path | str
 PathOrPaths = PathLike | Iterable[PathLike]
 
 
-class Bundle:
-    def __init__(self, path: PathLike):
-        self.path = path
-
+class Bundle(ABC):
     def __repr__(self) -> str:
-        return f'<Bundle({self.path_str!r})>'
+        return f'<{self.__class__.__name__}({str(self)!r})>'
 
-    @cached_property
-    def path_str(self) -> str:
-        return path_repr(self.path)
-
-    @cached_property
+    @property
+    @abstractmethod
     def env(self) -> Environment:
-        return load_bundle(self.path.as_posix())  # UnityPy does not support Path objects
+        raise NotImplementedError
 
     @property
     def contents(self):
@@ -57,7 +52,36 @@ class Bundle:
         return len(self.env.container)
 
 
-def find_bundles(path_or_paths: PathOrPaths, *, mod_after: datetime = None) -> Iterator[Bundle]:
+class DataBundle(Bundle):
+    def __init__(self, name: str, raw_data: bytes):
+        self.name = name
+        self.raw_data = raw_data
+
+    def __str__(self) -> str:
+        return self.name
+
+    @cached_property
+    def env(self) -> Environment:
+        return load_bundle(self.raw_data)
+
+
+class FileBundle(Bundle):
+    def __init__(self, path: PathLike):
+        self.path = path
+
+    def __str__(self) -> str:
+        return self.path_str
+
+    @cached_property
+    def path_str(self) -> str:
+        return path_repr(self.path)
+
+    @cached_property
+    def env(self) -> Environment:
+        return load_bundle(self.path.as_posix())  # UnityPy does not support Path objects
+
+
+def find_bundles(path_or_paths: PathOrPaths, *, mod_after: datetime = None) -> Iterator[FileBundle]:
     if mod_after:
         earliest = mod_after.timestamp()
         paths = (path for path in _find_bundles(path_or_paths) if path.stat().st_mtime >= earliest)
@@ -65,7 +89,7 @@ def find_bundles(path_or_paths: PathOrPaths, *, mod_after: datetime = None) -> I
         paths = _find_bundles(path_or_paths)
 
     for path in paths:
-        yield Bundle(path)
+        yield FileBundle(path)
 
 
 def _find_bundles(src_paths: PathOrPaths) -> Iterator[Path]:

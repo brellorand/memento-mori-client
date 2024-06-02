@@ -179,9 +179,17 @@ class AssetCatalog(DictWrapper):
             except KeyError:
                 bundle_path_map[bundle_name] = bundle_paths = []
 
-            # primary_key = self.keys[pk_idx]  # `internal_id_prefixes` entry + file name stem
             prefix_index, name = self.internal_ids[int_id_idx].split('#', 1)
-            bundle_paths.append(self.internal_id_prefixes[int(prefix_index)] + name)
+            # The `primary_key = self.keys[pk_idx]` value is not used here because it is both incomplete and contains
+            # too much at the same time.  For example, `62a70f458f55919d69c737052a1a2a0a.bundle` contains one internal
+            # id: `1#/RQB_000001.png`. Its primary_key is `Banner/LocalRaid/RQB_000001`, but the `internal_id_prefixes`
+            # value for it provides a more complete relative path: `Assets/AddressableConvertAssets/Banner/LocalRaid`
+            path = self.internal_id_prefixes[int(prefix_index)] + name
+            if path not in bundle_paths:
+                # A given `internal_id` / file may have multiple entries if multiple serialized types are represented
+                # by the same file.  For example, `Assets/AddressableConvertAssets/Banner/LocalRaid/RQB_000001.png`
+                # has 2 m_ClassName values: UnityEngine.Texture2D and UnityEngine.Sprite.
+                bundle_paths.append(path)
 
         return bundle_path_map
 

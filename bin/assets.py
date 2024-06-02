@@ -118,10 +118,15 @@ class Catalog(Save, help='Save the asset catalog, which contains metadata about 
     apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
     split = Flag('-s', help='Split the catalog into separate files for each top-level key')
     decode = Flag('-d', help='Decode base64-encoded content (only applies when --split / -s is specified)')
+    no_subdir = Flag(
+        '-S', help='When splitting the catalog into separate files, use the provided output dir, not a subdirectory'
+    )
 
     @section(help='Save the asset catalog, which contains metadata about game assets')
     def data(self):
         for name_parts, data, raw in self.iter_names_and_data():
+            if self.no_subdir:
+                name_parts = (name_parts[-1],)
             self.save_data(data, *name_parts, raw=raw)
 
     @cached_property
@@ -304,7 +309,7 @@ class Index(BundleCommand, help='Create a bundle index to facilitate bundle disc
 
 
 class Find(BundleCommand, help='Find bundles containing the specified paths/files'):
-    pattern = Option('-p', help='Path pattern to find (supports glob-style wildcards)')
+    pattern = Option('-P', help='Path pattern to find (supports glob-style wildcards)')
 
     def main(self):
         matching_contents_iter = self.iter_matching_contents() if self.pattern else self.iter_bundle_contents()
