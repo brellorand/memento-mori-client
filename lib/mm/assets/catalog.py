@@ -129,8 +129,8 @@ class AssetCatalog(DictWrapper):
         reader = BinaryReader(self.bucket_data)
         buckets = []
         for i in range(reader.read(int32)):
-            offset, entry_count = reader.read_multi(int32x2)
-            buckets.append(Bucket(offset, reader.read_num(int32, entry_count)))
+            offset, entry_count = reader.read_array(int32x2)
+            buckets.append(Bucket(offset, reader.read_n_array(int32, entry_count)))
         return buckets
 
     @cached_property
@@ -155,14 +155,26 @@ class AssetCatalog(DictWrapper):
             for int_id_idx, prov_idx, dep_key_idx, dep_hash, data_idx, pk_idx, r_type_idx in self._iter_entry_data()
         ]
 
+    @cached_property
+    def resources(self) -> dict[str | int, list[ResourceLocation]]:
+        """
+        This appears to be a mapping of dependency_key to the list of ResourceLocations that depend on it, but it's
+        not clear.
+        """
+        return {
+            self.keys[i]: [self.locations[entry] for entry in bucket.entries]
+            for i, bucket in enumerate(self.buckets)
+        }
+
     def _iter_entry_data(self) -> Iterator[tuple[int, int, int, int, int, int, int]]:
-        int32x7 = Struct('7i')
+        entry_struct = Struct('7i')
         entry_reader = BinaryReader(self.entry_data)
-        for _ in range(entry_reader.read(Struct('i'))):
-            yield entry_reader.read_multi(int32x7)
+        for _ in range(entry_reader.read(Struct('i'))):  # The first int32 is the number of entries
+            yield entry_reader.read_array(entry_struct)
 
     @cached_property
     def bundle_path_map(self) -> dict[str, list[str]]:
+        """Mapping of bundle file names to the list of relative paths for asset files stored in those bundles."""
         bundle_path_map = {}
         for int_id_idx, _, dep_key_idx, _, _, pk_idx, _ in self._iter_entry_data():
             if dep_key_idx < 0:
@@ -342,14 +354,14 @@ class BinaryReader:
     def read(self, struct: Struct):
         return struct.unpack(self._bio.read(struct.size))[0]
 
-    def read_multi(self, struct: Struct):
+    def read_array(self, struct: Struct):
         return struct.unpack(self._bio.read(struct.size))
 
-    def read_num(self, struct: Struct, n: int):
+    def read_n_array(self, struct: Struct, n: int):
         if n == 1:
-            return self.read_multi(struct)
+            return self.read_array(struct)
         else:
-            return self.read_multi(Struct(f'{n}{struct.format}'))
+            return self.read_array(Struct(f'{n}{struct.format}'))
 
 
 class SerializedObjectDecoder:
