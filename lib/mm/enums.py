@@ -1767,6 +1767,18 @@ class PlayerGuildPositionType(IntEnum):
 # endregion
 
 
+# region Quest
+
+
+class QuestQuickExecuteType(IntEnum):
+    # Reap quest for diamonds vs ticket, I assume
+    Currency = 1
+    Privilege = 2
+
+
+# endregion
+
+
 # region Trials
 
 

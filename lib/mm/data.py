@@ -15,6 +15,7 @@ from .properties import DataProperty, ClearableCachedPropertyMixin
 from .utils import parse_ms_epoch_ts
 
 if TYPE_CHECKING:
+    # fmt: off
     from .enums import LegendLeagueClassType, LockEquipmentDeckType, PrivacySettingsType, RankingDataType
     from .typing import (
         UserSyncData as _UserSyncData,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         UserShopAchievementPackDtoInfo, UserShopFirstChargeBonusDtoInfo, UserShopFreeGrowthPackDtoInfo,
         UserShopMonthlyBoostDtoInfo,
     )
+    # fmt: on
 
 __all__ = ['OrtegaInfo', 'GameData', 'WorldInfo']
 log = logging.getLogger(__name__)

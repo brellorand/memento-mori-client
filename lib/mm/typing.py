@@ -110,7 +110,7 @@ class GetMypageResponse(TypedDict):
     NotOrderedBountyQuestIdList: list[int]
     UnreadIndividualNotificationIdList: list[int]
     UserFriendDtoInfoList: list[UserFriendDtoInfo]
-    GuildSyncData: dict  # GuildSyncData
+    GuildSyncData: GuildSyncData
     UserSyncData: UserSyncData
 
 
