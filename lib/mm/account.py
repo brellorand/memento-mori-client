@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .data import UserSyncData
-from .enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType
+from .enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType, BattleType
 from .http_client import ApiClient
 from .properties import ClearableCachedPropertyMixin
 from .models import Character, Equipment, ItemAndCount
@@ -338,6 +338,94 @@ class WorldAccount(ClearableCachedPropertyMixin):
         return self._api_client.post_msg(
             'equipment/changeEquipment', {'UserCharacterGuid': char_guid, 'EquipmentChangeInfos': changes}
         )
+
+    # endregion
+
+    # region Quest
+
+    @api_request()
+    def get_quest_map_info(self, include_other_players: bool = True):
+        """
+        Example response::
+
+            "AutoBattleDropEquipmentPercent": 2500,
+            "CurrentQuestAutoEnemyIds": [10116007, ..., 10117033, 10117034],
+            "MapOtherPlayerInfos": [
+                {"LatestQuestId": 167, "MainCharacterIconId": 13, "PlayerId": 687..., "PlayerRank": 60, "QuestId": 164},
+                ...
+            ],
+            "MapPlayerInfos": [
+                {"LatestQuestId": 24, "MainCharacterIconId": 2, "PlayerId": 114005..., "PlayerRank": 34, "QuestId": 24},
+                ...
+            ],
+            "UserMapBuildingDtoInfos": [
+                {"SelectedIndex": 1, "QuestMapBuildingId": 1}, {"SelectedIndex": 2, "QuestMapBuildingId": 2},
+                {"SelectedIndex": 2, "QuestMapBuildingId": 6}, {"SelectedIndex": 2, "QuestMapBuildingId": 9},
+                {"SelectedIndex": 1, "QuestMapBuildingId": 16}, {"SelectedIndex": 2, "QuestMapBuildingId": 28}
+            ]
+
+        :param include_other_players: Whether ``MapOtherPlayerInfos`` should be populated in the response
+        :return:
+        """
+        return self._api_client.post_msg('quest/mapInfo', {'IsUpdateOtherPlayerInfo': bool(include_other_players)})
+
+    @api_request()
+    def get_quest_info(self, quest_id: int):
+        # -> GetQuestInfoResponse => {TargetBossBattleInfo: BossBattleInfo}
+        return self._api_client.post_msg('quest/getQuestInfo', {'TargetQuestId': quest_id})
+
+    @api_request()
+    def get_next_quest_info(self):
+        # This populates ``UserSyncData.UserBattleBossDtoInfo.BossClearMaxQuestId``; add 1 to get the quest ID that
+        # should be used with :meth:`.battle_quest_boss` to battle the next quest boss.
+        return self._api_client.post_msg('battle/nextQuest', {})
+
+    @api_request()
+    def battle_quest_boss(self, quest_id: int):
+        # Win/loss info in the response is in ``BattleResult.SimulationResult.BattleEndInfo``
+        # After a win, :meth:`.get_next_quest_info` should be called to determine the next quest that is available
+        return self._api_client.post_msg('battle/boss', {'QuestId': quest_id})
+
+    @api_request()
+    def __get_boss_reward_info(self):
+        # This resulted in an error: "There is no information for the next quest."
+        # {'ErrorCode': 112003, 'Message': '', 'ErrorHandlingType': 0, 'ErrorMessageId': 0, 'MessageParams': None}
+        return self._api_client.post_msg('battle/bossRewardInfo', {})
+
+    @api_request()
+    def get_clear_party_log(self, quest_id: int, battle_type: BattleType | int):
+        battle_type = BattleType(battle_type).value
+        return self._api_client.post_msg('battle/getClearPartyLog', {'QuestId': quest_id, 'BattleType': battle_type})
+
+    @api_request()
+    def get_clear_party_battle_log(self, quest_id: int, player_id: int, battle_type: BattleType | int):
+        # -> GetClearPartyBattleLogResponse => {BattleSimulationResult: BattleSimulationResult}
+        battle_type = BattleType(battle_type).value
+        data = {'LogQuestId': quest_id, 'LogPlayerId': player_id, 'BattleType': battle_type}
+        return self._api_client.post_msg('battle/getClearPartyBattleLog', data)
+
+    @api_request()
+    def get_battle_log(self, battle_token: str):
+        # -> GetBattleLogResponse => {BattleSimulationResult: BattleSimulationResult}
+        return self._api_client.post_msg('battle/getBattleLog', {'BattleToken': battle_token})
+
+    # endregion
+
+    # region Trials
+
+    # Notes:
+    # BountyQuest = Fountain of Prayers
+    # DungeonBattle = Cave of Space Time
+    # TowerBattle = Tower of Infinity
+    # LocalRaid = Temple of Illusions
+
+    @api_request()
+    def get_fountain_of_prayers_quests(self):
+        return self._api_client.post_msg('bountyQuest/getList', {})
+
+    @api_request()
+    def get_temple_of_illusions_info(self):
+        return self._api_client.post_msg('localRaid/getLocalRaidInfo', {})
 
     # endregion
 

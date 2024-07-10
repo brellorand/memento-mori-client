@@ -529,6 +529,7 @@ class AuthClient(OrtegaClient):
             'DisplayLanguage': auth_config.locale.num,
             'OSVersion': auth_config.os_version,
             'SteamTicket': '',
+            # TODO: 'AuthToken': ??? (maybe changes in every client version?)
         }
         log.debug(f'Sending createUser request with {data=}')
         return self._post_msg('auth/createUser', data)
