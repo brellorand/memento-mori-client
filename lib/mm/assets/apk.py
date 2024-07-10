@@ -5,12 +5,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from typing import Iterator, Iterable
 from weakref import finalize
 from zipfile import ZipFile, ZipInfo
+
+from cloudscraper import CloudScraper
+from requests import Session, Response
+from tqdm import tqdm
 
 from mm.fs import get_user_cache_dir
 from .bundles import DataBundle
@@ -64,6 +69,12 @@ class ApkArchive:
         manifest = json.loads(self._zip_file.read('manifest.json'))
         return manifest['version_name']
 
+    def __getstate__(self):
+        return self.parent, self.path, self._cache_dir
+
+    def __setstate__(self, state):
+        self.parent, self.path, self._cache_dir = state
+
     @classmethod
     def _close(cls, file: ZipFile):
         file.close()
@@ -92,3 +103,49 @@ class AssetPackApk(ApkArchive):
 class ApkType(Enum):
     XAPK = 'xapk'
     APK = 'apk'
+
+
+class ApkDownloader:
+    _USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0'
+
+    def __init__(self, *, user_agent: str = None, chunk_size: int = 1_048_576):
+        self.user_agent = user_agent or self._USER_AGENT
+        self.chunk_size = chunk_size  # default: 1 MB (1024 * 1024)
+
+    @cached_property
+    def _session(self) -> Session:
+        # Note: CloudScraper is required to handle Cloudflare verification
+        return CloudScraper(browser={'browser': 'firefox', 'platform': 'windows', 'mobile': False})
+
+    @cached_property
+    def latest_version(self) -> str | None:
+        resp = self._session.get('https://apkpure.com/mementomori-afkrpg/jp.boi.mementomori.android/download')
+        resp.raise_for_status()
+
+        if m := re.match(r"version_name:\s+'(.+?)'", resp.text):
+            return m.group(1).strip()
+        return None
+
+    def download_latest(self, download_dir: Path):
+        download_dir.mkdir(parents=True, exist_ok=True)
+        # TODO: Use file name from header instead?
+        #  'Content-Disposition': 'attachment; filename="MementoMori: AFKRPG_2.17.0_APKPure.xapk"'
+        path = download_dir.joinpath(f'jp.boi.mementomori.android_{self.latest_version}.xapk')
+
+        resp: Response = self._session.get(
+            'https://d.apkpure.com/b/XAPK/jp.boi.mementomori.android', params={'version': 'latest'}, stream=True
+        )
+        # log.debug(f'Response={resp} headers: {resp.headers}')
+        resp.raise_for_status()
+        try:
+            size = int(resp.headers.get('Content-Length'))
+        except (ValueError, TypeError):
+            size = None
+
+        written = 0
+        with tqdm(total=size, unit='B', unit_scale=True, smoothing=0.1) as prog_bar, path.open('wb') as f:
+            for chunk in resp.iter_content(chunk_size=self.chunk_size):
+                written += f.write(chunk)
+                prog_bar.update(len(chunk))
+
+        return written
