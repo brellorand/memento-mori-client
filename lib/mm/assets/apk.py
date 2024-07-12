@@ -106,37 +106,34 @@ class ApkType(Enum):
 
 
 class ApkDownloader:
-    _USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0'
+    host = 'apkpure.com'
+    package = 'jp.boi.mementomori.android'
 
-    def __init__(self, *, user_agent: str = None, chunk_size: int = 1_048_576):
-        self.user_agent = user_agent or self._USER_AGENT
+    def __init__(self, *, browser: str = 'firefox', platform: str = 'windows', chunk_size: int = 1_048_576):
+        self.browser = browser
+        self.platform = platform
         self.chunk_size = chunk_size  # default: 1 MB (1024 * 1024)
 
     @cached_property
     def _session(self) -> Session:
         # Note: CloudScraper is required to handle Cloudflare verification
-        return CloudScraper(browser={'browser': 'firefox', 'platform': 'windows', 'mobile': False})
+        return CloudScraper(browser={'browser': self.browser, 'platform': self.platform, 'mobile': False})
+
+    def _get(self, url: str, **kwargs) -> Response:
+        resp = self._session.get(url, **kwargs)
+        resp.raise_for_status()
+        return resp
 
     @cached_property
     def latest_version(self) -> str | None:
-        resp = self._session.get('https://apkpure.com/mementomori-afkrpg/jp.boi.mementomori.android/download')
-        resp.raise_for_status()
-
+        resp = self._get(f'https://{self.host}/mementomori-afkrpg/{self.package}/download')
         if m := re.match(r"version_name:\s+'(.+?)'", resp.text):
             return m.group(1).strip()
         return None
 
-    def download_latest(self, download_dir: Path):
-        download_dir.mkdir(parents=True, exist_ok=True)
-        # TODO: Use file name from header instead?
-        #  'Content-Disposition': 'attachment; filename="MementoMori: AFKRPG_2.17.0_APKPure.xapk"'
-        path = download_dir.joinpath(f'jp.boi.mementomori.android_{self.latest_version}.xapk')
-
-        resp: Response = self._session.get(
-            'https://d.apkpure.com/b/XAPK/jp.boi.mementomori.android', params={'version': 'latest'}, stream=True
-        )
-        # log.debug(f'Response={resp} headers: {resp.headers}')
-        resp.raise_for_status()
+    def download_latest(self, download_dir: Path) -> tuple[Path, int]:
+        resp = self._get(f'https://d.{self.host}/b/XAPK/{self.package}', params={'version': 'latest'}, stream=True)
+        path = self._get_path(download_dir, resp.headers.get('Content-Disposition'))
         try:
             size = int(resp.headers.get('Content-Length'))
         except (ValueError, TypeError):
@@ -148,4 +145,19 @@ class ApkDownloader:
                 written += f.write(chunk)
                 prog_bar.update(len(chunk))
 
-        return written
+        return path, written
+
+    def _get_path(self, download_dir: Path, content_disposition: str | None) -> Path:
+        version = _get_version(content_disposition) or self.latest_version
+        download_dir.mkdir(parents=True, exist_ok=True)
+        return download_dir.joinpath(f'{self.package}_{version}.xapk')
+
+
+def _get_version(content_disposition: str | None) -> str | None:
+    # Example: 'attachment; filename="MementoMori: AFKRPG_2.17.0_APKPure.xapk"'
+    if not content_disposition:
+        return None
+    elif m := re.search(r'_(\d+\.\d+\.\d+)_.*\.xapk"$', content_disposition):
+        return m.group(1)
+    log.debug(f'Could not find version in {content_disposition=}')
+    return None
