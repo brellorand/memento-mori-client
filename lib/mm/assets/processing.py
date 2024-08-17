@@ -204,6 +204,7 @@ class AssetConverter:
 
     def convert_audio(self):
         if paths := list(self.find_audio_files()):
+            log.info(f'Converting {len(paths)} audio files to flac...')
             self._convert_audio(paths)
         else:
             log.info(f'No .wav files were found in {path_repr(self.asset_dir)} (or all had .flac equivalents already)')

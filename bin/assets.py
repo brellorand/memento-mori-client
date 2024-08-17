@@ -220,7 +220,34 @@ class SaveBundles(SaveBundlesCmd, choice='bundles', help='Download raw bundles')
         self.download_bundles(self.output)
 
 
-class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and extract assets from them'):
+class ConverterMixin:
+    skip_flac: bool
+    ffmpeg_path: Path | None
+    output: Path
+    force: bool
+    debug: bool
+
+    def _should_convert_to_flac(self) -> bool:
+        if self.skip_flac:
+            return False
+        if self.ffmpeg_path:
+            return True
+
+        from shutil import which
+
+        return bool(which('ffmpeg'))
+
+    def maybe_convert_audio(self):
+        if not self._should_convert_to_flac():
+            return
+
+        converter = AssetConverter(self.output, self.ffmpeg_path, self.force, self.debug)
+        converter.convert_audio()
+
+
+class SaveAssets(
+    ConverterMixin, SaveBundlesCmd, choice='assets', help='Download raw bundles and extract assets from them'
+):
     with ParamGroup(mutually_exclusive=True, required=True):
         latest_apk = Flag('-A', help='Save assets from the latest APK')
         apk_path: Path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
@@ -241,24 +268,14 @@ class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and
 
             downloader = ApkDownloader()
             path = downloader.get_path(None)
-            if not path.exists():
+            if path.exists():
+                log.debug(f'The latest APK was already saved: {path.as_posix()}')
+                self.apk_path = path
+            else:
                 self.apk_path = downloader.download_latest(None)[0]  # noqa
 
         self.extract_assets()
-
-        if self._should_convert_to_flac():
-            converter = AssetConverter(self.output, self.ffmpeg_path, self.force, self.debug)
-            converter.convert_audio()
-
-    def _should_convert_to_flac(self) -> bool:
-        if self.skip_flac:
-            return False
-        if self.ffmpeg_path:
-            return True
-
-        from shutil import which
-
-        return bool(which('ffmpeg'))
+        self.maybe_convert_audio()
 
     def extract_assets(self):
         finder = AssetBundleFinder(
@@ -366,11 +383,13 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
                     yield src_path, content_path
 
 
-class Extract(BundleCommand, help='Extract assets from a .bundle file'):
+class Extract(ConverterMixin, BundleCommand, help='Extract assets from a .bundle file'):
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
 
     force = Flag('-F', help='Force re-extraction even if output files already exist (default: skip existing files)')
     allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
+    skip_flac = Flag(help='Skip conversion of audio files to flac (default: attempt to convert if ffmpeg is available)')
+    ffmpeg_path = Option('-f', type=FILE, help='Path to ffmpeg, if it is not in your $PATH')
 
     parallel: int = Option('-P', type=NumRange(min=1), default=4, help='Number of processes to use in parallel')
     debug = Flag('-d', help='Enable logging in bundle processing workers')
@@ -378,6 +397,7 @@ class Extract(BundleCommand, help='Extract assets from a .bundle file'):
     def main(self):
         extractor = AssetExtractor(self.finder, self.output, self.parallel, self.verbose, self.debug)
         extractor.extract_assets(self.force, self.allow_raw)
+        self.maybe_convert_audio()
 
 
 # endregion
