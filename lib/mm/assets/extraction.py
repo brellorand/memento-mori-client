@@ -25,7 +25,9 @@ from UnityPy.enums.ClassIDType import ClassIDType
 from mm.fs import path_repr
 
 if TYPE_CHECKING:
-    from .bundles import Bundle
+    from UnityPy.files.ObjectReader import ObjectReader
+
+    from .bundles import Bundle, BundleGroup
 
 __all__ = ['BundleExtractor', 'AssetExporter']
 log = logging.getLogger(__name__)
@@ -59,8 +61,25 @@ class BundleExtractor:
         self._exporters[id_type] = exporter = exp_cls(self)
         return exporter
 
+    def extract_group_bundle(self, group: BundleGroup, bundle_name: str):
+        log.debug(f'Loading asset file(s) from {bundle_name}...')
+        container = group.get_container(bundle_name)
+        log.debug(f'Loaded {len(container)} asset file(s) from {bundle_name}')
+        for obj_path, obj in container.items():
+            if self.include_exts and not obj_path.endswith(self.include_exts):
+                log.debug(f'Skipping {obj_path} from {bundle_name}')
+                continue
+
+            try:
+                self.save_asset(obj_path, obj)
+            except MissingExporter:
+                log.warning(
+                    f'No exporter is configured for {obj_path} in {obj=} with {obj.type=} from {bundle_name}',
+                    extra={'color': 'yellow'},
+                )
+
     def extract_bundle(self, bundle: Bundle):
-        log.debug(f'Loaded {len(bundle)} file(s) from {bundle}')
+        log.debug(f'Loaded {len(bundle)} asset file(s) from {bundle}')
         for obj_path, obj in bundle.env.container.items():
             if self.include_exts and not obj_path.endswith(self.include_exts):
                 log.debug(f'Skipping {obj_path} from {bundle}')
@@ -74,9 +93,10 @@ class BundleExtractor:
                     extra={'color': 'yellow'},
                 )
 
-    def save_asset(self, obj_path: str, obj):
+    def save_asset(self, obj_path: str, obj: ObjectReader, nested: bool = False):
         exporter = self._get_exporter(obj.type)
-        exporter.export_all(obj.read(), self.dst_dir.joinpath(obj_path))
+        log.debug(f'{exporter.__class__.__name__}: Exporting all from {obj} for {obj_path}')
+        exporter.export_all(obj.read(), self.dst_dir.joinpath(obj_path), nested)
 
 
 class AssetExporter(ABC, Generic[T]):
@@ -119,7 +139,7 @@ class AssetExporter(ABC, Generic[T]):
             return dst_path
         return dst_path.parent.joinpath(f'{dst_path.name}{self.default_ext}')
 
-    def export_all(self, obj: T, dst_path: Path):
+    def export_all(self, obj: T, dst_path: Path, nested: bool = False):
         self._export(obj, dst_path)
 
     def _export(self, obj: T, dst_path: Path):
@@ -252,7 +272,8 @@ class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip,
         # return obj.m_AudioData
         return b''
 
-    def export_all(self, obj: AudioClip, dst_path: Path):
+    def export_all(self, obj: AudioClip, dst_path: Path, nested: bool = False):
+        log.debug(f'{self.__class__.__name__}: Exporting all from {nested=} {obj}')
         self._register(obj)
         samples: dict[str, bytes] = obj.samples  # This is a plain property - stored here to avoid re-computation
         if not samples:
@@ -277,6 +298,7 @@ class SpriteExporter(AssetExporter[Sprite], id_type=ClassIDType.Sprite, ext='.pn
     def export_bytes(self, obj: Sprite) -> bytes:
         self.exported.add((obj.assets_file, obj.path_id))
         self.exported.add((obj.m_RD.texture.assets_file, obj.m_RD.texture.path_id))
+
         alpha_assets_file = getattr(obj.m_RD.alphaTexture, 'assets_file', None)
         alpha_path_id = getattr(obj.m_RD.alphaTexture, 'path_id', None)
         if alpha_path_id and alpha_assets_file:
@@ -338,22 +360,23 @@ class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObje
             else:
                 yield item
 
-    def export_all(self, obj: GameObject, dst_path: Path):
+    def export_all(self, obj: GameObject, dst_path: Path, nested: bool = False):
+        log.debug(f'{self.__class__.__name__}: Exporting all from {nested=} {obj}')
         refs = self._crawl(obj)
         if not refs:
-            log.info(f'No game objects found for {dst_path.as_posix()}')
+            log.info(f'No game objects found for {nested=} {dst_path.as_posix()}')
             return
 
         self._register(obj)
         for ref_id, ref in refs.items():
             # Don't export already exported objects a second time
             # and prevent circular calls by excluding other GameObjects.
-            # The other GameObjects were already exported in the this call.
+            # The other GameObjects were already exported in this call.
             if (ref.assets_file, ref_id) in self.exported or ref.type == ClassIDType.GameObject:
                 continue
 
             ref_path = dst_path.relative_to(self.extractor.dst_dir).joinpath(ref.name if ref.name else ref.type.name)
-            self.extractor.save_asset(ref_path.as_posix(), ref)
+            self.extractor.save_asset(ref_path.as_posix(), ref, nested=True)
 
 
 class SkipExport(Exception):

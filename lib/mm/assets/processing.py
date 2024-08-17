@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Collection, Iterator
 from mm.fs import path_repr
 from mm.logging import log_initializer
 from mm.utils import FutureWaiter
-from .bundles import FileBundle, Bundle, find_bundles
+from .bundles import FileBundle, Bundle, BundleGroup, find_bundles, find_bundle_paths
 
 if TYPE_CHECKING:
     from mm.session import MementoMoriSession
@@ -26,42 +26,53 @@ log = logging.getLogger(__name__)
 
 
 class BundleFinder:
+    """
+    Used to find bundles that should be downloaded from the asset catalog.
+
+    This base class is only used when downloading bundles, not when extracting assets from those bundles.
+    The :class:`AssetBundleFinder` class below is used when extracting assets.
+    """
+
     def __init__(
         self,
         mm_session: MementoMoriSession,
         bundle_dir: Path,
         *,
         limit: int = None,
+        bundle_names: Collection[str] = None,
         asset_path_pats: Collection[str] = None,
         extensions: Collection[str] = None,
     ):
         self.mm_session = mm_session
         self.bundle_dir = bundle_dir
         self.limit = limit
+        self.bundle_names = set(bundle_names) if bundle_names else None
         self.asset_path_pats = asset_path_pats
         self.extensions = tuple(extensions) if extensions else None
-
-    def find_bundles(self):
-        yield from find_bundles(self.bundle_dir)
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
         return self.mm_session.asset_catalog
 
     def get_bundle_names(self, save_dir: Path = None, force: bool = False, action: str = 'download') -> list[str]:
-        to_download = self._get_bundle_candidates()
-        log.debug(f'Found {len(to_download):,d} total bundles to {action}')
+        bundle_names = self._get_bundle_candidates()
+        log.debug(f'Found {len(bundle_names):,d} total bundles to {action}')
 
         if save_dir and not (force or not save_dir.exists()):
-            to_download = [name for name in to_download if not save_dir.joinpath(name).exists()]
-            log.debug(f'Filtered to {len(to_download):,d} new bundles to {action}')
+            bundle_names = [name for name in bundle_names if not save_dir.joinpath(name).exists()]
+            log.debug(f'Filtered to {len(bundle_names):,d} new bundles to {action}')
 
         if self.limit:
-            return to_download[:self.limit]
-        return to_download
+            return bundle_names[:self.limit]
+        return bundle_names
 
     def _get_bundle_candidates(self):
         bundle_path_map = self.asset_catalog.bundle_path_map
+        if self.bundle_names:
+            bundle_path_map = {name: bundle_path_map[name] for name in self.bundle_names.intersection(bundle_path_map)}
+            for name in self.bundle_names:
+                bundle_path_map.setdefault(name, [])  # Allow bundles in a directory but not in the asset catalog
+
         if asset_path_pats := self.asset_path_pats:
             from fnmatch import fnmatch
 
@@ -78,6 +89,8 @@ class BundleFinder:
 
 
 class AssetBundleFinder(BundleFinder):
+    """Used to find bundles from either a directory or an APK file during asset extraction"""
+
     def __init__(
         self,
         mm_session: MementoMoriSession,
@@ -86,15 +99,39 @@ class AssetBundleFinder(BundleFinder):
         apk_path: Path = None,
         earliest: datetime = None,
         limit: int = None,
+        bundle_names: Collection[str] = None,
         asset_path_pats: Collection[str] = None,
         extensions: Collection[str] = None,
     ):
-        super().__init__(mm_session, bundle_dir, limit=limit, asset_path_pats=asset_path_pats, extensions=extensions)
+        super().__init__(
+            mm_session,
+            bundle_dir,
+            limit=limit,
+            bundle_names=bundle_names,
+            asset_path_pats=asset_path_pats,
+            extensions=extensions,
+        )
         self.apk_path = apk_path
         self.earliest = earliest
 
+    def get_bundle_group(self) -> BundleGroup | None:
+        if (bundle_dir := self.bundle_dir) and not (self.bundle_names or self.asset_path_pats or self.extensions):
+            if self.earliest:
+                bundle_names = {p.name for p in find_bundle_paths(bundle_dir, mod_after=self.earliest)}
+                return BundleGroup.for_dir(bundle_dir, bundle_names=bundle_names)
+            return BundleGroup.for_dir(bundle_dir)
+        elif not (bundle_names := self.get_bundle_names(action='extract')):
+            return None
+        elif bundle_dir:
+            if self.earliest:
+                earliest = self.earliest.timestamp()
+                bundle_names = {name for name in bundle_names if bundle_dir.joinpath(name).stat().st_mtime >= earliest}
+            return BundleGroup.for_dir(bundle_dir, bundle_names=bundle_names)
+        else:
+            return BundleGroup.for_apk(self._asset_pack_apk, bundle_names)
+
     def find_bundles(self) -> Iterator[Bundle]:
-        if (bundle_dir := self.bundle_dir) and not (self.asset_path_pats or self.extensions):
+        if (bundle_dir := self.bundle_dir) and not (self.bundle_names or self.asset_path_pats or self.extensions):
             yield from find_bundles(self.bundle_dir, mod_after=self.earliest)
         elif bundle_names := self.get_bundle_names(action='extract'):
             if bundle_dir:
@@ -141,7 +178,13 @@ class AssetExtractor:
 
     def extract_assets(self, force: bool, allow_raw: bool):
         dst_dir, exts = self.output, self.finder.extensions
+        # TODO: Switch to the group approach?
+        # group = self.finder.get_bundle_group()
         with self.executor() as executor:
+            # futures = [
+            #     executor.submit(group.extract, name, dst_dir, force, allow_raw, exts)
+            #     for name in group.bundle_names
+            # ]
             futures = [
                 executor.submit(bundle.extract, dst_dir, force, allow_raw, exts)
                 for bundle in self.finder.find_bundles()

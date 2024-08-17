@@ -174,6 +174,7 @@ class Catalog(Save, help='Save the asset catalog, which contains metadata about 
 
 class SaveBundlesCmd(Save, ABC):
     with ParamGroup('Asset File'):
+        bundle_names = Option('-n', nargs='+', help='Names of specific bundles to include')
         asset_path = Option(
             '-p', nargs='+', metavar='GLOB',
             help='One or more asset paths for which bundles should be included (supports wildcards)',
@@ -187,7 +188,12 @@ class SaveBundlesCmd(Save, ABC):
 
     def download_bundles(self, save_dir: Path):
         finder = BundleFinder(
-            self.mm_session, save_dir, limit=self.limit, asset_path_pats=self.asset_path, extensions=self.extension
+            self.mm_session,
+            save_dir,
+            limit=self.limit,
+            bundle_names=self.bundle_names,
+            asset_path_pats=self.asset_path,
+            extensions=self.extension,
         )
         if bundle_names := finder.get_bundle_names(save_dir, self.force):
             self._download_bundles(save_dir, bundle_names)
@@ -216,25 +222,43 @@ class SaveBundles(SaveBundlesCmd, choice='bundles', help='Download raw bundles')
 
 class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and extract assets from them'):
     with ParamGroup(mutually_exclusive=True, required=True):
-        apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
-        bundle_dir = Option(
+        latest_apk = Flag('-A', help='Save assets from the latest APK')
+        apk_path: Path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+        bundle_dir: Path = Option(
             '-b', type=DIR, help='Path to a dir that contains .bundle files, or that should be used to store them'
         )
 
     debug = Flag('-d', help='Enable logging in bundle processing workers')
     allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
-    convert_to_flac = Flag('-c', help='[Requires ffmpeg to be installed separately] Convert audio files to flac')
+    skip_flac = Flag(help='Skip conversion of audio files to flac (default: attempt to convert if ffmpeg is available)')
     ffmpeg_path = Option('-f', type=FILE, help='Path to ffmpeg, if it is not in your $PATH')
 
     def main(self):
         if self.bundle_dir:
             self.download_bundles(self.bundle_dir)
+        elif self.latest_apk:
+            from mm.assets.apk import ApkDownloader
+
+            downloader = ApkDownloader()
+            path = downloader.get_path(None)
+            if not path.exists():
+                self.apk_path = downloader.download_latest(None)[0]  # noqa
 
         self.extract_assets()
 
-        if self.convert_to_flac:
+        if self._should_convert_to_flac():
             converter = AssetConverter(self.output, self.ffmpeg_path, self.force, self.debug)
             converter.convert_audio()
+
+    def _should_convert_to_flac(self) -> bool:
+        if self.skip_flac:
+            return False
+        if self.ffmpeg_path:
+            return True
+
+        from shutil import which
+
+        return bool(which('ffmpeg'))
 
     def extract_assets(self):
         finder = AssetBundleFinder(
@@ -242,6 +266,7 @@ class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and
             self.bundle_dir,
             apk_path=self.apk_path,
             limit=self.limit,
+            bundle_names=self.bundle_names,
             asset_path_pats=self.asset_path,
             extensions=self.extension,
         )
@@ -257,6 +282,7 @@ class SaveAssets(SaveBundlesCmd, choice='assets', help='Download raw bundles and
 
 class BundleCommand(AssetCLI, ABC):
     with ParamGroup('Asset File'):
+        bundle_names = Option('-n', nargs='+', help='Names of specific bundles to include')
         asset_path = Option(
             '-p', nargs='+', metavar='GLOB',
             help='One or more asset paths for which bundles should be included (supports wildcards)',
@@ -279,6 +305,7 @@ class BundleCommand(AssetCLI, ABC):
             self.mm_session,
             self.bundle_dir,
             apk_path=self.apk_path,
+            bundle_names=self.bundle_names,
             asset_path_pats=self.asset_path,
             extensions=self.extension,
             earliest=self.earliest,
@@ -291,11 +318,12 @@ class Index(BundleCommand, help='Create a bundle index to facilitate bundle disc
     debug = Flag('-d', help='Enable logging in bundle processing workers')
 
     def main(self):
+        group = self.finder.get_bundle_group()
         with self.executor() as executor:
-            futures = {executor.submit(bundle.get_content_paths): bundle for bundle in self.finder.find_bundles()}
+            futures = {executor.submit(group.get_container, name): name for name in group.bundle_names}
             log.info(f'Processing {len(futures):,d} bundles...')
             with FutureWaiter(executor)(futures, add_bar=not self.debug) as waiter:
-                bundle_contents = {futures[future].path.name: future.result() for future in waiter}
+                bundle_contents = {futures[future]: list(future.result()) for future in waiter}
 
         log.info(f'Saving {path_repr(self.output)}')
         with self.output.open('w', encoding='utf-8') as f:
@@ -314,12 +342,13 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
     def main(self):
         matching_contents_iter = self.iter_matching_contents() if self.pattern else self.iter_bundle_contents()
         for src_path, content_path in matching_contents_iter:
-            print(f'Bundle {path_repr(src_path)} contains: {content_path}')
+            print(f'Bundle {src_path} contains: {content_path}')
 
     def iter_bundle_contents(self):
-        for bundle in self.finder.find_bundles():
-            for path in bundle.contents:
-                yield bundle.path, path
+        group = self.finder.get_bundle_group()
+        for name in group.bundle_names:
+            for path in group.get_container(name):
+                yield name, path
 
     def iter_matching_contents(self):
         import posixpath

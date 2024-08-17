@@ -18,7 +18,7 @@ from requests import Session, Response
 from tqdm import tqdm
 
 from mm.fs import get_user_cache_dir
-from .bundles import DataBundle
+from .bundles import DataBundle, BundleGroup
 from .catalog import AssetCatalog
 
 __all__ = ['ApkArchive', 'AssetPackApk', 'ApkType']
@@ -92,6 +92,33 @@ class AssetPackApk(ApkArchive):
             path.write_bytes(self._zip_file.read('assets/aa/catalog.json'))
         return AssetCatalog(json.loads(path.read_text('utf-8')))
 
+    @cached_property
+    def bundle_group(self) -> BundleGroup:
+        return BundleGroup.for_apk(self)
+
+    def get_bundle_data(self, name: str) -> bytes:
+        """Get the raw data for the bundle file with the specified name"""
+        return self._zip_file.read(f'assets/aa/Android/{name}')
+
+    def iter_bundle_data(self, truncate_names: bool = True) -> Iterator[tuple[str, bytes]]:
+        # This method is not recommended - use `BundleGroup.for_apk` / `AssetPackApk.bundle_group` instead
+        read = self._zip_file.read
+        for file in self._zip_file.infolist():
+            if (name := file.filename).endswith('.bundle'):
+                if truncate_names:
+                    yield name.rsplit('/', 1)[-1], read(name)
+                else:
+                    yield name, read(name)
+
+    def iter_bundle_names(self, truncate: bool = True) -> Iterator[str]:
+        """
+        :param truncate: Whether bundle paths should be truncated so that only file names are yielded
+        :return: Generator that yields the paths/names of files with the ``.bundle`` extension in this APK
+        """
+        for file in self._zip_file.infolist():
+            if (name := file.filename).endswith('.bundle'):
+                yield name.rsplit('/', 1)[-1] if truncate else name
+
     def get_bundle(self, name: str) -> DataBundle:
         return DataBundle(name, self._zip_file.read(f'assets/aa/Android/{name}'))
 
@@ -108,6 +135,11 @@ class ApkType(Enum):
 class ApkDownloader:
     host = 'apkpure.com'
     package = 'jp.boi.mementomori.android'
+    _version_patterns = (
+        r'"version":\s*"(\d+\.\d+\.\d+)"',
+        r'Latest Version\s+(\d+\.\d+\.\d+)\s+APK',
+        r'【v(\d+\.\d+\.\d+)】',
+    )
 
     def __init__(self, *, browser: str = 'firefox', platform: str = 'windows', chunk_size: int = 1_048_576):
         self.browser = browser
@@ -127,13 +159,16 @@ class ApkDownloader:
     @cached_property
     def latest_version(self) -> str | None:
         resp = self._get(f'https://{self.host}/mementomori-afkrpg/{self.package}/download')
-        if m := re.match(r"version_name:\s+'(.+?)'", resp.text):
-            return m.group(1).strip()
+        for pattern in self._version_patterns:
+            if (version_strs := set(re.findall(pattern, resp.text))) and len(version_strs) == 1:
+                return next(iter(version_strs))
+        log.warning('Could not find APK version using any configured pattern on the download page')
         return None
 
-    def download_latest(self, download_dir: Path) -> tuple[Path, int]:
+    def download_latest(self, download_dir: Path | None) -> tuple[Path, int]:
         resp = self._get(f'https://d.{self.host}/b/XAPK/{self.package}', params={'version': 'latest'}, stream=True)
-        path = self._get_path(download_dir, resp.headers.get('Content-Disposition'))
+        path = self.get_path(download_dir, resp.headers.get('Content-Disposition'))
+        log.info(f'Saving latest APK to {path.as_posix()}')
         try:
             size = int(resp.headers.get('Content-Length'))
         except (ValueError, TypeError):
@@ -147,8 +182,11 @@ class ApkDownloader:
 
         return path, written
 
-    def _get_path(self, download_dir: Path, content_disposition: str | None) -> Path:
+    def get_path(self, download_dir: Path | None, content_disposition: str | None = None) -> Path:
         version = _get_version(content_disposition) or self.latest_version
+        if not download_dir:
+            download_dir = get_user_cache_dir(f'apk/{version}' if version else 'apk')
+
         download_dir.mkdir(parents=True, exist_ok=True)
         return download_dir.joinpath(f'{self.package}_{version}.xapk')
 
