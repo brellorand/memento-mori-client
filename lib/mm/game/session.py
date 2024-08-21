@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..data import UserSyncData
-from ..enums import Region, Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType, BattleType
+from ..enums import Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType, BattleType
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
 from ..models import Character, Equipment, ItemAndCount

@@ -15,7 +15,7 @@ from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.game import PlayerAccount, WorldSession
+from mm.game import PlayerAccount, WorldSession, DailyTask, TaskRunner
 from mm.config import AccountConfig
 from mm.enums import ItemRarityFlags, EquipmentType, ITEM_PAGE_TYPE_MAP
 from mm.output import CompactJSONEncoder
@@ -305,7 +305,7 @@ class Show(WorldCommand, help='Show info'):
 
 class Dailies(WorldCommand, help='Perform daily tasks'):
     world: int = Option('-w', required=True, help='The world to log in to')
-    actions = Option('-a', choices=('vip_gift',), required=True, help='The actions to take')
+    actions = Option('-a', choices=DailyTask.get_cli_name_map(), help='The actions to take')
     dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
 
     def main(self):
@@ -313,19 +313,14 @@ class Dailies(WorldCommand, help='Perform daily tasks'):
         self.world_session.get_user_sync_data()
         self.world_session.get_my_page()
 
-        if 'vip_gift' in self.actions:
-            self.get_vip_gift()
-
-    def get_vip_gift(self):
-        if self.world_session.user_sync_data.has_vip_daily_gift:
-            if self.dry_run:
-                log.info('[DRY RUN] Would claim daily VIP gift')
-            else:
-                log.info('Claiming daily VIP gift')
-                # TODO: Only print the items that were received
-                self.print(self.world_session.get_daily_vip_gift())
+        task_runner = TaskRunner(self.world_session, self.dry_run)
+        if self.actions:
+            cli_name_map = DailyTask.get_cli_name_map()
+            task_runner.add_tasks(cli_name_map[name] for name in self.actions)
         else:
-            log.info('The daily VIP gift was already claimed')
+            task_runner.add_tasks(DailyTask.get_all())
+
+        task_runner.run_tasks()
 
 
 if __name__ == '__main__':
