@@ -13,14 +13,14 @@ from .mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipme
 from .properties import DataProperty
 
 if TYPE_CHECKING:
-    from .account import WorldAccount
+    from .account import WorldSession
 
 __all__ = ['WorldEntity', 'Equipment', 'Character']
 log = logging.getLogger(__name__)
 
 
 class WorldEntity:
-    def __init__(self, world: WorldAccount, data: dict[str, Any]):
+    def __init__(self, world: WorldSession, data: dict[str, Any]):
         self.world = world
         self.data = data
 

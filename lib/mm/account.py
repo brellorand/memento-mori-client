@@ -32,17 +32,17 @@ if TYPE_CHECKING:
         ErrorLogInfo,
     )
 
-__all__ = ['PlayerAccount', 'WorldAccount']
+__all__ = ['PlayerAccount', 'WorldSession']
 log = logging.getLogger(__name__)
 
 
 class PlayerAccount:
-    """A player account, which may contain one or more :class:`.WorldAccount`s"""
+    """A player account, which may contain one or more :class:`.WorldSession`s"""
 
     session: MementoMoriSession
     config: ConfigFile = None
     account_config: AccountConfig = None
-    _last_world: WorldAccount = None
+    _last_world: WorldSession = None
 
     def __init__(self, session: MementoMoriSession, config: AccountConfig | None):
         self.session = session
@@ -89,11 +89,11 @@ class PlayerAccount:
         """
         return {row['WorldId']: row for row in self.login_data['PlayerDataInfoList']}
 
-    def get_world(self, world_id: int) -> WorldAccount:
+    def get_world(self, world_id: int) -> WorldSession:
         if self._last_world is not None:
             self._last_world.close()
 
-        self._last_world = world = WorldAccount(self, self.region.normalize_world(world_id))
+        self._last_world = world = WorldSession(self, self.region.normalize_world(world_id))
         return world
 
 
@@ -108,7 +108,7 @@ class ApiRequestMethod:
         self.requires_login = requires_login
         self.maintenance_ok = maintenance_ok
 
-    def _request_wrapper(self, instance: WorldAccount, *args, **kwargs):
+    def _request_wrapper(self, instance: WorldSession, *args, **kwargs):
         if self.requires_login and not instance.is_logged_in:
             instance.login()
 
@@ -133,7 +133,7 @@ class ApiRequestMethod:
         except KeyError:
             return None
 
-    def __get__(self, instance: WorldAccount, owner):
+    def __get__(self, instance: WorldSession, owner):
         if instance is None:
             return self
         return partial(self._request_wrapper, instance)
@@ -146,7 +146,7 @@ def api_request(*, requires_login: bool = True, maintenance_ok: bool = False):
 # endregion
 
 
-class WorldAccount(ClearableCachedPropertyMixin):
+class WorldSession(ClearableCachedPropertyMixin):
     """Represents a player + world account / logged in session for that account."""
 
     session: MementoMoriSession
@@ -164,7 +164,7 @@ class WorldAccount(ClearableCachedPropertyMixin):
         self._is_logged_in = False
 
     @classmethod
-    def from_cached_sync_data(cls, path: Path, player: PlayerAccount) -> WorldAccount:
+    def from_cached_sync_data(cls, path: Path, player: PlayerAccount) -> WorldSession:
         data = _load_cached_data(path)
         player_id = data['UserSyncData']['UserStatusDtoInfo']['PlayerId']
         self = cls(player, player.region.normalize_world(player_id % 1000))

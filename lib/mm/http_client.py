@@ -586,7 +586,7 @@ class ApiClient(OrtegaClient):
     API client for making requests specific to a logged in player + world.
 
     Only one specific request method is defined here since it doesn't require prior world login.  Methods for requests
-    that require login are defined in :class:`~.WorldAccount`
+    that require login are defined in :class:`~.WorldSession`
     """
 
     def post_msg(self, uri_path: str, to_pack, **kwargs):

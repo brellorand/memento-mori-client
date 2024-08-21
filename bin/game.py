@@ -15,7 +15,7 @@ from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import PlayerAccount, WorldAccount
+from mm.account import PlayerAccount, WorldSession
 from mm.config import AccountConfig
 from mm.enums import ItemRarityFlags, EquipmentType, ITEM_PAGE_TYPE_MAP
 from mm.output import CompactJSONEncoder
@@ -82,9 +82,9 @@ class WorldCommand(GameCLI, ABC):
             return PlayerAccount.from_cached_login(self.player_login_path, self.mm_session)
 
     @cached_property
-    def world_account(self) -> WorldAccount:
+    def world_session(self) -> WorldSession:
         if self.user_sync_path:
-            return WorldAccount.from_cached_sync_data(self.user_sync_path, self.player_account)
+            return WorldSession.from_cached_sync_data(self.user_sync_path, self.player_account)
         elif not self.world:
             raise UsageError('Missing required parameter: --world / -w')
         return self.player_account.get_world(self.world)
@@ -165,7 +165,7 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     def _ensure_user_sync_data_is_loaded(self):
         self.mm_session.mb.populate_cache()
         if not self.user_sync_path:
-            self.world_account.get_user_sync_data()
+            self.world_session.get_user_sync_data()
 
     # region Equipment
 
@@ -198,9 +198,9 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     def iter_equipment(self, unequipped: bool) -> Iterator[Equipment]:
         self._ensure_user_sync_data_is_loaded()
         if unequipped:
-            yield from self.world_account.char_guid_equipment_map.get('', ())
+            yield from self.world_session.char_guid_equipment_map.get('', ())
         else:
-            yield from self.world_account.equipment.values()
+            yield from self.world_session.equipment.values()
 
     # endregion
 
@@ -209,7 +209,7 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     def get_inventory_rows(self):
         self._ensure_user_sync_data_is_loaded()
 
-        inventory = self.world_account.inventory
+        inventory = self.world_session.inventory
         if not self.include_zero:
             inventory = (i for i in inventory if i.count != 0)
         if self.page:
@@ -269,25 +269,36 @@ class Show(WorldCommand, help='Show info'):
 
     @item
     def world_login(self):
-        self.print(self.world_account.login())
+        self.print(self.world_session.login())
 
     @item
     def user_sync_data(self):
-        # self.print(self.world_account.get_user_sync_data().data)
-        self.print(self.world_account.get_user_data())
+        # self.print(self.world_session.get_user_sync_data().data)
+        self.print(self.world_session.get_user_data())
 
     @item
     def my_page(self):
-        self.print(self.world_account.get_my_page())
+        self.print(self.world_session.get_my_page())
 
     @item
     def characters(self):
         self.mm_session.mb.populate_cache()
-        self.world_account.get_user_sync_data()
-        for char in self.world_account.characters.values():
+        self.world_session.get_user_sync_data()
+        for char in self.world_session.characters.values():
             print(f'- {char}')
             for item in char.equipment:
                 print(f'    - {item}')
+
+    @item
+    def quest_map(self):
+        self.world_session.get_my_page()
+        self.print(self.world_session.get_quest_map_info(True))
+
+    # @item
+    # def boss_reward_info(self):
+    #     self.world_session.get_my_page()
+    #     self.world_session.get_quest_map_info(True)
+    #     self.print(self.world_session.get_boss_reward_info())
 
     # endregion
 
@@ -299,20 +310,20 @@ class Dailies(WorldCommand, help='Perform daily tasks'):
 
     def main(self):
         self.mm_session.mb.populate_cache()
-        self.world_account.get_user_sync_data()
-        self.world_account.get_my_page()
+        self.world_session.get_user_sync_data()
+        self.world_session.get_my_page()
 
         if 'vip_gift' in self.actions:
             self.get_vip_gift()
 
     def get_vip_gift(self):
-        if self.world_account.user_sync_data.has_vip_daily_gift:
+        if self.world_session.user_sync_data.has_vip_daily_gift:
             if self.dry_run:
                 log.info('[DRY RUN] Would claim daily VIP gift')
             else:
                 log.info('Claiming daily VIP gift')
                 # TODO: Only print the items that were received
-                self.print(self.world_account.get_daily_vip_gift())
+                self.print(self.world_session.get_daily_vip_gift())
         else:
             log.info('The daily VIP gift was already claimed')
 
