@@ -8,7 +8,7 @@ from abc import ABC
 from functools import cached_property
 from getpass import getpass
 from operator import itemgetter
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Iterator, Iterable
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, main
 from cli_command_parser.inputs import Path as IPath
@@ -110,11 +110,29 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
 
     @view
     def unequipped(self):
-        self.print_item_rows('Unequipped Gear', self.get_equipment_rows(unequipped=True))
+        self.print_item_rows('Unequipped Gear', self.get_equipment_rows(equipped=False))
+
+    @view
+    def equipped(self):
+        self.print_item_rows('Equipped Gear', self.get_equipment_rows(equipped=True))
+
+    @view
+    def equipped_by_char(self):
+        self._ensure_user_sync_data_is_loaded()
+        for char_guid, equipment in self.world_session.char_guid_equipment_map.items():
+            if not char_guid:
+                continue
+
+            if char := self.world_session.characters.get(char_guid):
+                char_repr = repr(char)
+            else:
+                char_repr = char_guid
+
+            self.print_item_rows(f'Gear Equipped By: {char_repr}', self._get_equipment_rows(equipment))
 
     @view
     def all_equipment(self):
-        self.print_item_rows('All Equipment', self.get_equipment_rows(unequipped=False))
+        self.print_item_rows('All Equipment', self.get_equipment_rows())
 
     @view
     def inventory(self):
@@ -137,9 +155,10 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
         from rich.console import Console
         from rich.table import Table
 
-        table = Table(*self._table_columns(), title=title)
+        columns = list(self._table_columns())
+        table = Table(*columns, title=title)
         for row in rows:
-            table.add_row(*map(str, row.values()))
+            table.add_row(*(str(row.get(col if isinstance(col, str) else col.header, '')) for col in columns))
 
         Console().print(table)
 
@@ -169,9 +188,12 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
 
     # region Equipment
 
-    def get_equipment_rows(self, unequipped: bool):
+    def get_equipment_rows(self, equipped: bool | None = None):
+        return self._get_equipment_rows(self.iter_equipment(equipped=equipped))
+
+    def _get_equipment_rows(self, equipment: Iterable[Equipment]):
         gear = {}
-        for item in self.iter_equipment(unequipped=unequipped):
+        for item in equipment:
             try:
                 row = gear[item.equipment_id]
             except KeyError:
@@ -195,12 +217,16 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
         else:
             return {'Name': eq.name, 'Rarity': eq.rarity_flags, 'Level': eq.level, 'Slot': eq.gear_type, 'Quantity': 1}
 
-    def iter_equipment(self, unequipped: bool) -> Iterator[Equipment]:
+    def iter_equipment(self, equipped: bool | None) -> Iterator[Equipment]:
         self._ensure_user_sync_data_is_loaded()
-        if unequipped:
-            yield from self.world_session.char_guid_equipment_map.get('', ())
-        else:
+        if equipped:
+            for char_guid, equipment in self.world_session.char_guid_equipment_map.items():
+                if char_guid:
+                    yield from equipment
+        elif equipped is None:
             yield from self.world_session.equipment.values()
+        else:  # Equipped is False
+            yield from self.world_session.char_guid_equipment_map.get('', ())
 
     # endregion
 
