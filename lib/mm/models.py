@@ -13,7 +13,7 @@ from .mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipme
 from .properties import DataProperty
 
 if TYPE_CHECKING:
-    from .account import WorldSession
+    from .game import WorldSession
 
 __all__ = ['WorldEntity', 'Equipment', 'Character']
 log = logging.getLogger(__name__)

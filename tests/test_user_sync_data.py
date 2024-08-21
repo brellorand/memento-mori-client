@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import Mock, MagicMock, patch
 
-from mm.account import PlayerAccount
+from mm.game import PlayerAccount
 from mm.data import UserSyncData
 from mm.http_client import ApiClient
 

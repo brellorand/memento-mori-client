@@ -15,7 +15,7 @@ from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.account import PlayerAccount, WorldSession
+from mm.game import PlayerAccount, WorldSession
 from mm.config import AccountConfig
 from mm.enums import ItemRarityFlags, EquipmentType, ITEM_PAGE_TYPE_MAP
 from mm.output import CompactJSONEncoder

@@ -10,14 +10,13 @@ from typing import TYPE_CHECKING
 
 from .assets import AssetCatalog
 from .config import ConfigFile, AccountConfig
-from .http_client import AuthClient, DataClient, DataClientWrapper
+from .http_client import AuthClient, DataClientWrapper
 from .mb_models import MB
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from .enums import Locale
     from .fs import PathLike
-    from .account import PlayerAccount
+    from .game import PlayerAccount
 
 __all__ = ['MementoMoriSession']
 log = logging.getLogger(__name__)
@@ -81,11 +80,11 @@ class MementoMoriSession:
         raise ValueError(f'Unable to find an account with {name=} - pick from: {names}')
 
     def get_account_by_id(self, user_id: int) -> PlayerAccount:
-        from .account import PlayerAccount
+        from .game import PlayerAccount
 
         return PlayerAccount(self, self.get_account_config_by_id(user_id))
 
     def get_account_by_name(self, name: str) -> PlayerAccount:
-        from .account import PlayerAccount
+        from .game import PlayerAccount
 
         return PlayerAccount(self, self.get_account_config_by_name(name))
