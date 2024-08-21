@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
 
 from mm.data import DictWrapper
 from mm.enums import Locale, ItemType
-from mm.fs import MBFileCache, CacheMiss
+from mm.fs import MBFileCache, CacheMiss, path_repr
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
 
@@ -44,6 +44,7 @@ class MB:
         self.locale = Locale(locale)
         self._locale_text_resource_map = {}
         self._cache = MBFileCache(self, 'mb', use_cache=use_cache)
+        log.debug(f'Using MB cache dir: {path_repr(self._cache.root)}')
 
     # region Base MB data
 

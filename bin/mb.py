@@ -333,6 +333,11 @@ class Character(Show, choices=('character', 'char'), help='Show character info')
             print(f'{speed:,d}  {name}')
 
 
+class ShowCatalog(Show, choice='catalog', help='Show the MB catalog (for debugging purposes)'):
+    def main(self):
+        self.pprint(self.mm_session.mb.catalog)
+
+
 # endregion
 
 

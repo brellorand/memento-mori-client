@@ -109,7 +109,7 @@ class FileCache:
             with path.open('w', encoding='utf-8', newline='\n') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
         elif path.suffix in ('.mpk', '.msgpack'):
-            path.write_bytes(msgpack.packb(data))
+            path.write_bytes(msgpack.packb(data, use_single_float=True))
         elif path.suffix == '.txt':
             path.write_text(data, encoding='utf-8', newline='\n')
         else:
