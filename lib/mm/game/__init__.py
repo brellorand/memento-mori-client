@@ -1,4 +1,4 @@
 from .account import PlayerAccount
 from .session import WorldSession
-from .tasks import Task, DailyTask
+from .tasks import Task, DailyTask, TaskConfig
 from .task_runner import TaskRunner

@@ -237,8 +237,34 @@ class WorldSession(ClearableCachedPropertyMixin):
     # region Equipment
 
     @api_request()
-    def smelt_gear(self, guid: str, user_equipment: UserEquipment):
+    def smelt_gear(self, guid: str | None, user_equipment: UserEquipment | None = None):
         return self._api_client.post_msg('equipment/cast', {'Guid': guid, 'UserEquipment': user_equipment})
+
+    def smelt_never_equipped_gear(self, item_and_count: ItemAndCount, count: int = None):
+        # This is not decorated with @api_request since it calls a method that is decorated with it
+        user_equipment = {
+            'CharacterGuid': None,
+            'HasParameter': False,
+            'Guid': None,
+            'ItemCount': item_and_count.count if count is None else count,
+            'ItemId': item_and_count.item_id,
+            'ItemType': item_and_count.item_type,
+            'AdditionalParameterHealth': 0,
+            'AdditionalParameterIntelligence': 0,
+            'AdditionalParameterMuscle': 0,
+            'AdditionalParameterEnergy': 0,
+            'SphereId1': 0,
+            'SphereId2': 0,
+            'SphereId3': 0,
+            'SphereId4': 0,
+            'SphereUnlockedCount': 0,
+            'LegendSacredTreasureExp': 0,
+            'LegendSacredTreasureLv': 0,
+            'MatchlessSacredTreasureExp': 0,
+            'MatchlessSacredTreasureLv': 0,
+            'ReinforcementLv': 0,
+        }
+        return self.smelt_gear(None, user_equipment)
 
     @api_request()
     def smelt_all_gear(self, rarity: EquipmentRarityFlags | int):

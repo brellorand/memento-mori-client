@@ -1198,6 +1198,29 @@ class EquipmentRarityFlags(IntFlag, boundary=CONFORM):
     UR = 256
     LR = 512
 
+    @classmethod
+    def range(cls, min_rarity: EquipmentRarityFlags, max_rarity: EquipmentRarityFlags) -> EquipmentRarityFlags:
+        rarity = last = min_rarity
+        while (next_rarity := last * 2) <= max_rarity:
+            rarity |= next_rarity
+            last = next_rarity
+
+        return rarity
+
+
+class SmeltEquipmentRarity(IntEnum):
+    D = 1
+    C = 2
+    B = 4
+    A = 8
+    S = 16
+    S_PLUS = 17
+
+    def as_flag(self) -> EquipmentRarityFlags:
+        if self == self.S_PLUS:
+            return EquipmentRarityFlags.S
+        return EquipmentRarityFlags(self.value)
+
 
 class EquipmentSlotType(IntEnum):
     NONE = 0

@@ -331,9 +331,9 @@ class UserItem(TypedDict):
 
 
 class UserEquipment(TypedDict):
-    CharacterGuid: str
+    CharacterGuid: str | None
     HasParameter: bool
-    Guid: str
+    Guid: str | None
     ItemCount: int
     # public long EquipmentId {get { return this.ItemId; }}
     ItemId: int

@@ -11,13 +11,15 @@ from operator import itemgetter
 from typing import TYPE_CHECKING, Iterator, Iterable
 
 from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, main
-from cli_command_parser.inputs import Path as IPath
+from cli_command_parser.inputs import Path as IPath, NumRange
 from cli_command_parser.exceptions import UsageError
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.game import PlayerAccount, WorldSession, DailyTask, TaskRunner
+from mm.game import PlayerAccount, WorldSession, DailyTask, TaskRunner, TaskConfig
 from mm.config import AccountConfig
-from mm.enums import ItemRarityFlags, EquipmentType, ITEM_PAGE_TYPE_MAP
+from mm.enums import (
+    ITEM_PAGE_TYPE_MAP, ItemRarityFlags, EquipmentType, SmeltEquipmentRarity, EquipmentRarityFlags
+)
 from mm.output import CompactJSONEncoder
 from mm.session import MementoMoriSession
 
@@ -278,6 +280,63 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     # endregion
 
 
+class Smelt(WorldCommand, help='Smelt equipment'):
+    min_level: int = Option(type=NumRange(min=1), default=1, help='Minimum level of S equipment to smelt')
+    max_level: int = Option(type=NumRange(min=1), help='Maximum level of S equipment to smelt')
+    min_rarity: SmeltEquipmentRarity = Option(
+        default=SmeltEquipmentRarity.D, help='Minimum rarity of equipment to smelt'
+    )
+    max_rarity: SmeltEquipmentRarity = Option(
+        default=SmeltEquipmentRarity.S_PLUS, help='Maximum rarity of equipment to smelt'
+    )
+    keep: int = Option(
+        '-k', default=0, help='Keep the specified number of each piece of the specified max rarity equipment'
+    )
+
+    world: int = Option('-w', help='The world to log in to')
+    dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
+
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.4, help='Minimum wait between smelt requests')
+    max_wait: float = Option(type=NumRange(min=0.4), default=0.9, help='Maximum wait between smelt requests')
+
+    def main(self):
+        if self.min_level and self.max_level and self.min_level > self.max_level:
+            raise UsageError('Invalid min/max levels - the min level must be less than the max level')
+
+        self.mm_session.mb.populate_cache()
+        self.world_session.get_user_sync_data()
+        self.world_session.get_my_page()
+
+        task_runner = TaskRunner(self.world_session, config=self.task_config)
+        task_runner.add_tasks(self.iter_smelt_tasks())
+        task_runner.run_tasks()
+
+    @cached_property
+    def task_config(self) -> TaskConfig:
+        return TaskConfig(
+            dry_run=self.dry_run,
+            min_wait_ms=int(self.min_wait * 1000),
+            max_wait_ms=int(self.max_wait * 1000),
+        )
+
+    def iter_smelt_tasks(self):
+        from mm.game.tasks import SmeltAll, SmeltNeverEquippedSGear, SmeltUnequippedGear
+
+        min_rarity, max_rarity = self.min_rarity.as_flag(), self.max_rarity.as_flag()
+        if max_rarity == EquipmentRarityFlags.S and min_rarity != EquipmentRarityFlags.S:
+            rarity_range = EquipmentRarityFlags.range(min_rarity, EquipmentRarityFlags.A)
+        else:
+            rarity_range = EquipmentRarityFlags.range(min_rarity, max_rarity)
+
+        yield SmeltAll(self.world_session, self.task_config, rarity=rarity_range)
+        yield SmeltNeverEquippedSGear(
+            self.world_session, self.task_config, min_level=self.min_level, max_level=self.max_level, keep=self.keep
+        )
+        yield SmeltUnequippedGear(
+            self.world_session, self.task_config, min_level=self.min_level, max_level=self.max_level
+        )
+
+
 class Show(WorldCommand, help='Show info'):
     item = Action(help='The item to show')
 
@@ -339,7 +398,13 @@ class Dailies(WorldCommand, help='Perform daily tasks'):
         self.world_session.get_user_sync_data()
         self.world_session.get_my_page()
 
-        task_runner = TaskRunner(self.world_session, self.dry_run)
+        config = TaskConfig(
+            dry_run=self.dry_run,
+            # min_wait_ms=int(self.min_wait * 1000),
+            # max_wait_ms=int(self.max_wait * 1000),
+        )
+
+        task_runner = TaskRunner(self.world_session, config=config)
         if self.actions:
             cli_name_map = DailyTask.get_cli_name_map()
             task_runner.add_tasks(cli_name_map[name] for name in self.actions)

@@ -193,13 +193,13 @@ class Equipment(TypedItem, NamedEntity, file_name_fmt='EquipmentMB', item_type=I
     set_id: int = DataProperty('EquipmentSetId')
     part_id: int = DataProperty('CompositeId')  # ID for this item's part (ItemType=5)
     enhance_id: int = DataProperty('EquipmentEvolutionId')
+    category: EquipmentCategory = DataProperty('Category', EquipmentCategory)
 
     slot_type: EquipmentSlotType = DataProperty('SlotType', EquipmentSlotType)
     job_flags: Job = DataProperty('EquippedJobFlags', Job)
     rarity_flags: EquipmentRarityFlags = DataProperty('RarityFlags', EquipmentRarityFlags)
-    category: EquipmentCategory = DataProperty('Category', EquipmentCategory)
+    quality_level: int = DataProperty('QualityLv')  # 0 for normal, 1 for S+ (with the additional icon in the corner)
 
-    quality_level: int = DataProperty('QualityLv')
     additional_param_total: int = DataProperty('AdditionalParameterTotal')
     performance_point: int = DataProperty('PerformancePoint')
     first_rune_slot_cost: int = DataProperty('GoldRequiredToOpeningFirstSphereSlot')
@@ -227,6 +227,14 @@ class Equipment(TypedItem, NamedEntity, file_name_fmt='EquipmentMB', item_type=I
     @cached_property
     def upgrade_requirements(self) -> EquipmentUpgradeRequirements:
         return self.mb.weapon_upgrade_requirements if self.slot_type == 1 else self.mb.armor_upgrade_requirements
+
+    def __repr__(self) -> str:
+        attrs = ('full_name', 'name', 'id')
+        key, val = next((attr, v) for attr in attrs if (v := getattr(self, attr, None)) is not None)
+        rarity = self.rarity_flags.name
+        if self.rarity_flags == EquipmentRarityFlags.S and self.quality_level:
+            rarity += '+'
+        return f'<{self.__class__.__name__}[{key}={val!r}, slot={self.gear_type}, {rarity=!s}, level={self.level}]>'
 
 
 class EquipmentUpgradeRequirements(MBEntity, file_name_fmt='EquipmentReinforcementMaterialMB'):

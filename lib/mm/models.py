@@ -69,6 +69,10 @@ class ItemAndCount(WorldEntity):
     def item(self) -> AnyItem:
         return self.world.session.mb.get_item(self.item_type, self.item_id)
 
+    def __repr__(self) -> str:
+        type, id, count, item = self.item_type, self.item_id, self.count, self.item  # noqa
+        return f'<{self.__class__.__name__}[{type=!s}, {id=!s}, {count=}, {item=!s}]>'
+
 
 class Character(WorldEntity):
     guid: str = DataProperty('Guid')
