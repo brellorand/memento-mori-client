@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 from mm.fs import CacheMiss
 from mm.mb_models import MB
 
+MODULE = 'mm.mb_models.base'
+
 
 def load_mb_data():
     mb_dir = Path(__file__).resolve().parent.joinpath('data/mb')
@@ -33,8 +35,10 @@ class TestMB(TestCase):
         return self._mb_data[name]
 
     def _init_mb(self) -> MB:
-        with patch('mm.mb_models.base.MBFileCache', return_value=Mock(get=Mock(side_effect=CacheMiss))):
-            return MB(session=Mock(data_client=Mock(get_mb_data=self._get_mb_data)), use_cache=False)
+        # path_repr
+        with patch(f'{MODULE}.MBFileCache', return_value=Mock(get=Mock(side_effect=CacheMiss))):
+            with patch(f'{MODULE}.path_repr'):
+                return MB(session=Mock(data_client=Mock(get_mb_data=self._get_mb_data)), use_cache=False)
 
     def test_char_from_short_name(self):
         mb = self._init_mb()
