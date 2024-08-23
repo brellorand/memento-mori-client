@@ -384,6 +384,31 @@ class Show(WorldCommand, help='Show info'):
     # endregion
 
 
+class BattleLeague(WorldCommand, choices=('battle_league', 'BL'), help='Show PvP info'):
+    with ParamGroup(mutually_exclusive=True, required=True):
+        history = Flag('-H', help='Show Battle League history')
+        details = Option('-d', metavar='BATTLE_TOKEN', help='Show details of the BL battle with the specified token')
+
+    world: int = Option('-w', required=True, help='The world to log in to')
+
+    def main(self):
+        if self.history:
+            self.show_history()
+        elif self.details:
+            self.show_battle(self.details)
+
+    def show_history(self):
+        self.world_session.get_my_page()
+        self.world_session.get_pvp_info()
+        self.print(self.world_session.get_pvp_battle_logs())
+
+    def show_battle(self, battle_token: str):
+        self.world_session.get_my_page()
+        self.world_session.get_pvp_info()
+        self.world_session.get_pvp_battle_logs()
+        self.print(self.world_session.get_pvp_battle_details(battle_token))
+
+
 class Dailies(WorldCommand, help='Perform daily tasks'):
     world: int = Option('-w', required=True, help='The world to log in to')
     actions = Option('-a', choices=DailyTask.get_cli_name_map(), help='The actions to take')

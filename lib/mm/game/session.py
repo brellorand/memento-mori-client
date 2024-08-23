@@ -16,6 +16,7 @@ from .models import Character, Equipment, ItemAndCount, UserSyncData
 from .utils import load_cached_data
 
 if TYPE_CHECKING:
+    from mm import typing as t
     from ..config import ConfigFile
     from ..grpc_client import MagicOnionClient
     from ..session import MementoMoriSession
@@ -193,6 +194,8 @@ class WorldSession(ClearableCachedPropertyMixin):
 
     @api_request()
     def get_my_page(self) -> GetMypageResponse:
+        if self.user_sync_data is None:
+            self.get_user_data()
         return self._api_client.post_msg('user/getMypage', {'LanguageType': self.config.auth.locale.num})
 
     # endregion
@@ -395,5 +398,24 @@ class WorldSession(ClearableCachedPropertyMixin):
     @api_request()
     def get_temple_of_illusions_info(self):
         return self._api_client.post_msg('localRaid/getLocalRaidInfo', {})
+
+    # endregion
+
+    # region PvP - Battle League
+
+    @api_request()
+    def get_pvp_info(self) -> t.GetPvpInfoResponse:
+        # Load the Battle League main page's info
+        return self._api_client.post_msg('battle/getPvpInfo', {})
+
+    @api_request()
+    def get_pvp_battle_logs(self) -> t.GetPvpBattleLogsResponse:
+        # Load the BL history summary
+        return self._api_client.post_msg('battle/getPvpBattleLogs', {})
+
+    @api_request()
+    def get_pvp_battle_details(self, battle_token: str) -> t.GetPvpBattleResultDetailResponse:
+        # Retrieve battle details, including replay info, for the specified BL battle
+        return self._api_client.post_msg('battle/getPvpBattleResultDetail', {'BattleToken': battle_token})
 
     # endregion

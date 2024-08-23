@@ -714,6 +714,55 @@ class TransientEffectResult(TypedDict):
 # endregion
 
 
+# region PvP Battle Results
+
+
+class GetPvpInfoResponse(TypedDict):
+    CurrentRank: int
+    ExistNewDefenseBattleLog: bool
+    MatchingRivalList: list[PvpRankingPlayerInfo]
+    TopRankerList: list[PvpRankingPlayerInfo]
+    UserSyncData: UserSyncData
+
+
+class GetPvpBattleLogsResponse(TypedDict):
+    AttackPvpBattleLogInfoList: list[PvpBattleLogInfo]
+    DefensePvpBattleLogInfoList: list[PvpBattleLogInfo]
+
+
+class GetPvpBattleResultDetailResponse(TypedDict):
+    BattleResult: BattleResult
+
+
+class PvpBattleLogInfo(TypedDict):
+    AttackBattlePower: int
+    AttackCharacterBaseParameterMap: dict[str, BaseParameter]
+    AttackCharacterBattleParameterMap: dict[str, BattleParameter]
+    AttackCharacterInfoList: list[UserCharacterInfo]
+    AttackEquipmentDtoInfoListMap: dict[str, list[UserEquipmentDtoInfo]]
+    BattleEndInfo: BattleEndInfo
+    BattleTime: int
+    BattleToken: str
+    DefenseBattlePower: int
+    DefenseCharacterBaseParameterMap: dict[str, BaseParameter]
+    DefenseCharacterBattleParameterMap: dict[str, BattleParameter]
+    DefenseCharacterInfoList: list[UserCharacterInfo]
+    DefenseEquipmentDtoInfoListMap: dict[str, list[UserEquipmentDtoInfo]]
+    NewRank: int
+    OldRank: int
+    RivalPlayerInfo: PlayerInfo
+
+
+class PvpRankingPlayerInfo(TypedDict):
+    CurrentRank: int
+    DefenseBattlePower: int
+    PlayerInfo: PlayerInfo
+    UserCharacterInfoList: list[UserCharacterInfo]
+
+
+# endregion
+
+
 # region DtoInfo
 
 
