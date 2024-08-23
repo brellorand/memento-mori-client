@@ -199,10 +199,7 @@ class BundleGroup:
     def for_apk(cls, apk: AssetPackApk, bundle_names: Collection[str] = ()) -> BundleGroup:
         env = Environment()
         # The following replaces a call to `env.load(files)` / `env.load_files(files)` / similar
-        env.files = {
-            name: LazyBundleFile(apk, env, name=name, is_dependency=False)
-            for name in apk.iter_bundle_names()
-        }
+        env.files = {name: LazyBundleFile(apk, env, name=name, is_dependency=False) for name in apk.iter_bundle_names()}
         log.debug(
             f'Initializing {cls.__name__} for {apk=} with total_bundles={len(env.files)}, names={len(bundle_names)}'
         )

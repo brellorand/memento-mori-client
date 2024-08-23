@@ -1,5 +1,5 @@
 """
-
+Classes that represent structs used when logged in to a specific world, with helpers for mapping to MB entities
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ class Equipment(WorldEntity):
     This class represents ``UserEquipmentDtoInfo``, which is slightly different than the ``UserEquipment`` struct
     that is used related to smelting.
     """
+
     guid: str = DataProperty('Guid')
     char_guid: str = DataProperty('CharacterGuid')  # Empty string indicates this item is not equipped
     equipment_id: int = DataProperty('EquipmentId')

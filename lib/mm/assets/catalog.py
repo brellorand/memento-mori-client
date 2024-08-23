@@ -161,10 +161,12 @@ class AssetCatalog(DictWrapper):
         This appears to be a mapping of dependency_key to the list of ResourceLocations that depend on it, but it's
         not clear.
         """
+        # fmt: off
         return {
             self.keys[i]: [self.locations[entry] for entry in bucket.entries]
             for i, bucket in enumerate(self.buckets)
         }
+        # fmt: on
 
     def _iter_entry_data(self) -> Iterator[tuple[int, int, int, int, int, int, int]]:
         entry_struct = Struct('7i')
@@ -368,6 +370,7 @@ class SerializedObjectDecoder:
     __slots__ = ('_bio',)
     _int8 = Struct('b')
     _int32 = Struct('i')
+    # fmt: off
     _type_struct_map = {
         ObjectType.AsciiString: Struct('i'),    ObjectType.UnicodeString: Struct('i'),
         ObjectType.UInt32: Struct('I'),         ObjectType.Int32: Struct('i'),
@@ -375,9 +378,10 @@ class SerializedObjectDecoder:
         ObjectType.UInt16: Struct('H'),
     }
     _type_encoding_map = {
-        ObjectType.AsciiString: 'ascii', ObjectType.UnicodeString: 'utf-8',
-        ObjectType.Hash128: 'ascii', ObjectType.Type: 'ascii',
+        ObjectType.AsciiString: 'ascii',    ObjectType.UnicodeString: 'utf-8',
+        ObjectType.Hash128: 'ascii',        ObjectType.Type: 'ascii',
     }
+    # fmt: on
 
     def __init__(self, data: bytes | bytearray | BytesIO):
         self._bio = data if isinstance(data, BytesIO) else BytesIO(data)

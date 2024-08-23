@@ -1,4 +1,5 @@
 """
+Utilities for finding and processing asset bundles
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ class BundleFinder:
             log.debug(f'Filtered to {len(bundle_names):,d} new bundles to {action}')
 
         if self.limit:
-            return bundle_names[:self.limit]
+            return bundle_names[: self.limit]
         return bundle_names
 
     def _get_bundle_candidates(self):
