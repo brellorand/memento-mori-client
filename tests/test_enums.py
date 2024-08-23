@@ -2,7 +2,7 @@
 
 from unittest import TestCase, main
 
-from mm.enums import EquipmentRarityFlags
+from mm.enums import EquipmentRarityFlags, Locale
 
 
 class TestEnums(TestCase):
@@ -17,6 +17,26 @@ class TestEnums(TestCase):
         for expected, erf_range in cases:
             with self.subTest(expected=expected):
                 self.assertEqual(expected, erf_range)
+
+    def test_locale_country_codes(self):
+        cases = {
+            Locale.DeDe: 'DE',
+            Locale.EnUs: 'US',
+            Locale.EsMx: 'MX',
+            Locale.FrFr: 'FR',
+            Locale.IdId: 'ID',
+            Locale.JaJp: 'JP',
+            Locale.KoKr: 'KR',
+            Locale.PtBr: 'BR',
+            Locale.RuRu: 'RU',
+            Locale.ThTh: 'TH',
+            Locale.ViVn: 'VN',
+            Locale.ZhCn: 'CN',
+            Locale.ZhTw: 'TW',
+        }
+        for locale, expected in cases.items():
+            with self.subTest(locale=locale):
+                self.assertEqual(expected, locale.country_code)
 
 
 if __name__ == '__main__':

@@ -16,6 +16,7 @@ from .models import Character, Equipment, ItemAndCount, UserSyncData
 from .utils import load_cached_data
 
 if TYPE_CHECKING:
+    from ..config import ConfigFile
     from ..grpc_client import MagicOnionClient
     from ..session import MementoMoriSession
     from ..typing import (
@@ -86,15 +87,20 @@ def api_request(*, requires_login: bool = True, maintenance_ok: bool = False):
 class WorldSession(ClearableCachedPropertyMixin):
     """Represents a player + world account / logged in session for that account."""
 
+    config: ConfigFile
     session: MementoMoriSession
     player_data: PlayerDataInfo
     user_sync_data: UserSyncData = None
+
+    # region Initialization & Tear Down
 
     def __init__(self, player: PlayerAccount, world_id: int):
         try:
             self.player_data = player.worlds[world_id]
         except KeyError as e:
             raise ValueError(f'Invalid {world_id=} - pick from: {", ".join(map(str, sorted(player.worlds)))}') from e
+
+        self.config = player.config
         self.session = player.session
         self.player = player
         self._world_id = world_id
@@ -107,6 +113,17 @@ class WorldSession(ClearableCachedPropertyMixin):
         self = cls(player, player.region.normalize_world(player_id % 1000))
         self.user_sync_data = UserSyncData(self, data['UserSyncData'])
         return self
+
+    def close(self):
+        for key in ('_server_host_info', '_api_client', '_grpc_client', '_login_resp'):
+            try:
+                del self.__dict__[key]
+            except KeyError:
+                pass
+
+        self._is_logged_in = False
+
+    # endregion
 
     # region General Properties
 
@@ -164,15 +181,6 @@ class WorldSession(ClearableCachedPropertyMixin):
 
     # endregion
 
-    def close(self):
-        for key in ('_server_host_info', '_api_client', '_grpc_client', '_login_resp'):
-            try:
-                del self.__dict__[key]
-            except KeyError:
-                pass
-
-        self._is_logged_in = False
-
     # region User Data Sync / My Page
 
     @api_request()
@@ -184,10 +192,8 @@ class WorldSession(ClearableCachedPropertyMixin):
         return self.user_sync_data
 
     @api_request()
-    def get_my_page(self, locale: Locale = None) -> GetMypageResponse:
-        # Alt locale value source: self.player.config.auth.locale
-        data = {'LanguageType': locale.num} if locale is not None else {}
-        return self._api_client.post_msg('user/getMypage', data)
+    def get_my_page(self) -> GetMypageResponse:
+        return self._api_client.post_msg('user/getMypage', {'LanguageType': self.config.auth.locale.num})
 
     # endregion
 

@@ -158,7 +158,7 @@ class AndroidModel:
 ANDROID_MODELS = {
     'Galaxy S22': AndroidModel('Samsung', 'SM-S901E', 12, 31, 'SP1A.210812.016', 'S901EXXU2AVF1'),
     'Galaxy S21 Ultra': AndroidModel('Samsung', 'SM-G998B', 12, 31, 'SP1A.210812.016', 'G998BXXU4CVC4'),
-    'Galaxy S21 Ultra 5G': AndroidModel('Samsung', 'SM-G998B', 9, 28, 'SP1A.210812.016', 'G998BXXU4BULF'),  # bluestacks
+    'Galaxy S21 Ultra 5G': AndroidModel('samsung', 'SM-G998B', 9, 28, 'SP1A.210812.016', 'G998BXXU4BULF'),  # bluestacks
     'Pixel Tablet': AndroidModel('Google', 'Pixel Tablet', 14, 34, 'UQ1A.240205.002', '11224170'),
     'Xiaomi 12S Ultra': AndroidModel('Xiaomi', '2203121C', 13, 33, 'TKQ1.220829.002', 'V14.0.12.0.TLACNXM'),
 }

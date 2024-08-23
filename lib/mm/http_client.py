@@ -463,11 +463,17 @@ class AuthClient(OrtegaClient):
 
     # region getDataUri
 
+    def _get_data_uri(self, user_id: int = 0):
+        # This request may be made during maintenance
+        # This request is made multiple times, before and immediately after login.  Many requests are made with no
+        # UserId value (i.e., 0), though subsequent requests are made with the user ID.  This request technically works
+        # with the data being an empty dict.
+        data = {'CountryCode': self.config.auth.locale.country_code, 'UserId': user_id}
+        return self.post('auth/getDataUri', data=msgpack.packb(data))
+
     @cached_property
     def _get_data_resp(self) -> Response:
-        # This request technically supports the following fields: CountryCode (str), UserId (long)
-        # This request may be made during maintenance
-        return self.post('auth/getDataUri', data=msgpack.packb({}))
+        return self._get_data_uri()
 
     @cached_property
     def ortega_info(self) -> OrtegaInfo:
@@ -525,7 +531,7 @@ class AuthClient(OrtegaClient):
             'AdverisementId': str(uuid4()),  # noqa  # Typo is intentional
             'AppVersion': self.config.app_version_manager.get_version(),
             'CountryCode': auth_config.locale.country_code,
-            'DeviceToken': '',
+            'DeviceToken': '',  # The DeviceToken is normally a 163-char base64-encoded string, but this works...
             'ModelName': auth_config.model_name,
             'DisplayLanguage': auth_config.locale.num,
             'OSVersion': auth_config.os_version,
@@ -568,7 +574,7 @@ class AuthClient(OrtegaClient):
         auth_config = self.config.auth
         data = {
             'ClientKey': account.client_key,
-            'DeviceToken': '',
+            'DeviceToken': '',  # The DeviceToken is normally a 163-char base64-encoded string, but this works...
             'AppVersion': self.config.app_version_manager.get_version(),
             'OSVersion': auth_config.os_version,
             'ModelName': auth_config.model_name,

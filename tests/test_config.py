@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, main
 
-from mm.config import AccountConfig, ConfigFile
+from mm.config import ANDROID_MODELS, AccountConfig, ConfigFile
 
 
 class TestConfig(TestCase):
@@ -20,6 +20,12 @@ class TestConfig(TestCase):
             # Using a separate ConfigFile instance below is intentional
             AccountConfig(4567, name='test_2', config_file=ConfigFile(path)).client_key = 'xyz987'
             self.assertEqual({'accounts': accounts}, json.loads(path.read_text()))
+
+    def test_android_model(self):
+        android_model = ANDROID_MODELS['Galaxy S21 Ultra 5G']
+        # The below expected values were observed in a packet capture of the game running on BlueStacks
+        self.assertEqual('samsung SM-G998B', android_model.model_name)
+        self.assertEqual('Android OS 9 / API-28 (SP1A.210812.016/G998BXXU4BULF)', android_model.os_version)
 
 
 if __name__ == '__main__':
