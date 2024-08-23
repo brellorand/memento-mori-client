@@ -9,14 +9,13 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 from .enums import Locale
 from .fs import PathLike, get_config_dir, path_repr
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from .http_client import AppVersionManager
 
 __all__ = ['ConfigFile', 'AccountConfig', 'AndroidModel', 'ANDROID_MODELS', 'DEFAULT_ANDROID_MODEL']
