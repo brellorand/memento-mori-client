@@ -9,11 +9,10 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..data import UserSyncData
 from ..enums import BaseParameterType, BattleType, EquipmentRarityFlags, EquipmentSlotType, Locale
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
-from .models import Character, Equipment, ItemAndCount
+from .models import Character, Equipment, ItemAndCount, UserSyncData
 from .utils import load_cached_data
 
 if TYPE_CHECKING:
@@ -54,7 +53,7 @@ class ApiRequestMethod:
         if user_sync_data := self._get_user_sync_data(resp):
             instance._reset_user_sync_data_properties()
             if instance.user_sync_data is None:
-                instance.user_sync_data = UserSyncData(user_sync_data)
+                instance.user_sync_data = UserSyncData(instance, user_sync_data)
             else:
                 instance.user_sync_data.update(user_sync_data)
 
@@ -106,7 +105,7 @@ class WorldSession(ClearableCachedPropertyMixin):
         data = load_cached_data(path)
         player_id = data['UserSyncData']['UserStatusDtoInfo']['PlayerId']
         self = cls(player, player.region.normalize_world(player_id % 1000))
-        self.user_sync_data = UserSyncData(data['UserSyncData'])
+        self.user_sync_data = UserSyncData(self, data['UserSyncData'])
         return self
 
     # region General Properties

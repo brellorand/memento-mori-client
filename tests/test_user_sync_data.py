@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import MagicMock, Mock, patch
 
-from mm.data import UserSyncData
 from mm.game import PlayerAccount
+from mm.game.models import UserSyncData
 from mm.http_client import ApiClient
 
 
@@ -38,7 +38,7 @@ class TestUserSyncData(TestCase):
         return deepcopy(self._sync_data[name])  # deepcopy is needed to prevent tests from affecting each other
 
     def test_basic_update_user_sync_data(self):
-        usd = UserSyncData(self._get_sync_data('world_login')['UserSyncData'])
+        usd = UserSyncData(Mock(), self._get_sync_data('world_login')['UserSyncData'])
 
         self.assertIsNone(usd.cleared_tutorial_ids)
         self.assertIsNone(usd.has_vip_daily_gift)
