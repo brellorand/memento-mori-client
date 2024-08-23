@@ -331,6 +331,10 @@ class UserItem(TypedDict):
 
 
 class UserEquipment(TypedDict):
+    """
+    This class represents ``UserEquipment`` and is used for requests related to smelting.  It is similar to the
+    ``UserEquipmentDtoInfo`` struct that is used in other contexts.
+    """
     CharacterGuid: str | None
     HasParameter: bool
     Guid: str | None

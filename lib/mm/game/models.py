@@ -26,6 +26,10 @@ class WorldEntity:
 
 
 class Equipment(WorldEntity):
+    """
+    This class represents ``UserEquipmentDtoInfo``, which is slightly different than the ``UserEquipment`` struct
+    that is used related to smelting.
+    """
     guid: str = DataProperty('Guid')
     char_guid: str = DataProperty('CharacterGuid')  # Empty string indicates this item is not equipped
     equipment_id: int = DataProperty('EquipmentId')

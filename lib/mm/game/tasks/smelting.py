@@ -150,8 +150,7 @@ class SmeltUnequippedGear(Task):
     @cached_property
     def _to_be_smelted(self) -> list[Equipment]:
         min_level, max_level = self.min_level, self.max_level or self._max_level
-        # TODO: Filter out gear that has a dark/light augment on it
-        return [e for e in self._all_unequipped if min_level <= e.equipment.level <= max_level]
+        return [e for e in self._all_unequipped if _should_smelt(e, min_level, max_level)]
 
     def can_perform(self) -> bool:
         return bool(self._to_be_smelted)
@@ -180,3 +179,11 @@ class SmeltUnequippedGear(Task):
 
             log.info(f'  -> Smelting {equipment}')
             self.world_session.smelt_gear(equipment.guid)
+
+
+def _should_smelt(equipment: Equipment, min_level: int, max_level: int) -> bool:
+    if not min_level <= equipment.equipment.level <= max_level:
+        return False
+    elif equipment.holy_augment_level or equipment.dark_augment_level:
+        return False
+    return not (equipment.rune_slots_unlocked or equipment.upgrade_level)
