@@ -109,11 +109,12 @@ class Character(NamedEntity, file_name_fmt='CharacterMB'):
 
 class CharacterProfile(MBEntity, file_name_fmt='CharacterProfileMB'):
     _size_pat = re.compile(r'^<size=\d+>.*?</size>')
-
+    # fmt: off
     lament_name: str = LocalizedString('LamentJPKey')               # This char's lament name, in the current locale
     lament_lyrics_html: str = LocalizedString('LyricsJPKey')        # This char's lament lyrics, in the current locale
     lament_name_en: str = LocalizedString('LamentUSKey')            # This char's lament name, in English
     lament_lyrics_html_en: str = LocalizedString('LyricsUSKey')     # This char's lament lyrics, in English
+    # fmt: on
 
     @cached_property
     def character(self) -> Character:

@@ -31,7 +31,7 @@ class LocalizedString:
         default_key: str = None,
         default_to_key: bool = False,
         delim: str = '.',
-        locale: Locale = None
+        locale: Locale = None,
     ):
         # noinspection PyUnresolvedReferences
         """

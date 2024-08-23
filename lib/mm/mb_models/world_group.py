@@ -44,7 +44,4 @@ class WorldGroup(MBEntity, file_name_fmt='WorldGroupMB'):
 
     @cached_property
     def grand_battles(self) -> list[tuple[datetime, datetime]]:
-        return [
-            (parse_dt(row['StartTime']), parse_dt(row['EndTime']))
-            for row in self.data['GrandBattleDateTimeList']
-        ]
+        return [(parse_dt(row['StartTime']), parse_dt(row['EndTime'])) for row in self.data['GrandBattleDateTimeList']]

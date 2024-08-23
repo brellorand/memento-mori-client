@@ -320,5 +320,3 @@ class FullyNamedEntity(NamedEntity):
 
 
 # endregion
-
-
