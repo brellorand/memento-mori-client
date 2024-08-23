@@ -534,7 +534,7 @@ class AuthClient(OrtegaClient):
         log.debug(f'Sending createUser request with {data=}')
         return self._post_msg('auth/createUser', data)
 
-    def _comeback_user_data(self, user_id: int, password: str, create_resp_id: int, ):
+    def _comeback_user_data(self, user_id: int, password: str, create_resp_id: int):
         # This request may be made during maintenance
         # From helper: public enum SnsType {None, OrtegaId, AppleId, Twitter, Facebook, GameCenter, GooglePlay}
         data = {

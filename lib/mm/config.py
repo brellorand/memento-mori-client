@@ -1,5 +1,5 @@
 """
-
+Classes for managing / loading configurable options
 """
 
 from __future__ import annotations

@@ -1,13 +1,15 @@
 """
-
+Typing helpers
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict, Any
+from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    # fmt: off
     from .enums import (
         ErrorLogType, NotificationType, BingoType, DeviceType, PlayerSettingsType, LeadLockEquipmentDialogType,
         LegendLeagueClassType, GuildRaidBossType, FriendStatusType, ShopGuerrillaPackRankType, TransferSpotType,
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
         BadgeType, SnsType, LockEquipmentDeckType, PrivacySettingsType, RankingDataType,
         GuildActivityPolicyType, GlobalGvgGroupType, PlayerGuildPositionType,
     )
+    # fmt: on
 
 # region Errors
 
@@ -335,6 +338,7 @@ class UserEquipment(TypedDict):
     This class represents ``UserEquipment`` and is used for requests related to smelting.  It is similar to the
     ``UserEquipmentDtoInfo`` struct that is used in other contexts.
     """
+
     CharacterGuid: str | None
     HasParameter: bool
     Guid: str | None

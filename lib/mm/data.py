@@ -188,6 +188,7 @@ class MyPage(DictWrapper):
 
 
 class UserSyncData(DictWrapper):
+    # fmt: off
     player_info: UserStatusDtoInfo = DataProperty('UserStatusDtoInfo')  # name, comment, rank, vip level, exp, etc
     quest_status: UserBattleBossDtoInfo = DataProperty('UserBattleBossDtoInfo')
     tower_status: list[UserTowerBattleDtoInfo] = DataProperty('UserTowerBattleDtoInfos')
@@ -309,6 +310,8 @@ class UserSyncData(DictWrapper):
     mission_history: UserMissionOccurrenceHistoryDtoInfo = DataProperty('UserMissionOccurrenceHistoryDtoInfo')
     friend_missions: list[UserFriendMissionDtoInfo] = DataProperty('UserFriendMissionDtoInfoList')
 
+    # fmt: on
+
     def update(self, data: _UserSyncData):
         if not data:
             log.debug('Ignoring UserSyncData update with no data')
@@ -317,12 +320,17 @@ class UserSyncData(DictWrapper):
         self.clear_cached_properties()
 
         simple_lists = {
-            'BlockPlayerIdList', 'ClearedTutorialIdList', 'ReceivedGuildTowerFloorRewardIdList',
+            'BlockPlayerIdList',
+            'ClearedTutorialIdList',
+            'ReceivedGuildTowerFloorRewardIdList',
             'ReceivedAchieveRankingRewardIdList',
         }
         simple_dicts = {
-            'DataLinkageMap', 'TreasureChestCeilingCountMap', 'LeadLockEquipmentDialogInfoMap',
-            'LockedEquipmentCharacterGuidListMap', 'LockedUserEquipmentDtoInfoListMap',
+            'DataLinkageMap',
+            'TreasureChestCeilingCountMap',
+            'LeadLockEquipmentDialogInfoMap',
+            'LockedEquipmentCharacterGuidListMap',
+            'LockedUserEquipmentDtoInfoListMap',
             'ReleaseLockEquipmentCooldownTimeStampMap',
         }
         cmp_key_lists = {

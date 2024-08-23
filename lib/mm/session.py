@@ -1,5 +1,5 @@
 """
-
+Provides a central entry point for initializing API clients with common configs
 """
 
 from __future__ import annotations

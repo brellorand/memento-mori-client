@@ -27,7 +27,11 @@ if TYPE_CHECKING:
     from .mb_models import MB
 
 __all__ = [
-    'get_user_temp_dir', 'get_user_cache_dir', 'relative_path', 'path_repr', 'get_config_dir',
+    'get_user_temp_dir',
+    'get_user_cache_dir',
+    'relative_path',
+    'path_repr',
+    'get_config_dir',
     'sanitize_file_name',
 ]
 log = logging.getLogger(__name__)

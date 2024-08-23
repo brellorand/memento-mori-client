@@ -31,6 +31,7 @@ else:
 
     class IndentedYamlDumper(yaml.SafeDumper):
         """This indents lists that are nested in dicts in the same way as the Perl yaml library"""
+
         def increase_indent(self, flow=False, indentless=False):
             return super().increase_indent(flow, False)
 
@@ -248,10 +249,12 @@ class CompactJSONEncoder(PermissiveJSONEncoder):
         return self.encode(o)
 
     def _len_okay_and_not_nested(self, obj: list | tuple | dict) -> bool:
+        # fmt: off
         return (
             len(obj) <= self._max_line_items
             and not any(isinstance(v, self.CONTAINER_TYPES) for v in (obj.values() if isinstance(obj, dict) else obj))
         )
+        # fmt: on
 
     def _str_len_is_below_max(self, parts: list[str]) -> bool:
         return (2 + sum(map(len, parts)) + (2 * len(parts))) <= self._max_line_len

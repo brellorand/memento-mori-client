@@ -54,7 +54,7 @@ class TestUserSyncData(TestCase):
         self.assertEqual(6, usd.guild_raid_challenge_count)
         self.assertEqual(15, len(usd.character_index_info))
         self.assertEqual(
-            {"CharacterId": 1, "MaxCharacterLevel": 1, "MaxCharacterRarityFlags": 1, "MaxEpisodeId": 0},
+            {'CharacterId': 1, 'MaxCharacterLevel': 1, 'MaxCharacterRarityFlags': 1, 'MaxEpisodeId': 0},
             usd.character_index_info[0],
         )
 
@@ -67,7 +67,7 @@ class TestUserSyncData(TestCase):
             'Password': 'fake1b0eea85fake4c34a16891f8fake',
             'PlayerId': 272688835018,
             'PlayerRank': 10,
-            'WorldId': 4018
+            'WorldId': 4018,
         }
         auth_client = Mock(
             login=Mock(return_value={'PlayerDataInfoList': [player_data_info]}), get_server_host=MagicMock()

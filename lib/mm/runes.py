@@ -102,7 +102,7 @@ class Rune(ABC):
 
     @property
     def ticket_cost(self) -> int:
-        return 2 ** self.level
+        return 2**self.level
 
     def __mul__(self, other: int) -> int:
         if not isinstance(other, int):
@@ -267,7 +267,7 @@ class RunePool:
         # Ensure each RuneSet gets to be the first set in a group at least once
         for i, rune_set in enumerate(rune_sets):
             # The other sets to potentially include in each group should exclude the current set
-            other_sets = deque(rune_sets[:i] + rune_sets[i + 1:])
+            other_sets = deque(rune_sets[:i] + rune_sets[i + 1 :])
             # Iterating only once over other_sets results in missing some potential combinations containing sets with
             # fewer than 3 runes due to the order of the sets, so a group is created for every possible rotation of
             # other_sets
@@ -285,6 +285,7 @@ class RunePool:
 
 # region Stat-Specific Rune Classes
 
+# fmt: off
 _ACC_EVD_DEBUFF_VALUES = [
     260, 500, 970, 1_900, 3_770,
     7_500, 14_900, 29_700, 59_300, 118_000,
@@ -295,7 +296,7 @@ _DEF_VALUES = [40, 60, 110, 200, 370, 680, 1_240, 2_270, 4_160, 7_600, 13_900, 2
 _OFFENSIVE_BASE_STAT_VALUES = [
     60, 100, 180, 330, 620, 1_130, 2_070, 3_800, 6_930, 12_600, 23_100, 42_300, 77_400, 141_000, 250_000
 ]
-
+# fmt: on
 
 # region Offensive (Left) Runes
 
@@ -307,11 +308,13 @@ class AccuracyRune(Rune, stat='ACC'):
 
 class AttackRune(Rune, stat='ATK'):
     __slots__ = ()
+    # fmt: off
     values = [
         240, 440, 810, 1_480, 2_710,
         4_950, 9_050, 16_500, 30_200, 55_300,
         101_000, 184_000, 338_000, 617_000, 1_090_000,
     ]
+    # fmt: on
 
 
 class CritRune(Rune, stat='CRIT'):
@@ -357,11 +360,13 @@ class EvasionRune(Rune, stat='EVD'):
 
 class HPRune(Rune, stat='HP'):
     __slots__ = ()
+    # fmt: off
     values = [
         1_000, 1_830, 3_340, 6_110, 11_100,
         20_400, 37_300, 68_300, 124_000, 228_000,
         417_000, 762_000, 1_390_000, 2_540_000, 4_510_000,
     ]
+    # fmt: on
 
 
 class MagicDefenseRune(Rune, stat='M.DEF'):
@@ -590,7 +595,7 @@ class Party:
             member.speed_rune_set = levels
 
         if reset:
-            for member in self.members[len(level_groups):]:
+            for member in self.members[len(level_groups) :]:
                 member.reset_speed()
 
     @property
@@ -649,7 +654,6 @@ class Party:
         # TODO: Alt approach: call tune_speed, and see if runes are available that are >= the suggested levels,
         #  apply those, then call tune_speed again with the updated speed, and apply runes to the next char from the
         #  suggested set the same way?
-
 
         if len(levels) >= 10:
             log_lvl = logging.INFO
