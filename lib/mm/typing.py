@@ -9,20 +9,8 @@ from typing import TYPE_CHECKING, TypedDict
 if TYPE_CHECKING:
     from datetime import datetime
 
-    # fmt: off
-    from .enums import (
-        ErrorLogType, NotificationType, BingoType, DeviceType, PlayerSettingsType, LeadLockEquipmentDialogType,
-        LegendLeagueClassType, GuildRaidBossType, FriendStatusType, ShopGuerrillaPackRankType, TransferSpotType,
-        ItemType, EquipmentSlotType, SacredTreasureType,
-        MissionGroupType, MissionAchievementType, MissionType, MissionStatusType, MissionActivityRewardStatusType,
-        CharacterRarity, DeckUseContentType, Element, Job,
-        BountyQuestType, BountyQuestRarityFlags, DungeonBattleGridState, TowerType,
-        BattleFieldCharacterGroupType, UnitType, BattleType, HitType, SubSetType, PassiveTrigger, SkillDisplayType,
-        SubSkillResultType, EffectType, SkillCategory, EffectGroupType, RemoveEffectType,
-        BadgeType, SnsType, LockEquipmentDeckType, PrivacySettingsType, RankingDataType,
-        GuildActivityPolicyType, GlobalGvgGroupType, PlayerGuildPositionType,
-    )
-    # fmt: on
+    from . import enums as e
+
 
 # region Errors
 
@@ -38,7 +26,7 @@ class ApiErrorResponse(TypedDict):
 class ErrorLogInfo(TypedDict):
     ApiName: str
     ErrorCode: int
-    ErrorLogType: ErrorLogType
+    ErrorLogType: e.ErrorLogType
     LocalTimeStamp: int
     Message: str
 
@@ -58,7 +46,7 @@ class GetServerHostResponse(TypedDict):
 class PlayerDataInfo(TypedDict):
     CharacterId: int
     LastLoginTime: int
-    LegendLeagueClass: LegendLeagueClassType
+    LegendLeagueClass: e.LegendLeagueClassType
     Name: str
     Password: str
     PlayerId: int
@@ -124,8 +112,8 @@ class DisplayMypageInfo(TypedDict):
 
 class MissionGuideInfo(TypedDict):
     GuideId: int
-    MissionGroupType: MissionGroupType
-    MissionStatus: MissionStatusType
+    MissionGroupType: e.MissionGroupType
+    MissionStatus: e.MissionStatusType
 
 
 class MypageBannerInfo(TypedDict):
@@ -137,7 +125,7 @@ class MypageBannerInfo(TypedDict):
 
 
 class MypageIconInfo(TypedDict):
-    BadgeType: BadgeType
+    BadgeType: e.BadgeType
     DisplayPriority: int
     HidePriority: int
     IconNameKey: str
@@ -156,14 +144,14 @@ class MypageIconInfo(TypedDict):
 class SnsInfo(TypedDict):
     NameKey: str
     Url: str
-    MissionAchievementType: MissionAchievementType
+    MissionAchievementType: e.MissionAchievementType
 
 
 class TransferDetailInfo(TypedDict):
     NumberInfo1: int
     NumberInfo2: int
     StringInfo: str
-    TransferSpotType: TransferSpotType
+    TransferSpotType: e.TransferSpotType
 
 
 # endregion
@@ -177,7 +165,7 @@ class PlayerInfo(TypedDict):
     BattlePower: int
     Comment: str
     CumulativeGuildFame: int
-    FriendStatus: FriendStatusType
+    FriendStatus: e.FriendStatusType
     GuildId: int
     GuildJoinRequestUtcTimeStamp: int
     GuildJoinTimeStamp: int
@@ -191,11 +179,11 @@ class PlayerInfo(TypedDict):
     LocalRaidBattlePower: int
     MainCharacterIconId: int
     NpcNameKey: str
-    PlayerGuildPositionType: PlayerGuildPositionType
+    PlayerGuildPositionType: e.PlayerGuildPositionType
     PlayerId: int
     PlayerLevel: int
     PlayerName: str
-    PrevLegendLeagueClass: LegendLeagueClassType
+    PrevLegendLeagueClass: e.LegendLeagueClassType
 
 
 class UserCharacterInfo(TypedDict):
@@ -205,7 +193,7 @@ class UserCharacterInfo(TypedDict):
     Level: int
     SubLevel: int
     Exp: int
-    RarityFlags: CharacterRarity
+    RarityFlags: e.CharacterRarity
     IsLocked: bool
 
 
@@ -215,7 +203,7 @@ class UserSyncData(TypedDict):
     ClearedTutorialIdList: list[int]
     CreateUserIdTimestamp: int | None
     CreateWorldLocalTimeStamp: int | None
-    DataLinkageMap: dict[SnsType, bool]
+    DataLinkageMap: dict[e.SnsType, bool]
     DeletedCharacterGuidList: list[str]
     DeletedEquipmentGuidList: list[str]
     ExistUnconfirmedRetrieveItemHistory: bool | None
@@ -229,18 +217,18 @@ class UserSyncData(TypedDict):
     IsReceivedSnsShareReward: bool | None
     IsRetrievedItem: bool | None
     IsValidContractPrivilege: bool | None
-    LeadLockEquipmentDialogInfoMap: dict[LockEquipmentDeckType, LeadLockEquipmentDialogInfo]
-    LegendLeagueClassType: LegendLeagueClassType | None
+    LeadLockEquipmentDialogInfoMap: dict[e.LockEquipmentDeckType, LeadLockEquipmentDialogInfo]
+    LegendLeagueClassType: e.LegendLeagueClassType | None
     LocalRaidChallengeCount: int | None
-    LockedEquipmentCharacterGuidListMap: dict[LockEquipmentDeckType, list[str]]
-    LockedUserEquipmentDtoInfoListMap: dict[LockEquipmentDeckType, list[UserEquipmentDtoInfo]]
+    LockedEquipmentCharacterGuidListMap: dict[e.LockEquipmentDeckType, list[str]]
+    LockedUserEquipmentDtoInfoListMap: dict[e.LockEquipmentDeckType, list[UserEquipmentDtoInfo]]
     PresentCount: int | None
-    PrivacySettingsType: PrivacySettingsType | None
-    ReceivableAchieveRankingRewardIdMap: dict[RankingDataType, int]
+    PrivacySettingsType: e.PrivacySettingsType | None
+    ReceivableAchieveRankingRewardIdMap: dict[e.RankingDataType, int]
     ReceivedAchieveRankingRewardIdList: list[int]
     ReceivedAutoBattleRewardLastTime: int | None
     ReceivedGuildTowerFloorRewardIdList: list[int]
-    ReleaseLockEquipmentCooldownTimeStampMap: dict[LockEquipmentDeckType, int]
+    ReleaseLockEquipmentCooldownTimeStampMap: dict[e.LockEquipmentDeckType, int]
     ShopCurrencyMissionProgressMap: dict[str, int]
     ShopProductGuerrillaPackList: list[ShopProductGuerrillaPack]
     StripePoint: int
@@ -293,7 +281,7 @@ class GuildInfo(TypedDict):
 
 
 class GuildOverView(TypedDict):
-    ActivityPolicyType: GuildActivityPolicyType
+    ActivityPolicyType: e.GuildActivityPolicyType
     GuildDescription: str
     GuildName: str
     IsFreeJoin: bool
@@ -303,7 +291,7 @@ class GuildOverView(TypedDict):
 class GuildSyncData(TypedDict):
     ApplyPlayerInfoList: list[PlayerInfo]
     CreateGuildLocalTime: int
-    GlobalGvgGroupType: GlobalGvgGroupType
+    GlobalGvgGroupType: e.GlobalGvgGroupType
     GuildAnnouncement: str
     GuildAnnouncementUpdateTime: int
     GuildBattlePower: int
@@ -312,7 +300,7 @@ class GuildSyncData(TypedDict):
     GuildTowerBadgeInfo: GuildTowerBadgeInfo
     JoinGuildTime: int
     MatchingNumber: int
-    PlayerGuildPositionType: PlayerGuildPositionType
+    PlayerGuildPositionType: e.PlayerGuildPositionType
 
 
 class GuildTowerBadgeInfo(TypedDict):
@@ -330,7 +318,7 @@ class GuildTowerBadgeInfo(TypedDict):
 class UserItem(TypedDict):
     ItemCount: int
     ItemId: int
-    ItemType: ItemType
+    ItemType: e.ItemType
 
 
 class UserEquipment(TypedDict):
@@ -345,7 +333,7 @@ class UserEquipment(TypedDict):
     ItemCount: int
     # public long EquipmentId {get { return this.ItemId; }}
     ItemId: int
-    ItemType: ItemType
+    ItemType: e.ItemType
     AdditionalParameterHealth: int
     AdditionalParameterIntelligence: int
     AdditionalParameterMuscle: int
@@ -371,13 +359,13 @@ class SmeltResponse(TypedDict):  # Same response for smelt 1 vs smelt many
 class EquipmentChangeInfo(TypedDict):
     EquipmentGuid: str
     EquipmentId: int
-    EquipmentSlotType: EquipmentSlotType
+    EquipmentSlotType: e.EquipmentSlotType
     IsInherit: bool  # Whether runes/augments should be transferred
 
 
 class PresentItem(TypedDict):
     Item: UserItem
-    RarityFlags: CharacterRarity
+    RarityFlags: e.CharacterRarity
 
 
 # endregion
@@ -390,7 +378,7 @@ class BountyQuestMemberInfo(TypedDict):
     PlayerId: int
     CharacterId: int
     UserCharacterGuid: str
-    CharacterRarityFlags: CharacterRarity
+    CharacterRarityFlags: e.CharacterRarity
 
 
 # endregion
@@ -407,7 +395,7 @@ class TradeShopItem(TypedDict):
     SalePercent: int
     TradeCount: int
     LimitTradeCount: int
-    SacredTreasureType: SacredTreasureType
+    SacredTreasureType: e.SacredTreasureType
     SortOrder: int
     RequiredCharacterId: int
     Disabled: bool
@@ -419,8 +407,8 @@ class ShopProductGuerrillaPack(TypedDict):
     DiscountRate: int
     EndTime: int
     NameKey: str
-    ProductIdDict: dict[DeviceType, str]
-    ShopGuerrillaPackRankType: ShopGuerrillaPackRankType
+    ProductIdDict: dict[e.DeviceType, str]
+    ShopGuerrillaPackRankType: e.ShopGuerrillaPackRankType
     ShopProductPrice: int
     ShopGuerrillaPackId: int
     TextKey: str
@@ -482,7 +470,7 @@ class BaseParameter(TypedDict):
 
 
 class LeadLockEquipmentDialogInfo(TypedDict):
-    DialogType: LeadLockEquipmentDialogType
+    DialogType: e.LeadLockEquipmentDialogType
     PassedDays: int
 
 
@@ -493,7 +481,7 @@ class LeadLockEquipmentDialogInfo(TypedDict):
 
 
 class BattleField(TypedDict):
-    BattleType: BattleType
+    BattleType: e.BattleType
     Characters: list[BattleFieldCharacter]
     AttackTeamPassiveSkillIds: list[int]
     ReceiveTeamPassiveSkillIds: list[int]
@@ -505,13 +493,13 @@ class BattleFieldCharacter(TypedDict):
     PlayerName: str
     CharacterGuid: str
     CharacterLevel: int
-    CharacterRarityFlags: CharacterRarity
+    CharacterRarityFlags: e.CharacterRarity
     EquipmentMaxLevel: int
     EquipmentDtoInfos: list[UserEquipmentDtoInfo]
-    UnitType: UnitType
+    UnitType: e.UnitType
     UnitId: int
-    JobFlags: Job
-    ElementType: Element
+    JobFlags: e.Job
+    ElementType: e.Element
     DefaultBaseParameter: BaseParameter
     DefaultBattleParameter: BattleParameter
     BattleParameterWithoutBonus: BattleParameter
@@ -540,7 +528,7 @@ class BattlePassiveSkill(TypedDict):
 
 
 class PassiveSubSetSkillInfo(TypedDict):
-    PassiveTrigger: PassiveTrigger
+    PassiveTrigger: e.PassiveTrigger
     SkillCoolTime: int
     SkillMaxCoolTime: int
     PassiveGroupId: int
@@ -571,7 +559,7 @@ class BattleParameter(TypedDict):
 
 class BattlePosition(TypedDict):
     DeckIndex: int
-    GroupType: BattleFieldCharacterGroupType
+    GroupType: e.BattleFieldCharacterGroupType
 
 
 class DungeonBattleInfo(TypedDict):
@@ -582,27 +570,27 @@ class DungeonBattleInfo(TypedDict):
 
 
 class Effect(TypedDict):
-    EffectType: EffectType
+    EffectType: e.EffectType
     EffectValue: int
     EffectMaxCount: int
     EffectCount: int
 
 
 class TransientEffect(TypedDict):
-    EffectType: EffectType
+    EffectType: e.EffectType
     EffectValue: int
-    HitType: HitType
+    HitType: e.HitType
     AddEffectGroups: list[EffectGroup]
     RemoveEffectGroups: list[EffectGroup]
 
 
 class EffectGroup(TypedDict):
     EffectGroupId: int
-    SkillCategory: SkillCategory
-    EffectGroupType: EffectGroupType
+    SkillCategory: e.SkillCategory
+    EffectGroupType: e.EffectGroupType
     EffectTurn: int
     Effects: list[Effect]
-    RemoveEffectType: RemoveEffectType
+    RemoveEffectType: e.RemoveEffectType
     LinkTargetGuid: int
     GranterGuid: int
     IsExtendEffectTurn: bool
@@ -649,14 +637,14 @@ class BattleCharacterReport(TypedDict):
     PlayerName: str
     OwnerPlayerId: int
     DeckIndex: int
-    GroupType: BattleFieldCharacterGroupType
+    GroupType: e.BattleFieldCharacterGroupType
     CharacterGuid: str
     BattleCharacterGuid: int
-    UnitType: UnitType
+    UnitType: e.UnitType
     UnitId: int
     CharacterLevel: int
-    CharacterRarityFlags: CharacterRarity
-    ElementType: Element
+    CharacterRarityFlags: e.CharacterRarity
+    ElementType: e.Element
     TotalGiveDamage: int
     TotalHpRecovery: int
     TotalReceiveDamage: int
@@ -667,7 +655,7 @@ class BattleCharacterReport(TypedDict):
 class BattleEndInfo(TypedDict):
     IsOutOfTurn: bool
     EndTurn: int
-    WinGroupType: BattleFieldCharacterGroupType
+    WinGroupType: e.BattleFieldCharacterGroupType
     WinPlayerIdSet: set[int]
 
 
@@ -696,14 +684,14 @@ class ActiveSkillData(TypedDict):
 
 
 class SubSkillResult(TypedDict):
-    SubSkillResultType: SubSkillResultType
+    SubSkillResultType: e.SubSkillResultType
     SubSkillIndex: int
-    SkillDisplayType: SkillDisplayType
+    SkillDisplayType: e.SkillDisplayType
     AttackUnitGuid: int
     TargetUnitGuid: int
     AddEffectGroups: list[EffectGroup]
     RemoveEffectGroups: list[EffectGroup]
-    HitType: HitType
+    HitType: e.HitType
     ChangeHp: int
     TargetRemainHp: int
 
@@ -714,7 +702,7 @@ class SubSetSkillResult(TypedDict):
     PassiveSubSkillResults: list[SubSkillResult]
     TempSubSkillResults: list[SubSkillResult]
     SubSkillResults: list[SubSkillResult]
-    SubSetType: SubSetType
+    SubSetType: e.SubSetType
 
 
 class TransientEffectResult(TypedDict):
@@ -740,7 +728,7 @@ class GuildRaidBossInfo(TypedDict):
 
 
 class GuildRaidDtoInfo(TypedDict):
-    BossType: GuildRaidBossType
+    BossType: e.GuildRaidBossType
     CloseLimitTime: int
     LastReleaseTime: int
     TotalChallengeCount: int
@@ -790,15 +778,15 @@ class UserBattlePvpDtoInfo(TypedDict):
 
 
 class UserBountyQuestBoardDtoInfo(TypedDict):
-    BountyQuestType: BountyQuestType
-    BountyQuestRarity: BountyQuestRarityFlags
+    BountyQuestType: e.BountyQuestType
+    BountyQuestRarity: e.BountyQuestRarityFlags
     ClearCount: int
 
 
 class UserBountyQuestDtoInfo(TypedDict):
     Date: int
     BountyQuestId: int
-    BountyQuestType: BountyQuestType
+    BountyQuestType: e.BountyQuestType
     BountyQuestLimitStartTime: int
     BountyQuestEndTime: int
     RewardEndTime: int
@@ -809,7 +797,7 @@ class UserBountyQuestDtoInfo(TypedDict):
 class UserBountyQuestMemberDtoInfo(TypedDict):
     UserCharacterGuid: str
     CharacterId: int
-    RarityFlags: CharacterRarity
+    RarityFlags: e.CharacterRarity
     DispatchPlayerId: int
     DispatchPlayerName: str
     DispatchEndTime: int
@@ -824,7 +812,7 @@ class UserBoxSizeDtoInfo(TypedDict):
 class UserCharacterBookDtoInfo(TypedDict):
     CharacterId: int
     MaxCharacterLevel: int
-    MaxCharacterRarityFlags: CharacterRarity
+    MaxCharacterRarityFlags: e.CharacterRarity
     MaxEpisodeId: int
 
 
@@ -839,13 +827,13 @@ class UserCharacterDtoInfo(TypedDict):
     CharacterId: int
     Level: int
     Exp: int
-    RarityFlags: CharacterRarity
+    RarityFlags: e.CharacterRarity
     IsLocked: bool
 
 
 class UserDeckDtoInfo(TypedDict):
     DeckNo: int
-    DeckUseContentType: DeckUseContentType
+    DeckUseContentType: e.DeckUseContentType
     DeckBattlePower: int
     UserCharacterGuid1: str
     CharacterId1: int
@@ -869,7 +857,7 @@ class UserDungeonBattleCharacterDtoInfo(TypedDict):
 class UserDungeonBattleDtoInfo(TypedDict):
     CurrentBoughtShopCounts: list[int]
     CurrentGridGuid: str
-    CurrentGridState: DungeonBattleGridState
+    CurrentGridState: e.DungeonBattleGridState
     DoneGridGuids: list[str]
     DoneRewardClearLayers: list[int]
     GuestCharacterMap: dict[str, list[int]]
@@ -895,7 +883,7 @@ class UserDungeonBattleGuestCharacterDtoInfo(TypedDict):
     Guid: str
     Level: int
     PlayerId: int
-    RarityFlags: CharacterRarity
+    RarityFlags: e.CharacterRarity
 
 
 class UserDungeonBattleMissedCountDtoInfo(TypedDict):
@@ -935,7 +923,7 @@ class UserEquipmentDtoInfo(TypedDict):
 
 class UserFriendDtoInfo(TypedDict):
     FriendPointSendDate: int
-    FriendStatusType: FriendStatusType
+    FriendStatusType: e.FriendStatusType
     IsChecked: bool
     IsReceived: bool
     OtherPlayerId: int
@@ -944,9 +932,9 @@ class UserFriendDtoInfo(TypedDict):
 
 class UserFriendMissionDtoInfo(TypedDict):
     FriendCampaignId: int
-    AchievementType: MissionAchievementType
+    AchievementType: e.MissionAchievementType
     ProgressCount: int
-    MissionStatusHistory: dict[MissionStatusType, list[int]]
+    MissionStatusHistory: dict[e.MissionStatusType, list[int]]
 
 
 class UserGuildRaidDtoInfo(TypedDict):
@@ -962,13 +950,13 @@ class UserGuildRaidPreviousDtoInfo(TypedDict):
     BattleLogJson: str
     Damage: int
     DropItemCount: int
-    GuildRaidBossType: GuildRaidBossType
+    GuildRaidBossType: e.GuildRaidBossType
 
 
 class UserItemDtoInfo(TypedDict):
     ItemCount: int
     ItemId: int
-    ItemType: ItemType
+    ItemType: e.ItemType
     PlayerId: int
 
 
@@ -994,16 +982,16 @@ class UserMapBuildingDtoInfo(TypedDict):
 
 
 class UserMissionActivityDtoInfo(TypedDict):
-    MissionGroupType: MissionGroupType
+    MissionGroupType: e.MissionGroupType
     PlayerId: int
     ProgressCount: int
-    RewardStatusDict: dict[int, MissionActivityRewardStatusType]
+    RewardStatusDict: dict[int, e.MissionActivityRewardStatusType]
 
 
 class UserMissionDtoInfo(TypedDict):
-    AchievementType: MissionAchievementType
-    MissionStatusHistory: dict[MissionStatusType, list[int]]
-    MissionType: MissionType
+    AchievementType: e.MissionAchievementType
+    MissionStatusHistory: dict[e.MissionStatusType, list[int]]
+    MissionType: e.MissionType
     PlayerId: int
     ProgressCount: int
 
@@ -1019,7 +1007,7 @@ class UserMissionOccurrenceHistoryDtoInfo(TypedDict):
 
 
 class UserNotificationDtoInfo(TypedDict):
-    NotificationType: NotificationType
+    NotificationType: e.NotificationType
     Value: int
 
 
@@ -1029,7 +1017,7 @@ class UserOpenContentDtoInfo(TypedDict):
 
 class UserPanelMissionDtoInfo(TypedDict):
     SheetNo: int
-    ReceivedBingoTypeList: list[BingoType]
+    ReceivedBingoTypeList: list[e.BingoType]
 
 
 class UserPresentDtoInfo(TypedDict):
@@ -1050,14 +1038,14 @@ class UserRecruitGuildMemberSettingDtoInfo(TypedDict):
 
 
 class UserSettingsDtoInfo(TypedDict):
-    PlayerSettingsType: PlayerSettingsType
+    PlayerSettingsType: e.PlayerSettingsType
     Value: int
     PlayerId: int
 
 
 class UserShopSubscriptionDtoInfo(TypedDict):
     ProductId: str
-    DeviceType: DeviceType
+    DeviceType: e.DeviceType
     TransactionId: str
     ExpirationTimeStamp: int
 
@@ -1095,7 +1083,7 @@ class UserTowerBattleDtoInfo(TypedDict):
     TodayBattleCount: int
     TodayBoughtCountByCurrency: int
     TodayClearNewFloorCount: int
-    TowerType: TowerType
+    TowerType: e.TowerType
 
 
 class UserVipGiftDtoInfo(TypedDict):
