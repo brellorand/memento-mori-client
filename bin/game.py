@@ -6,7 +6,6 @@ import json
 import logging
 from abc import ABC
 from functools import cached_property
-from getpass import getpass
 from operator import itemgetter
 from typing import TYPE_CHECKING, Iterable, Iterator
 
@@ -15,7 +14,6 @@ from cli_command_parser.exceptions import UsageError
 from cli_command_parser.inputs import NumRange, Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.config import AccountConfig
 from mm.enums import ITEM_PAGE_TYPE_MAP, EquipmentRarityFlags, EquipmentType, ItemRarityFlags, SmeltEquipmentRarity
 from mm.game import DailyTask, PlayerAccount, TaskConfig, TaskRunner, WorldSession
 from mm.output import CompactJSONEncoder
@@ -51,12 +49,9 @@ class Login(GameCLI, help='Log in for the first time'):
     name = Option('-n', required=True, help='Friendly name to associate with the account (locally only)')
 
     def main(self):
-        account = AccountConfig(self.user_id, name=self.name, config_file=self.mm_session.config)
-        client_key = self.mm_session.auth_client.get_client_key(
-            account, password=getpass('Please enter the account password: ')
-        )
-        log.debug(f'Received {client_key=}')
-        account.client_key = client_key
+        account = self.mm_session.get_new_account(self.user_id, self.name)
+        account.generate_client_key()
+        log.info('Successfully generated a new client key')
 
 
 class WorldCommand(GameCLI, ABC):

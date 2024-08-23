@@ -79,6 +79,11 @@ class MementoMoriSession:
         names = ', '.join(sorted(a.name for a in self.config.accounts.values()))
         raise ValueError(f'Unable to find an account with {name=} - pick from: {names}')
 
+    def get_new_account(self, user_id: int, name: str) -> PlayerAccount:
+        from .game import PlayerAccount
+
+        return PlayerAccount(self, AccountConfig(user_id, name=name, config_file=self.config))
+
     def get_account_by_id(self, user_id: int) -> PlayerAccount:
         from .game import PlayerAccount
 

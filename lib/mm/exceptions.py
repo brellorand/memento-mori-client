@@ -34,7 +34,11 @@ class RuneError(MementoMoriException):
     """Raised when an invalid combination of rune types, levels, or quantities is provided"""
 
 
-class MissingClientKey(MementoMoriException):
+class LoginFailure(MementoMoriException):
+    """Raised when a step that is required to log in fails"""
+
+
+class MissingClientKey(LoginFailure):
     """Raised when no client key is stored for a given account, and a password is required"""
 
 

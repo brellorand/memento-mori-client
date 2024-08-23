@@ -92,7 +92,7 @@ class AssetCatalog(DictWrapper):
     scene_provider_data: dict[str, Any] = DataProperty('m_SceneProviderData')
     resource_provider_data: list[dict[str, Any]] = DataProperty('m_ResourceProviderData')
     provider_ids: list[str] = DataProperty('m_ProviderIds')  # class/module names?
-    internal_ids: list[str] = DataProperty('m_InternalIds')  # `{prefix_index}#/{file_name}`
+    internal_ids: list[str] = DataProperty('m_InternalIds')  # `{prefix_index}#/{file_name}`, typically .bundle files
 
     key_data: bytes = DataProperty('m_KeyDataString', type=b64decode)
     bucket_data: bytes = DataProperty('m_BucketDataString', type=b64decode)
@@ -206,6 +206,13 @@ class AssetCatalog(DictWrapper):
                 bundle_paths.append(path)
 
         return bundle_path_map
+
+    def find_bundle(self, asset_path: str) -> str | None:
+        for bundle, assets in self.bundle_path_map.items():
+            if asset_path in assets:
+                return bundle
+
+        return None
 
     # endregion
 

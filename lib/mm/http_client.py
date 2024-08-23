@@ -501,15 +501,16 @@ class AuthClient(OrtegaClient):
 
     # region Get Client Key
 
-    def get_client_key(self, account: AccountConfig, password: str) -> str:
+    def get_client_key(self, account: AccountConfig, password: str, auth_token: int) -> str:
         """
         Retrieve a reusable client key that may be stored and reused instead of storing the account password.
 
         :param account: The Account object for which a client key should be obtained
         :param password: The account's password
+        :param auth_token: Auth token obtained from an asset in the APK
         :return: The client key value
         """
-        create_resp = self._create_user()
+        create_resp = self._create_user(auth_token)
         log.debug(f'Create user response={create_resp!r}')
         cb_user_data = self._comeback_user_data(account.user_id, password, create_resp['UserId'])
         log.debug(f'Get comeback user data response={cb_user_data!r}')
@@ -517,7 +518,7 @@ class AuthClient(OrtegaClient):
         log.debug(f'Get comeback user response={cb_resp!r}')
         return cb_resp['ClientKey']
 
-    def _create_user(self):
+    def _create_user(self, auth_token: int):
         # This request may NOT be made during maintenance
         auth_config = self.config.auth
         data = {
@@ -529,7 +530,7 @@ class AuthClient(OrtegaClient):
             'DisplayLanguage': auth_config.locale.num,
             'OSVersion': auth_config.os_version,
             'SteamTicket': '',
-            # TODO: 'AuthToken': ??? (maybe changes in every client version?)
+            'AuthToken': auth_token,  # This comes from an asset in the APK
         }
         log.debug(f'Sending createUser request with {data=}')
         return self._post_msg('auth/createUser', data)
