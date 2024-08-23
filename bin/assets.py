@@ -56,14 +56,16 @@ class AssetCLI(Command, description='Memento Mori Asset Manager', option_name_mo
 
 class List(AssetCLI, help='List asset paths'):
     item = SubCommand(help='What to list')
-    apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+    with ParamGroup(mutually_exclusive=True):
+        latest_apk = Flag('-A', help='List assets from the latest APK')
+        apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
-        if self.apk_path:
-            from mm.assets.apk import ApkArchive
+        if self.apk_path or self.latest_apk:
+            from mm.assets.apk import load_apk_or_latest
 
-            return ApkArchive(self.apk_path).asset_pack_apk.catalog
+            return load_apk_or_latest(self.apk_path).asset_pack_apk.catalog
         else:
             return self.mm_session.asset_catalog
 
@@ -116,7 +118,11 @@ class Save(AssetCLI, help='Save bundles/assets to the specified directory'):
 
 class Catalog(Save, help='Save the asset catalog, which contains metadata about game assets'):
     section = Action()
-    apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+
+    with ParamGroup(mutually_exclusive=True):
+        latest_apk = Flag('-A', help='Save the asset catalog from the latest APK')
+        apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
+
     split = Flag('-s', help='Split the catalog into separate files for each top-level key')
     decode = Flag('-d', help='Decode base64-encoded content (only applies when --split / -s is specified)')
     no_subdir = Flag(
@@ -132,10 +138,10 @@ class Catalog(Save, help='Save the asset catalog, which contains metadata about 
 
     @cached_property
     def asset_catalog(self) -> AssetCatalog:
-        if self.apk_path:
-            from mm.assets.apk import ApkArchive
+        if self.apk_path or self.latest_apk:
+            from mm.assets.apk import load_apk_or_latest
 
-            return ApkArchive(self.apk_path).asset_pack_apk.catalog
+            return load_apk_or_latest(self.apk_path).asset_pack_apk.catalog
         else:
             return self.mm_session.asset_catalog
 
@@ -261,16 +267,6 @@ class SaveAssets(
     def main(self):
         if self.bundle_dir:
             self.download_bundles(self.bundle_dir)
-        elif self.latest_apk:
-            from mm.assets.apk import ApkDownloader
-
-            downloader = ApkDownloader()
-            path = downloader.get_path(None)
-            if path.exists():
-                log.debug(f'The latest APK was already saved: {path.as_posix()}')
-                self.apk_path = path
-            else:
-                self.apk_path = downloader.download_latest(None)[0]  # noqa
 
         self.extract_assets()
         self.maybe_convert_audio()
@@ -279,7 +275,7 @@ class SaveAssets(
         finder = AssetBundleFinder(
             self.mm_session,
             self.bundle_dir,
-            apk_path=self.apk_path,
+            apk_path=_get_apk_path(self.apk_path, self.latest_apk),
             limit=self.limit,
             bundle_names=self.bundle_names,
             asset_path_pats=self.asset_path,
@@ -287,6 +283,15 @@ class SaveAssets(
         )
         extractor = AssetExtractor(finder, self.output, self.parallel, self.verbose, self.debug)
         extractor.extract_assets(self.force, self.allow_raw)
+
+
+def _get_apk_path(apk_path: Path | None, latest_apk: bool) -> Path | None:
+    if apk_path or latest_apk:
+        from mm.assets.apk import get_apk_or_latest_path
+
+        return get_apk_or_latest_path(apk_path)
+    else:
+        return None
 
 
 # endregion
@@ -304,6 +309,7 @@ class BundleCommand(AssetCLI, ABC):
         )
 
     with ParamGroup(mutually_exclusive=True, required=True):
+        latest_apk = Flag('-A', help='Save bundles from the latest APK')
         apk_path = Option('-a', type=FILE, help='Path to an APK file to use as a source for bundles')
         bundle_dir = Option(
             '-b', type=DIR, help='Path to a dir that contains .bundle files, or that should be used to store them'
@@ -316,7 +322,7 @@ class BundleCommand(AssetCLI, ABC):
         return AssetBundleFinder(
             self.mm_session,
             self.bundle_dir,
-            apk_path=self.apk_path,
+            apk_path=_get_apk_path(self.apk_path, self.latest_apk),
             bundle_names=self.bundle_names,
             asset_path_pats=self.asset_path,
             extensions=self.extension,
@@ -357,10 +363,14 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
             print(f'Bundle {src_path} contains: {content_path}')
 
     def iter_bundle_contents(self):
-        group = self.finder.get_bundle_group()
-        for name in group.bundle_names:
-            for path in group.get_container(name):
-                yield name, path
+        for bundle_name, content_paths in self.finder.asset_catalog.bundle_path_map.items():
+            for content_path in content_paths:
+                yield bundle_name, content_path
+
+        # group = self.finder.get_bundle_group()
+        # for name in group.bundle_names:
+        #     for path in group.get_container(name):
+        #         yield name, path
 
     def iter_matching_contents(self):
         import posixpath
