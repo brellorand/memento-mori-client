@@ -1,71 +1,55 @@
 """
-Tasks that can be performed when logged in to a specific world
+Tasks related to smelting equipment
 """
 
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from functools import cached_property
-from random import randint
-from typing import TYPE_CHECKING, Collection, Type, Self
+from typing import TYPE_CHECKING, Collection
 
 from mm.enums import EquipmentRarityFlags, ItemType
-from .utils import wait
+from ..utils import wait
+from .task import Task, DailyTask, TaskConfig
 
 if TYPE_CHECKING:
-    from .session import WorldSession
     from mm.models import ItemAndCount, Equipment
+    from ..session import WorldSession
 
-__all__ = ['TaskConfig', 'Task', 'DailyTask']
+__all__ = ['SmeltAll', 'SmeltUnequippedGear', 'SmeltNeverEquippedSGear']
 log = logging.getLogger(__name__)
 
 
-@dataclass
-class TaskConfig:
-    """Common configurable options for Tasks"""
+class SmeltAll(DailyTask):
+    cli_name = 'smelt_all'
 
-    dry_run: bool = False
-    min_wait_ms: int = 300
-    max_wait_ms: int = 600
-
-    def get_wait_ms(self) -> int:
-        return randint(self.min_wait_ms, self.max_wait_ms)
-
-
-class Task(ABC):
-    world_session: WorldSession
-    config: TaskConfig
-
-    def __init__(self, world_session: WorldSession, config: TaskConfig = None):
-        self.world_session = world_session
-        self.config = TaskConfig() if config is None else config
-
-    def run(self):
-        if not self.can_perform():
-            log.info(self.cannot_perform_msg)
-            return
-
-        result = self.perform_task()
-        log.info(f'Result of performing task={self.__class__.__name__}: {result}')
-
-    @abstractmethod
-    def can_perform(self) -> bool:
-        raise NotImplementedError
+    def __init__(
+        self,
+        world_session: WorldSession,
+        config: TaskConfig = None,
+        *,
+        rarity: EquipmentRarityFlags = EquipmentRarityFlags.range(EquipmentRarityFlags.D, EquipmentRarityFlags.A),
+    ):
+        super().__init__(world_session, config)
+        self.rarity = rarity
 
     @property
-    @abstractmethod
     def cannot_perform_msg(self) -> str:
-        raise NotImplementedError
+        return f'There are no never-equipped items with rarity={self.rarity} in your inventory'
 
-    @abstractmethod
+    def can_perform(self) -> bool:
+        return any(
+            ic.count and ic.item_type == ItemType.Equipment and ic.item.rarity_flags in self.rarity
+            for ic in self.world_session.inventory
+        )
+
     def perform_task(self):
-        raise NotImplementedError
+        if self.config.dry_run:
+            log.info(f'[DRY RUN] Would smelt all rarity={self.rarity} never-equipped equipment')
+            return
 
-    @classmethod
-    def get_all(cls) -> list[Type[Self]]:
-        return cls.__subclasses__()
+        log.info(f'Smelting all rarity={self.rarity} never-equipped equipment')
+        return self.world_session.smelt_all_gear(self.rarity)
 
 
 class SmeltNeverEquippedSGear(Task):
@@ -196,69 +180,3 @@ class SmeltUnequippedGear(Task):
 
             log.info(f'  -> Smelting {equipment}')
             self.world_session.smelt_gear(equipment.guid)
-
-
-# region Daily Tasks
-
-
-class DailyTask(Task, ABC):
-    @property
-    @abstractmethod
-    def cli_name(self) -> str:
-        raise NotImplementedError
-
-    @classmethod
-    def get_cli_name_map(cls) -> dict[str, Type[Self]]:
-        return {c.cli_name: c for c in cls.get_all()}
-
-
-class ClaimDailyVIPGift(DailyTask):
-    cli_name = 'vip_gift'
-    cannot_perform_msg = 'The daily VIP gift was already claimed'
-
-    def can_perform(self) -> bool:
-        return self.world_session.user_sync_data.has_vip_daily_gift
-
-    def perform_task(self):
-        if self.config.dry_run:
-            log.info('[DRY RUN] Would claim daily VIP gift')
-            return
-
-        log.info('Claiming daily VIP gift')
-        # TODO: Only print the items that were received
-        return self.world_session.get_daily_vip_gift()
-
-
-class SmeltAll(DailyTask):
-    cli_name = 'smelt_all'
-
-    def __init__(
-        self,
-        world_session: WorldSession,
-        config: TaskConfig = None,
-        *,
-        rarity: EquipmentRarityFlags = EquipmentRarityFlags.range(EquipmentRarityFlags.D, EquipmentRarityFlags.A),
-    ):
-        super().__init__(world_session, config)
-        self.rarity = rarity
-
-    @property
-    def cannot_perform_msg(self) -> str:
-        return f'There are no never-equipped items with rarity={self.rarity} in your inventory'
-
-    def can_perform(self) -> bool:
-        return any(
-            ic.count and ic.item_type == ItemType.Equipment and ic.item.rarity_flags in self.rarity
-            for ic in self.world_session.inventory
-        )
-
-    def perform_task(self):
-        if self.config.dry_run:
-            log.info(f'[DRY RUN] Would smelt all rarity={self.rarity} never-equipped equipment')
-            return
-
-        log.info(f'Smelting all rarity={self.rarity} never-equipped equipment')
-        return self.world_session.smelt_all_gear(self.rarity)
-
-
-# endregion
