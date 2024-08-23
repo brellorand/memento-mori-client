@@ -9,9 +9,9 @@ from abc import ABC
 from collections import Counter, deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import cached_property
-from itertools import product, combinations, chain, permutations
+from itertools import chain, combinations, permutations, product
 from math import factorial
-from typing import TYPE_CHECKING, Type, Iterator, Collection, Iterable, Sequence
+from typing import TYPE_CHECKING, Collection, Iterable, Iterator, Sequence, Type
 
 from .enums import RuneRarity
 from .exceptions import RuneError

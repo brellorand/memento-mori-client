@@ -9,7 +9,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from .assets import AssetCatalog
-from .config import ConfigFile, AccountConfig
+from .config import AccountConfig, ConfigFile
 from .http_client import AuthClient, DataClientWrapper
 from .mb_models import MB
 

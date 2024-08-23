@@ -8,22 +8,22 @@ import logging
 import re
 from functools import cached_property
 from threading import Lock
-from typing import TYPE_CHECKING, Union, MutableMapping, Any, Mapping, Self
+from typing import TYPE_CHECKING, Any, Mapping, MutableMapping, Self, Union
 from urllib.parse import urlencode, urlparse
 from uuid import uuid4
 from weakref import finalize
 
 import msgpack
-from requests import Session, Response, HTTPError
+from requests import HTTPError, Response, Session
 
-from .config import ConfigFile, AccountConfig
+from .config import AccountConfig, ConfigFile
 from .data import GameData, OrtegaInfo
-from .exceptions import CacheMiss, MissingClientKey, ApiResponseError
+from .exceptions import ApiResponseError, CacheMiss, MissingClientKey
 from .fs import FileCache, HTTPSaver, PathLike
-from .utils import UrlPart, RequestMethod, format_path_prefix, rate_limited
+from .utils import RequestMethod, UrlPart, format_path_prefix, rate_limited
 
 if TYPE_CHECKING:
-    from .typing import LoginResponse, GetServerHostResponse, LoginPlayerResponse, ErrorLogInfo
+    from .typing import ErrorLogInfo, GetServerHostResponse, LoginPlayerResponse, LoginResponse
 
 __all__ = ['AuthClient', 'DataClient']
 log = logging.getLogger(__name__)

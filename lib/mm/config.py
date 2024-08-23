@@ -16,6 +16,7 @@ from .fs import PathLike, get_config_dir, path_repr
 
 if TYPE_CHECKING:
     from pathlib import Path
+
     from .http_client import AppVersionManager
 
 __all__ = ['ConfigFile', 'AccountConfig', 'AndroidModel', 'ANDROID_MODELS', 'DEFAULT_ANDROID_MODEL']

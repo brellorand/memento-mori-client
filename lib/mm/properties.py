@@ -8,7 +8,7 @@ that they may be re-computed.
 
 from __future__ import annotations
 
-from functools import lru_cache, cached_property
+from functools import cached_property, lru_cache
 from typing import Any, Callable, Collection
 
 __all__ = [

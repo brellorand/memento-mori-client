@@ -10,16 +10,16 @@ import re
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import Iterator, Iterable
+from typing import Iterable, Iterator
 from weakref import finalize
 from zipfile import ZipFile, ZipInfo
 
 from cloudscraper import CloudScraper
-from requests import Session, Response
+from requests import Response, Session
 from tqdm import tqdm
 
 from mm.fs import get_user_cache_dir
-from .bundles import DataBundle, BundleGroup
+from .bundles import BundleGroup, DataBundle
 from .catalog import AssetCatalog
 
 __all__ = ['ApkArchive', 'AssetPackApk', 'ApkType']

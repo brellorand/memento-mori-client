@@ -8,19 +8,30 @@ import logging
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Type, TypeVar, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, Type, TypeVar
 
 from mm.data import DictWrapper
-from mm.enums import Locale, ItemType
-from mm.fs import MBFileCache, CacheMiss, path_repr
+from mm.enums import ItemType, Locale
+from mm.fs import CacheMiss, MBFileCache, path_repr
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
 
 if TYPE_CHECKING:
     from mm.session import MementoMoriSession
     from .characters import Character, CharacterProfile
-    from .items import Item, EquipmentSetMaterial, ChangeItem, EquipmentPart, Equipment, EquipmentUpgradeRequirements
-    from .items import EquipmentEnhanceRequirements, Rune, AnyItem, TreasureChest, CharacterFragment
+    from .items import (
+        AnyItem,
+        ChangeItem,
+        CharacterFragment,
+        Equipment,
+        EquipmentEnhanceRequirements,
+        EquipmentPart,
+        EquipmentSetMaterial,
+        EquipmentUpgradeRequirements,
+        Item,
+        Rune,
+        TreasureChest,
+    )
     from .player import PlayerRank, VipLevel
     from .world_group import WorldGroup
 

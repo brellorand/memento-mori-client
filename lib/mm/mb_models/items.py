@@ -9,18 +9,18 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from mm.enums import (
-    EquipmentSlotType,
-    EquipmentRarityFlags,
-    Job,
-    EquipmentCategory,
-    ItemType,
-    SphereType,
     BaseParameterType,
     ChangeParameterType,
+    EquipmentCategory,
+    EquipmentRarityFlags,
+    EquipmentSlotType,
     EquipmentType,
+    ItemType,
+    Job,
+    SphereType,
 )
 from mm.properties import DataProperty, DictAttrFieldNotFoundError
-from .base import MB, MBEntity, NamedEntity, FullyNamedEntity
+from .base import MB, FullyNamedEntity, MBEntity, NamedEntity
 from .utils import LocalizedString
 
 if TYPE_CHECKING:

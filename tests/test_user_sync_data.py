@@ -4,10 +4,10 @@ import json
 from copy import deepcopy
 from pathlib import Path
 from unittest import TestCase, main
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
-from mm.game import PlayerAccount
 from mm.data import UserSyncData
+from mm.game import PlayerAccount
 from mm.http_client import ApiClient
 
 

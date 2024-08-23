@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Collection, Iterator
 from mm.fs import path_repr
 from mm.logging import log_initializer
 from mm.utils import FutureWaiter
-from .bundles import FileBundle, Bundle, BundleGroup, find_bundles, find_bundle_paths
+from .bundles import Bundle, BundleGroup, FileBundle, find_bundle_paths, find_bundles
 
 if TYPE_CHECKING:
     from mm.session import MementoMoriSession

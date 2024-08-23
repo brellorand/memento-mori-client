@@ -8,16 +8,16 @@ from abc import ABC
 from functools import cached_property
 from getpass import getpass
 from operator import itemgetter
-from typing import TYPE_CHECKING, Iterator, Iterable
+from typing import TYPE_CHECKING, Iterable, Iterator
 
-from cli_command_parser import Command, SubCommand, Flag, Counter, Option, ParamGroup, Action, main
-from cli_command_parser.inputs import Path as IPath, NumRange
+from cli_command_parser import Action, Command, Counter, Flag, Option, ParamGroup, SubCommand, main
 from cli_command_parser.exceptions import UsageError
+from cli_command_parser.inputs import NumRange, Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.game import PlayerAccount, WorldSession, DailyTask, TaskRunner, TaskConfig
 from mm.config import AccountConfig
-from mm.enums import ITEM_PAGE_TYPE_MAP, ItemRarityFlags, EquipmentType, SmeltEquipmentRarity, EquipmentRarityFlags
+from mm.enums import ITEM_PAGE_TYPE_MAP, EquipmentRarityFlags, EquipmentType, ItemRarityFlags, SmeltEquipmentRarity
+from mm.game import DailyTask, PlayerAccount, TaskConfig, TaskRunner, WorldSession
 from mm.output import CompactJSONEncoder
 from mm.session import MementoMoriSession
 

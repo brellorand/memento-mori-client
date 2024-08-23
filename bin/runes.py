@@ -2,10 +2,10 @@
 
 from abc import ABC
 
-from cli_command_parser import Command, Positional, Counter, SubCommand, main
+from cli_command_parser import Command, Counter, Positional, SubCommand, main
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.runes import Rune, RuneSet, RuneCalculator
+from mm.runes import Rune, RuneCalculator, RuneSet
 
 
 class RunesCLI(Command, description='Memento Mori Rune Calculator', option_name_mode='*-'):

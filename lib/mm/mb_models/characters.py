@@ -4,12 +4,12 @@ Classes that wrap API responses
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from functools import cached_property
 from typing import Any
 
-from mm.enums import Element, Job, CharacterRarity, Locale, CharacterType, ItemRarityFlags
+from mm.enums import CharacterRarity, CharacterType, Element, ItemRarityFlags, Job, Locale
 from mm.properties import DataProperty
 from .base import MBEntity, NamedEntity
 from .utils import LocalizedString

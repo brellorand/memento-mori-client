@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Iterator
 
-from cli_command_parser import Command, SubCommand, Counter, Option, main
+from cli_command_parser import Command, Counter, Option, SubCommand, main
 from cli_command_parser.inputs import Path as IPath
 from cli_command_parser.utils import camel_to_snake_case
 

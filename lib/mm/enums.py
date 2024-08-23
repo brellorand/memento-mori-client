@@ -5,7 +5,7 @@ Enums used by the game
 from __future__ import annotations
 
 import logging
-from enum import StrEnum, IntEnum, IntFlag, CONFORM
+from enum import CONFORM, IntEnum, IntFlag, StrEnum
 from math import log as _log
 
 __all__ = ['Region', 'Locale', 'LOCALES']

@@ -3,9 +3,9 @@ Logging helpers
 """
 
 from functools import partial
-from logging import LogRecord, Formatter, getLogger, basicConfig, DEBUG, INFO
+from logging import DEBUG, INFO, Formatter, LogRecord, basicConfig, getLogger
 
-from colored import stylize, fg
+from colored import fg, stylize
 
 __all__ = ['init_logging', 'log_initializer', 'ENTRY_FMT_DETAILED']
 

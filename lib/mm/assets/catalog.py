@@ -15,7 +15,7 @@ from enum import IntEnum
 from functools import cached_property
 from io import BytesIO
 from struct import Struct
-from typing import Any, Iterator, Sequence, NamedTuple
+from typing import Any, Iterator, NamedTuple, Sequence
 
 from mm.data import DictWrapper
 from mm.properties import DataProperty

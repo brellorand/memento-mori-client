@@ -5,14 +5,14 @@ Misc utilities.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
-from functools import wraps, partial
-from json.encoder import JSONEncoder, encode_basestring_ascii, encode_basestring  # noqa
+from functools import partial, wraps
+from json.encoder import JSONEncoder, encode_basestring, encode_basestring_ascii  # noqa
 from operator import attrgetter
 from threading import Lock
-from time import sleep, monotonic
-from typing import TYPE_CHECKING, Optional, Callable
+from time import monotonic, sleep
+from typing import TYPE_CHECKING, Callable, Optional
 
 from tqdm import tqdm
 

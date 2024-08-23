@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from subprocess import run, CalledProcessError
-from typing import TYPE_CHECKING, Sequence, Any
+from subprocess import CalledProcessError, run
+from typing import TYPE_CHECKING, Any, Sequence
 
 if TYPE_CHECKING:
     from mm.fs import PathLike

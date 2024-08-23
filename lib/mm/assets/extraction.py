@@ -16,10 +16,21 @@ import logging
 from abc import ABC, abstractmethod
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar, Type
+from typing import TYPE_CHECKING, Generic, Type, TypeVar
 
-from UnityPy.classes import Object, PPtr, MonoBehaviour, TextAsset, Font, Shader, Mesh, Sprite, Texture2D, AudioClip
-from UnityPy.classes import GameObject
+from UnityPy.classes import (
+    AudioClip,
+    Font,
+    GameObject,
+    Mesh,
+    MonoBehaviour,
+    Object,
+    PPtr,
+    Shader,
+    Sprite,
+    TextAsset,
+    Texture2D,
+)
 from UnityPy.enums.ClassIDType import ClassIDType
 
 from mm.fs import path_repr

@@ -6,13 +6,13 @@ import logging
 from abc import ABC
 from functools import cached_property
 
-from cli_command_parser import Command, Positional, Counter, SubCommand, Flag, Option, main
+from cli_command_parser import Command, Counter, Flag, Option, Positional, SubCommand, main
 from cli_command_parser.inputs import Path as IPath
 
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.session import MementoMoriSession
 from mm.enums import LOCALES
-from mm.runes import PartyMember, Party, speed_tune
+from mm.runes import Party, PartyMember, speed_tune
+from mm.session import MementoMoriSession
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class SpeedCLI(Command, description='Memento Mori Speed Rune Calculator', option
         )
 
     def print_members(self, members: list[PartyMember]):
-        from colored import stylize, fg
+        from colored import fg, stylize
 
         last = 0
         for i, member in enumerate(members):

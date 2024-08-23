@@ -5,10 +5,10 @@ Helpers for serializing Python data structures to JSON or YAML
 import json
 import sys
 from collections import UserDict
-from collections.abc import Mapping, KeysView, ValuesView
+from collections.abc import KeysView, Mapping, ValuesView
 from csv import DictWriter
-from datetime import datetime, date, timedelta
-from json.encoder import JSONEncoder, encode_basestring_ascii, encode_basestring  # noqa
+from datetime import date, datetime, timedelta
+from json.encoder import JSONEncoder, encode_basestring, encode_basestring_ascii  # noqa
 
 try:
     import yaml

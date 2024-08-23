@@ -11,7 +11,8 @@ from .enums import ErrorCode
 from .errors import ERROR_CODE_MESSAGE_MAP
 
 if TYPE_CHECKING:
-    from requests import Response, Request
+    from requests import Request, Response
+
     from .typing import ApiErrorResponse
 
 log = logging.getLogger(__name__)

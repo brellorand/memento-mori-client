@@ -5,7 +5,7 @@ from itertools import count
 from unittest import TestCase, main
 from unittest.mock import patch
 
-from mm.properties import DataProperty, ClearableCachedPropertyMixin, get_cached_property_names
+from mm.properties import ClearableCachedPropertyMixin, DataProperty, get_cached_property_names
 
 
 class ExampleClass(ClearableCachedPropertyMixin):

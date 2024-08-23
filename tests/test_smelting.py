@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
+from time import time
+from typing import Any
 from unittest import TestCase, main
 from unittest.mock import Mock
 from uuid import uuid4
-from time import time
-from typing import Any
 
 from mm.game.models import Equipment
 from mm.game.tasks.smelting import _should_smelt

@@ -9,14 +9,14 @@ import os
 from abc import ABC, abstractmethod
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, Iterable, Collection
+from typing import TYPE_CHECKING, Collection, Iterable, Iterator
 
 from UnityPy import Environment
-from UnityPy.files.File import File
 from UnityPy.files.BundleFile import BundleFile, DirectoryInfoFS
+from UnityPy.files.File import File
 from UnityPy.files.SerializedFile import SerializedFile
-from UnityPy.streams import EndianBinaryReader
 from UnityPy.helpers.ImportHelper import parse_file
+from UnityPy.streams import EndianBinaryReader
 
 from mm.fs import path_repr
 from .extraction import BundleExtractor

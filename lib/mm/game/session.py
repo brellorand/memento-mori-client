@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..data import UserSyncData
-from ..enums import Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType, BattleType
+from ..enums import BaseParameterType, BattleType, EquipmentRarityFlags, EquipmentSlotType, Locale
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
 from .models import Character, Equipment, ItemAndCount
@@ -20,14 +20,14 @@ if TYPE_CHECKING:
     from ..grpc_client import MagicOnionClient
     from ..session import MementoMoriSession
     from ..typing import (
-        PlayerDataInfo,
-        GetServerHostResponse,
-        LoginPlayerResponse,
-        GetUserDataResponse,
-        GetMypageResponse,
-        UserEquipment,
         EquipmentChangeInfo,
         ErrorLogInfo,
+        GetMypageResponse,
+        GetServerHostResponse,
+        GetUserDataResponse,
+        LoginPlayerResponse,
+        PlayerDataInfo,
+        UserEquipment,
     )
     from .account import PlayerAccount
 

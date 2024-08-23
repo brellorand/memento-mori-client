@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Collection
 
 from mm.enums import EquipmentRarityFlags, ItemType
 from ..utils import wait
-from .task import Task, DailyTask, TaskConfig
+from .task import DailyTask, Task, TaskConfig
 
 if TYPE_CHECKING:
-    from ..models import ItemAndCount, Equipment
+    from ..models import Equipment, ItemAndCount
     from ..session import WorldSession
 
 __all__ = ['SmeltAll', 'SmeltUnequippedGear', 'SmeltNeverEquippedSGear']
