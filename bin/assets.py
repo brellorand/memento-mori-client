@@ -35,6 +35,7 @@ NEW_FILE = IPath(type='file', exists=False)
 FILES = IPath(type='file|dir', exists=True)
 FILE = IPath(type='file', exists=True)
 DATE_OR_DT = DateTime(DEFAULT_DATE_FMT, DEFAULT_DT_FMT)
+ASSET_PATH_HELP = 'One or more asset paths for which bundles should be included (supports wildcards)'
 
 
 class AssetCLI(Command, description='Memento Mori Asset Manager', option_name_mode='*-'):
@@ -175,10 +176,7 @@ class Catalog(Save, help='Save the asset catalog, which contains metadata about 
 class SaveBundlesCmd(Save, ABC):
     with ParamGroup('Asset File'):
         bundle_names = Option('-n', nargs='+', help='Names of specific bundles to include')
-        asset_path = Option(
-            '-p', nargs='+', metavar='GLOB',
-            help='One or more asset paths for which bundles should be included (supports wildcards)',
-        )
+        asset_path = Option('-p', nargs='+', metavar='GLOB', help=ASSET_PATH_HELP)
         extension = Option(
             '-x', nargs='+', help='One or more asset file extensions for which bundles should be included'
         )
@@ -300,10 +298,7 @@ class SaveAssets(
 class BundleCommand(AssetCLI, ABC):
     with ParamGroup('Asset File'):
         bundle_names = Option('-n', nargs='+', help='Names of specific bundles to include')
-        asset_path = Option(
-            '-p', nargs='+', metavar='GLOB',
-            help='One or more asset paths for which bundles should be included (supports wildcards)',
-        )
+        asset_path = Option('-p', nargs='+', metavar='GLOB', help=ASSET_PATH_HELP)
         extension = Option(
             '-x', nargs='+', help='One or more asset file extensions for which bundles should be included'
         )

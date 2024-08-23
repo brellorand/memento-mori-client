@@ -98,7 +98,7 @@ class Mbs(Save, help='Save the MB files listed in the MB catalog'):
             to_download = [name for name in to_download if not self.output.joinpath(name + '.json').exists()]
 
         if self.limit:
-            return to_download[:self.limit]
+            return to_download[: self.limit]
         return to_download
 
     def _save_data(self, name: str, data):
@@ -162,10 +162,10 @@ class RawData(Save, help='Download files listed in the DownloadRawDataMB list'):
                 names = set(self.name)
                 to_download = {row['FilePath'] for row in self.raw_data_info}.intersection(names)
                 if bad := names.difference(to_download):
-                    bad_str = ", ".join(sorted(bad))
+                    bad_str = ', '.join(sorted(bad))
                     raise ParamUsageError(
                         self.__class__.name,
-                        f'Invalid values - they do not match FilePath values specified in DownloadRawDataMB: {bad_str}'
+                        f'Invalid values - they do not match FilePath values specified in DownloadRawDataMB: {bad_str}',
                     )
                 to_download = sorted(to_download)
         else:  # --all
@@ -175,7 +175,7 @@ class RawData(Save, help='Download files listed in the DownloadRawDataMB list'):
             to_download = [path for path in to_download if not self.output.joinpath(path).exists()]
 
         if self.limit:
-            return to_download[:self.limit]
+            return to_download[: self.limit]
         return to_download
 
     def _save(self, name: str, data: bytes, log_lvl: int = logging.DEBUG):
@@ -264,9 +264,7 @@ class VIP(Show, choice='vip', help='Show daily VIP rewards by level'):
     @item(help='Show the daily rewards unlocked at each VIP level')
     def daily_rewards(self):
         data = {
-            f'Level {level.level}': [
-                f'{ic.item.display_name} x {ic.count:,d}' for ic in level.daily_rewards
-            ]
+            f'Level {level.level}': [f'{ic.item.display_name} x {ic.count:,d}' for ic in level.daily_rewards]
             for level in self.mm_session.mb.vip_levels
         }
         self.pprint(data)
@@ -291,16 +289,11 @@ class Rank(Show, help='Show player rank info'):
         output = {}
         last = {}
         for num, rank in self.mm_session.mb.player_ranks.items():
-            rank_stats = {
-                k: v
-                for k, v in rank.get_stat_bonuses().items()
-                if k in stats and v and v != last.get(k)
-            }
+            rank_stats = {k: v for k, v in rank.get_stat_bonuses().items() if k in stats and v and v != last.get(k)}
             if rank_stats:
                 last |= rank_stats  # Update instead of replace so filtered out same values will be retained
                 output[f'Rank {num}'] = {
-                    k: f'{v}%' if '%' in k else f'{v:,d}' if v > 999 else v
-                    for k, v in rank_stats.items()
+                    k: f'{v}%' if '%' in k else f'{v:,d}' if v > 999 else v for k, v in rank_stats.items()
                 }
 
         self.pprint(output)

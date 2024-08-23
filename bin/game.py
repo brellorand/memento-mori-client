@@ -17,9 +17,7 @@ from cli_command_parser.exceptions import UsageError
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.game import PlayerAccount, WorldSession, DailyTask, TaskRunner, TaskConfig
 from mm.config import AccountConfig
-from mm.enums import (
-    ITEM_PAGE_TYPE_MAP, ItemRarityFlags, EquipmentType, SmeltEquipmentRarity, EquipmentRarityFlags
-)
+from mm.enums import ITEM_PAGE_TYPE_MAP, ItemRarityFlags, EquipmentType, SmeltEquipmentRarity, EquipmentRarityFlags
 from mm.output import CompactJSONEncoder
 from mm.session import MementoMoriSession
 
@@ -98,12 +96,11 @@ class WorldCommand(GameCLI, ABC):
 
 
 class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory'):
+    _sort_choices = ('Name', 'Rarity', 'Level', 'Slot', 'Quantity')
+
     view = Action(help='The view to show')
     world: int = Option('-w', help='The world to log in to')
-    sort_by = Option(
-        '-S', nargs='+', choices=('Name', 'Rarity', 'Level', 'Slot', 'Quantity'),
-        help='Sort the equipment table by the specified columns',
-    )
+    sort_by = Option('-S', nargs='+', choices=_sort_choices, help='Sort the equipment table by the specified columns')
     show_ids = Flag('-I', help='Show item and type IDs')
     include_zero = Flag('-z', help='Include items with quantity=0')
     page = Option('-p', choices=ITEM_PAGE_TYPE_MAP, help='Show only items that appear on the specified inventory page')
@@ -213,8 +210,12 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     def _get_equipment_row(self, eq: MBEquipment):
         if self.show_ids:
             return {
-                'Item ID': eq.item_id, 'Name': eq.name, 'Rarity': eq.rarity_flags,
-                'Level': eq.level, 'Slot': eq.gear_type, 'Quantity': 1,
+                'Item ID': eq.item_id,
+                'Name': eq.name,
+                'Rarity': eq.rarity_flags,
+                'Level': eq.level,
+                'Slot': eq.gear_type,
+                'Quantity': 1,
             }
         else:
             return {'Name': eq.name, 'Rarity': eq.rarity_flags, 'Level': eq.level, 'Slot': eq.gear_type, 'Quantity': 1}

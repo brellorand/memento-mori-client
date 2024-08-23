@@ -26,9 +26,7 @@ class CodeConversionCLI(Command, description='Memento Mori Code Converter', opti
         required=True,
         help='Input file containing the enum to convert',
     )
-    output: Path = Option(
-        '-o', type=IPath(type='file', exists=False, allow_dash=True), help='Output path', default='-'
-    )
+    output: Path = Option('-o', type=IPath(type='file', exists=False, allow_dash=True), help='Output path', default='-')
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
 
     def _init_command_(self):
