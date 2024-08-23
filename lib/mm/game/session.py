@@ -13,7 +13,7 @@ from ..data import UserSyncData
 from ..enums import Locale, EquipmentRarityFlags, BaseParameterType, EquipmentSlotType, BattleType
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
-from ..models import Character, Equipment, ItemAndCount
+from .models import Character, Equipment, ItemAndCount
 from .utils import load_cached_data
 
 if TYPE_CHECKING:

@@ -8,12 +8,12 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-from .enums import CharacterRarity, ItemType
-from .mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipment
-from .properties import DataProperty
+from mm.enums import CharacterRarity, ItemType
+from mm.mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipment
+from mm.properties import DataProperty
 
 if TYPE_CHECKING:
-    from .game import WorldSession
+    from .session import WorldSession
 
 __all__ = ['WorldEntity', 'Equipment', 'Character']
 log = logging.getLogger(__name__)

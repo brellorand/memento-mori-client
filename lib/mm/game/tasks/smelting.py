@@ -13,7 +13,7 @@ from ..utils import wait
 from .task import Task, DailyTask, TaskConfig
 
 if TYPE_CHECKING:
-    from mm.models import ItemAndCount, Equipment
+    from ..models import ItemAndCount, Equipment
     from ..session import WorldSession
 
 __all__ = ['SmeltAll', 'SmeltUnequippedGear', 'SmeltNeverEquippedSGear']

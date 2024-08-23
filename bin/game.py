@@ -24,7 +24,7 @@ from mm.output import CompactJSONEncoder
 from mm.session import MementoMoriSession
 
 if TYPE_CHECKING:
-    from mm.models import Equipment, ItemAndCount
+    from mm.game.models import Equipment, ItemAndCount
     from mm.mb_models import Equipment as MBEquipment
 
 log = logging.getLogger(__name__)
