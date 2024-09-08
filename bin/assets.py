@@ -356,6 +356,8 @@ class Index(BundleCommand, help='Create a bundle index to facilitate bundle disc
 
 class Find(BundleCommand, help='Find bundles containing the specified paths/files'):
     pattern = Option('-P', help='Path pattern to find (supports glob-style wildcards)')
+    exact = Flag('-E', help='Do not adjust the provided pattern for a higher likelihood of finding a match')
+    ignore_case = Flag('-i', help='Disable case sensitivity')
 
     def main(self):
         matching_contents_iter = self.iter_matching_contents() if self.pattern else self.iter_bundle_contents()
@@ -377,8 +379,16 @@ class Find(BundleCommand, help='Find bundles containing the specified paths/file
         from fnmatch import _compile_pattern  # noqa
         from os.path import normcase
 
-        match = _compile_pattern(normcase(self.pattern))
-        if os.path is posixpath:  # normcase on posix is NOP. Optimize it away from the loop.
+        pattern = self.pattern.lower() if self.ignore_case else self.pattern
+        if not self.exact and '/' not in pattern and not pattern.startswith('*'):
+            pattern = f'*{pattern}'
+
+        match = _compile_pattern(normcase(pattern))
+        if self.ignore_case:
+            for src_path, content_path in self.iter_bundle_contents():
+                if match(content_path.lower()):
+                    yield src_path, content_path
+        elif os.path is posixpath:  # normcase on posix is NOP. Optimize it away from the loop.
             for src_path, content_path in self.iter_bundle_contents():
                 if match(content_path):
                     yield src_path, content_path
@@ -392,7 +402,7 @@ class Extract(ConverterMixin, BundleCommand, help='Extract assets from a .bundle
     output: Path = Option('-o', type=DIR, help='Output directory', required=True)
 
     force = Flag('-F', help='Force re-extraction even if output files already exist (default: skip existing files)')
-    allow_raw = Flag(help='Allow extraction of unhandled asset types without any conversion/processing')
+    allow_raw = Flag('-r', help='Allow extraction of unhandled asset types without any conversion/processing')
     skip_flac = Flag(help='Skip conversion of audio files to flac (default: attempt to convert if ffmpeg is available)')
     ffmpeg_path = Option('-f', type=FILE, help='Path to ffmpeg, if it is not in your $PATH')
 
