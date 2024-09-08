@@ -28,6 +28,7 @@ from UnityPy.classes import (
     PPtr,
     Shader,
     Sprite,
+    SpriteAtlas,
     TextAsset,
     Texture2D,
 )
@@ -320,6 +321,23 @@ class SpriteExporter(AssetExporter[Sprite], id_type=ClassIDType.Sprite, ext='.pn
         return bio.getvalue()
 
 
+class SpriteAtlasExporter(AssetExporter[SpriteAtlas], id_type=ClassIDType.SpriteAtlas, ext='.png'):
+    def export_bytes(self, obj: SpriteAtlas) -> bytes:
+        return b''
+
+    def export_all(self, obj: SpriteAtlas, dst_path: Path, nested: bool = False):
+        log.debug(f'{self.__class__.__name__}: Exporting {len(obj.m_PackedSprites)} from {nested=} {obj}')
+        dst_dir = dst_path.relative_to(self.extractor.dst_dir).with_suffix('')
+        for i, sprite_ref in enumerate(obj.m_PackedSprites):
+            if name := sprite_ref.read().name:
+                if dst_dir.joinpath(name + self.default_ext).exists():
+                    name += f'__{i}'
+            else:
+                name = f'{sprite_ref.type.name}_{i}'
+
+            self.extractor.save_asset(dst_dir.joinpath(name).as_posix(), sprite_ref, nested=True)
+
+
 class Texture2DExporter(AssetExporter[Texture2D], id_type=ClassIDType.Texture2D, ext='.png'):
     def export_bytes(self, obj: Texture2D) -> bytes:
         if not obj.m_Width:
@@ -347,6 +365,7 @@ class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObje
         except AttributeError:
             return found
 
+        log.debug(f'GameObjectExporter._crawl found: {obj}')
         found[obj.path_id] = obj
         # MonoBehaviour relies on their typetree while Object denotes that the class of the object isn't implemented yet
         if isinstance(obj, (MonoBehaviour, Object)):
@@ -376,9 +395,12 @@ class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObje
         refs = self._crawl(obj)
         if not refs:
             log.info(f'No game objects found for {nested=} {dst_path.as_posix()}')
+            if not nested and self.extractor.unknown_as_raw:
+                RawExporter(self.extractor).export_all(obj, dst_path)
             return
 
         self._register(obj)
+        dst_dir = dst_path.relative_to(self.extractor.dst_dir)
         for ref_id, ref in refs.items():
             # Don't export already exported objects a second time
             # and prevent circular calls by excluding other GameObjects.
@@ -386,7 +408,7 @@ class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObje
             if (ref.assets_file, ref_id) in self.exported or ref.type == ClassIDType.GameObject:
                 continue
 
-            ref_path = dst_path.relative_to(self.extractor.dst_dir).joinpath(ref.name if ref.name else ref.type.name)
+            ref_path = dst_dir.joinpath(ref.name if ref.name else ref.type.name)
             self.extractor.save_asset(ref_path.as_posix(), ref, nested=True)
 
 
