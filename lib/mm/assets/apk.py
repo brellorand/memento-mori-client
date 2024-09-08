@@ -10,6 +10,7 @@ import re
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+from time import time
 from typing import Iterable, Iterator
 from weakref import finalize
 from zipfile import ZipFile, ZipInfo
@@ -162,10 +163,34 @@ class ApkDownloader:
 
     @cached_property
     def latest_version(self) -> str | None:
+        latest_path = get_user_cache_dir('apk').joinpath('latest.txt')
+        try:
+            modified = latest_path.stat().st_mtime
+        except OSError:
+            pass
+        else:
+            if (time() - modified) < 3600:  # If the last check was within the past hour
+                try:
+                    latest_version = latest_path.read_text()
+                except OSError:
+                    pass
+                else:
+                    log.debug(f'Using {latest_version=} from {path_repr(latest_path)}')
+                    return latest_version
+
+        latest_version = self._get_latest_version()
+        latest_path.parent.mkdir(parents=True, exist_ok=True)
+        latest_path.write_text(latest_version)
+        log.debug(f'Using {latest_version=} from the APK download page')
+        return latest_version
+
+    def _get_latest_version(self) -> str | None:
+        log.debug('Retrieving latest APK version from APK site')
         resp = self._get(f'https://{self.host}/mementomori-afkrpg/{self.package}/download')
         for pattern in self._version_patterns:
             if (version_strs := set(re.findall(pattern, resp.text))) and len(version_strs) == 1:
                 return next(iter(version_strs))
+
         log.warning('Could not find APK version using any configured pattern on the download page')
         return None
 
