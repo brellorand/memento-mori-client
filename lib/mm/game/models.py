@@ -23,6 +23,8 @@ log = logging.getLogger(__name__)
 
 
 class WorldEntity:
+    __slots__ = ('world', 'data')
+
     def __init__(self, world: WorldSession, data: dict[str, Any]):
         self.world = world
         self.data = data
@@ -65,6 +67,16 @@ class Equipment(WorldEntity):
         level, slot_type, rarity = equip.level, equip.slot_type.name, equip.rarity_flags.name
         guid = self.guid
         return f'<{self.__class__.__name__}[{equip.name}, {rarity=}, {level=}, {slot_type=}, {guid=}]>'
+
+    def __eq__(self, other: Equipment) -> bool:
+        if not isinstance(other, Equipment):
+            return False
+        return self.equipment_id == other.equipment_id
+
+    def __lt__(self, other: Equipment) -> bool:
+        if not isinstance(other, Equipment):
+            return NotImplemented
+        return self.equipment < other.equipment
 
 
 class ItemAndCount(WorldEntity):

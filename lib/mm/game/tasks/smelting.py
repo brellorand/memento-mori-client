@@ -150,7 +150,7 @@ class SmeltUnequippedGear(Task):
     @cached_property
     def _to_be_smelted(self) -> list[Equipment]:
         min_level, max_level = self.min_level, self.max_level or self._max_level
-        return [e for e in self._all_unequipped if _should_smelt(e, min_level, max_level)]
+        return sorted(e for e in self._all_unequipped if _should_smelt(e, min_level, max_level))
 
     def can_perform(self) -> bool:
         return bool(self._to_be_smelted)
@@ -158,7 +158,7 @@ class SmeltUnequippedGear(Task):
     @cached_property
     def _description(self) -> str:
         min_lvl, max_lvl = self.min_level, self.max_level or self._max_level
-        return f'unequipped items with {min_lvl} <= level <= {max_lvl}'
+        return f'{len(self._to_be_smelted)} unequipped items with {min_lvl} <= level <= {max_lvl}'
 
     @property
     def cannot_perform_msg(self) -> str:

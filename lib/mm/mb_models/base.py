@@ -312,6 +312,12 @@ class MBEntity:
         key, val = next((attr, v) for attr in attrs if (v := getattr(self, attr, None)) is not None)
         return f'<{self.__class__.__name__}[{key}={val!r}]>'
 
+    def __eq__(self, other: MBEntity) -> bool:
+        return isinstance(other, self.__class__) and self.id == other.id
+
+    def __hash__(self) -> int:
+        return hash(self.__class__) ^ hash(self.id)
+
 
 class TextResource(MBEntity, file_name_fmt='TextResource{locale}MB'):
     """A row in TextResource[locale]MB"""

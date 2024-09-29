@@ -243,6 +243,11 @@ class Equipment(TypedItem, NamedEntity, file_name_fmt='EquipmentMB', item_type=I
             rarity += '+'
         return f'<{self.__class__.__name__}[{key}={val!r}, slot={self.gear_type}, {rarity=!s}, level={self.level}]>'
 
+    def __lt__(self, other: Equipment) -> bool:
+        if not isinstance(other, Equipment):
+            return NotImplemented
+        return (self.level, self.slot_type, self.id) < (other.level, other.slot_type, other.id)
+
 
 class EquipmentUpgradeRequirements(MBEntity, file_name_fmt='EquipmentReinforcementMaterialMB'):
     """

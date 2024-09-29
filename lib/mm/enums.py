@@ -1111,6 +1111,9 @@ class ItemType(IntEnum):
     SpecialIcon = 34
     IconFragment = 35
     GuildTowerJobReinforcementMaterial = 36
+    UNKNOWN_37 = 37  # TODO: Fix these
+    UNKNOWN_38 = 38
+    UNKNOWN_39 = 39
     EventExchangePlaceItem = 50
     StripeCoupon = 1_001
 
@@ -1337,6 +1340,7 @@ class CharacterType(IntEnum):
 
 
 class DeckUseContentType(IntEnum):
+    # When saving a party to be used for a given purpose (quest, tower, etc), this represents the party type
     NONE = 0
     Auto = 1
     Boss = 2
@@ -1812,6 +1816,13 @@ class TowerType(IntEnum):
     Red = 3
     Green = 4
     Yellow = 5
+
+
+class TowerBattleRewardsType(IntEnum):
+    NONE = 0
+    First = 1
+    Confirmed = 2
+    Lottery = 3
 
 
 class BountyQuestType(IntEnum):
