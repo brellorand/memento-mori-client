@@ -70,3 +70,11 @@ class ApiResponseError(MementoMoriException):
         elif self.error_message:
             return self._format_message(self.error_message)
         return f'Error requesting url={self.resp.request.url}: {self.data}'
+
+
+class NoActiveSession(MementoMoriException):
+    """Raised when no MementoMoriSession is active"""
+
+
+class AssetError(MementoMoriException):
+    """Raised when unable to find a required asset or bundle"""

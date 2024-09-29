@@ -13,4 +13,5 @@ from .items import (
     Item,
 )
 from .player import PlayerRank, VipLevel
+from .tower import TowerBattleQuest
 from .world_group import WorldGroup

@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Iterable, Iterator
 
 from cli_command_parser import Action, Command, Counter, Flag, Option, ParamGroup, SubCommand, main
 from cli_command_parser.exceptions import UsageError
-from cli_command_parser.inputs import NumRange, Path as IPath
+from cli_command_parser.inputs import ChoiceMap, NumRange, Path as IPath
 
+from mm import enums
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.enums import ITEM_PAGE_TYPE_MAP, EquipmentRarityFlags, EquipmentType, ItemRarityFlags, SmeltEquipmentRarity
 from mm.game import DailyTask, PlayerAccount, TaskConfig, TaskRunner, WorldSession
@@ -41,7 +42,9 @@ class GameCLI(Command, description='Memento Mori Game Manager', option_name_mode
 
     @cached_property
     def mm_session(self) -> MementoMoriSession:
-        return MementoMoriSession(self.config_file, use_auth_cache=False, http_save_dir=self.http_save_dir)
+        mm_session = MementoMoriSession(self.config_file, use_auth_cache=False, http_save_dir=self.http_save_dir)
+        mm_session.__enter__()
+        return mm_session
 
 
 class ListAccounts(GameCLI, help='List account names/ids that have been configured for use'):
@@ -282,7 +285,26 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     # endregion
 
 
-class Smelt(WorldCommand, help='Smelt equipment'):
+class TaskCommand(WorldCommand, ABC):
+    world: int = Option('-w', help='The world to log in to')
+    dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
+    min_wait: float
+    max_wait: float
+
+    @cached_property
+    def task_config(self) -> TaskConfig:
+        return TaskConfig(
+            dry_run=self.dry_run,
+            min_wait_ms=int(self.min_wait * 1000),
+            max_wait_ms=int(self.max_wait * 1000),
+        )
+
+    @cached_property
+    def task_runner(self) -> TaskRunner:
+        return TaskRunner(self.world_session, config=self.task_config)
+
+
+class Smelt(TaskCommand, help='Smelt equipment'):
     min_level: int = Option(type=NumRange(min=1), default=1, help='Minimum level of S equipment to smelt')
     max_level: int = Option(type=NumRange(min=1), help='Maximum level of S equipment to smelt')
     min_rarity: SmeltEquipmentRarity = Option(
@@ -295,9 +317,6 @@ class Smelt(WorldCommand, help='Smelt equipment'):
         '-k', default=0, help='Keep the specified number of each piece of the specified max rarity equipment'
     )
 
-    world: int = Option('-w', help='The world to log in to')
-    dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
-
     min_wait: float = Option(type=NumRange(min=0.3), default=0.4, help='Minimum wait between smelt requests')
     max_wait: float = Option(type=NumRange(min=0.4), default=0.9, help='Maximum wait between smelt requests')
 
@@ -309,17 +328,8 @@ class Smelt(WorldCommand, help='Smelt equipment'):
         self.world_session.get_user_sync_data()
         self.world_session.get_my_page()
 
-        task_runner = TaskRunner(self.world_session, config=self.task_config)
-        task_runner.add_tasks(self.iter_smelt_tasks())
-        task_runner.run_tasks()
-
-    @cached_property
-    def task_config(self) -> TaskConfig:
-        return TaskConfig(
-            dry_run=self.dry_run,
-            min_wait_ms=int(self.min_wait * 1000),
-            max_wait_ms=int(self.max_wait * 1000),
-        )
+        self.task_runner.add_tasks(self.iter_smelt_tasks())
+        self.task_runner.run_tasks()
 
     def iter_smelt_tasks(self):
         from mm.game.tasks import SmeltAll, SmeltNeverEquippedSGear, SmeltUnequippedGear
@@ -337,6 +347,40 @@ class Smelt(WorldCommand, help='Smelt equipment'):
         yield SmeltUnequippedGear(
             self.world_session, self.task_config, min_level=self.min_level, max_level=self.max_level
         )
+
+
+class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul tower)'):
+    _types = {t.name: t for t in enums.TowerType if t != enums.TowerType.NONE}
+
+    with ParamGroup('Tower'):
+        tower_type = Option(
+            '-t', type=ChoiceMap(_types), default=enums.TowerType.Infinite, help='Which tower to challenge'
+        )
+        max_floor: int = Option(type=NumRange(min=1), help='The maximum floor to challenge (inclusive)')
+
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
+    max_wait: float = Option(type=NumRange(min=0.4), default=1.0, help='Maximum wait between battle attempts')
+
+    def _init_command_(self):
+        from mm.logging import init_logging
+
+        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s')
+
+    def main(self):
+        from mm.game.tasks.tower_battle import ClimbTower
+
+        self.mm_session.mb.populate_cache()
+        self.world_session.get_user_sync_data()
+        self.world_session.get_my_page()
+
+        task = ClimbTower(
+            self.world_session,
+            self.task_config,
+            tower_type=self.tower_type,
+            max_floor=(self.max_floor + 1) if self.max_floor else None,
+        )
+        self.task_runner.add_task(task)
+        self.task_runner.run_tasks()
 
 
 class Show(WorldCommand, help='Show info'):

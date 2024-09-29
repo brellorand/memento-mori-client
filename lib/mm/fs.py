@@ -185,7 +185,7 @@ class HTTPSaver:
         to_save = {'headers': dict(headers), 'data': self._prep_data(data)}
         parsed = urlparse(url)
         name = f'{time_ns()}_{method}_{kind}_{parsed.hostname}{"__".join(parsed.path.split("/"))}.json'
-        with self.dir.joinpath(name).open('w', encoding='utf-8') as f:
+        with self.dir.joinpath(name).open('w', encoding='utf-8', newline='\n') as f:
             json.dump(to_save, f, indent=4, ensure_ascii=False, cls=CompactJSONEncoder)
 
 

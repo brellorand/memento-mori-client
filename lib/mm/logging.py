@@ -12,11 +12,13 @@ __all__ = ['init_logging', 'log_initializer', 'ENTRY_FMT_DETAILED']
 ENTRY_FMT_DETAILED = '%(asctime)s %(levelname)s %(threadName)s %(name)s %(lineno)d %(message)s'
 
 
-def init_logging(verbose: int):
-    log_fmt = ENTRY_FMT_DETAILED if verbose > 1 else '%(message)s'
-    basicConfig(level=DEBUG if verbose else INFO, format=log_fmt)
+def init_logging(verbose: int, *, entry_fmt: str = None):
+    if entry_fmt is None:
+        entry_fmt = ENTRY_FMT_DETAILED if verbose > 1 else '%(message)s'
 
-    formatter = ColorLogFormatter(log_fmt)
+    basicConfig(level=DEBUG if verbose else INFO, format=entry_fmt)
+
+    formatter = ColorLogFormatter(entry_fmt)
     for handler in getLogger().handlers:
         handler.setFormatter(formatter)
 

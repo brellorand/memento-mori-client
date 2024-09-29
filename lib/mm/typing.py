@@ -714,6 +714,33 @@ class TransientEffectResult(TypedDict):
 # endregion
 
 
+# region Tower Battle Results
+
+
+class TowerBattleResponse(TypedDict):  # renamed from `StartResponse`
+    BattleResult: BattleResult
+    BattleRewardResult: BattleRewardResult
+    TowerBattleRewardsItemList: list[TowerBattleRewardsItem]
+    UserSyncData: UserSyncData
+
+
+class BattleRewardResult(TypedDict):
+    CharacterExp: int
+    DropItemList: list[UserItem]
+    ExtraGold: int
+    FixedItemList: list[UserItem]
+    PlayerExp: int
+    RankUp: int
+
+
+class TowerBattleRewardsItem(TypedDict):
+    Item: UserItem
+    RewardsType: e.TowerBattleRewardsType
+
+
+# endregion
+
+
 # region PvP Battle Results
 
 
@@ -1127,11 +1154,11 @@ class UserStatusDtoInfo(TypedDict):
 class UserTowerBattleDtoInfo(TypedDict):
     BoughtCount: int
     LastUpdateTime: int
-    MaxTowerBattleId: int
+    MaxTowerBattleId: int  # "quest id" for the last floor that was cleared in this tower; add 1 for target quest id
     PlayerId: int
     TodayBattleCount: int
     TodayBoughtCountByCurrency: int
-    TodayClearNewFloorCount: int
+    TodayClearNewFloorCount: int  # When == 10 for mono-soul towers, stop (ClientErrorMessage1700007)
     TowerType: e.TowerType
 
 

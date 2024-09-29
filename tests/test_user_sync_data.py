@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import MagicMock, Mock, patch
 
+from mm.enums import TowerType
 from mm.game import PlayerAccount
 from mm.game.models import UserSyncData
 from mm.http_client import ApiClient
@@ -34,11 +35,11 @@ class TestUserSyncData(TestCase):
     def tearDownClass(cls):
         cls._session_patch.stop()
 
-    def _get_sync_data(self, name: str):
+    def _get_data(self, name: str):
         return deepcopy(self._sync_data[name])  # deepcopy is needed to prevent tests from affecting each other
 
     def test_basic_update_user_sync_data(self):
-        usd = UserSyncData(Mock(), self._get_sync_data('world_login')['UserSyncData'])
+        usd = UserSyncData(Mock(), self._get_data('world_login')['UserSyncData'])
 
         self.assertIsNone(usd.cleared_tutorial_ids)
         self.assertIsNone(usd.has_vip_daily_gift)
@@ -46,7 +47,7 @@ class TestUserSyncData(TestCase):
         self.assertIsNone(usd.guild_raid_challenge_count)
         self.assertEqual([], usd.character_index_info)
 
-        usd.update(self._get_sync_data('get_user_data')['UserSyncData'])
+        usd.update(self._get_data('get_user_data')['UserSyncData'])
 
         self.assertEqual(CLEARED_TUTORIAL_IDS, usd.cleared_tutorial_ids)
         self.assertTrue(usd.has_vip_daily_gift)
@@ -59,26 +60,12 @@ class TestUserSyncData(TestCase):
         )
 
     def test_world_user_sync_data_automatically_updated(self):
-        player_data_info = {
-            'CharacterId': 2,
-            'LastLoginTime': 1716664759000,
-            'LegendLeagueClass': 0,
-            'Name': 'New Player',
-            'Password': 'fake1b0eea85fake4c34a16891f8fake',
-            'PlayerId': 272688835018,
-            'PlayerRank': 10,
-            'WorldId': 4018,
-        }
-        auth_client = Mock(
-            login=Mock(return_value={'PlayerDataInfoList': [player_data_info]}), get_server_host=MagicMock()
-        )
         api_client = Mock(
-            login_player=Mock(return_value=self._get_sync_data('world_login')),
-            post_msg=Mock(return_value=self._get_sync_data('get_user_data')),
+            login_player=Mock(return_value=self._get_data('world_login')),
+            post_msg=Mock(return_value=self._get_data('get_user_data')),
         )
 
-        player = PlayerAccount(Mock(auth_client=auth_client), Mock())
-        world = player.get_world(18)
+        world = mocked_player_account().get_world(18)
         self.assertEqual(4018, world.world_id)
         self.assertFalse(world.is_logged_in)
         self.assertIsNone(world.user_sync_data)
@@ -97,6 +84,37 @@ class TestUserSyncData(TestCase):
 
         world.close()
         self.assertFalse(world.is_logged_in)
+
+    def test_tower_battle_updates_sync_data(self):
+        api_client = Mock(
+            login_player=Mock(return_value=self._get_data('world_login')),
+            post_msg=Mock(
+                side_effect=[self._get_data('get_user_data__before_tower'), self._get_data('tower_battle_win')]
+            ),
+        )
+        world = mocked_player_account().get_world(18)
+        with patch.object(ApiClient, 'child_client', return_value=api_client):
+            world.login()
+            world.get_user_sync_data()
+
+        self.assertEqual(4, world.user_sync_data.tower_type_status_map[TowerType.Yellow]['MaxTowerBattleId'])
+        world.start_tower_battle(TowerType.Yellow, 4)
+        self.assertEqual(5, world.user_sync_data.tower_type_status_map[TowerType.Yellow]['MaxTowerBattleId'])
+
+
+def mocked_player_account() -> PlayerAccount:
+    player_data_info = {
+        'CharacterId': 2,
+        'LastLoginTime': 1716664759000,
+        'LegendLeagueClass': 0,
+        'Name': 'New Player',
+        'Password': 'fake1b0eea85fake4c34a16891f8fake',
+        'PlayerId': 272688835018,
+        'PlayerRank': 10,
+        'WorldId': 4018,
+    }
+    auth_client = Mock(login=Mock(return_value={'PlayerDataInfoList': [player_data_info]}), get_server_host=MagicMock())
+    return PlayerAccount(Mock(auth_client=auth_client), Mock())
 
 
 if __name__ == '__main__':

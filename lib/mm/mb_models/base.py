@@ -11,7 +11,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, Iterator, Type, TypeVar
 
 from mm.data import DictWrapper
-from mm.enums import ItemType, Locale
+from mm.enums import ItemType, Locale, TowerType
 from mm.fs import CacheMiss, MBFileCache, path_repr
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         TreasureChest,
     )
     from .player import PlayerRank, VipLevel
+    from .tower import TowerBattleQuest
     from .world_group import WorldGroup
 
 __all__ = ['MB', 'MBEntity']
@@ -135,6 +136,7 @@ class MB:
 
     @cached_property
     def text_resource_map(self) -> dict[str, str]:
+        """Mapping of ``{StringKey: Text}`` for every entry in the `TextResource{locale}MB`."""
         return self.get_text_resource_map(self.locale)
 
     def get_text_resource_map(self, locale: Locale) -> dict[str, str]:
@@ -231,6 +233,15 @@ class MB:
         return {char.id: CharacterFragment(self, char) for char in self.characters.values()}
 
     # endregion
+
+    tower_floors: dict[int, TowerBattleQuest] = MBEntityMap('TowerBattleQuest')
+
+    @cached_property
+    def tower_type_floors_map(self) -> dict[TowerType, list[TowerBattleQuest]]:
+        tower_type_floors_map = {t: [] for t in TowerType if t != TowerType.NONE}
+        for floor in self.tower_floors.values():
+            tower_type_floors_map[floor.type].append(floor)
+        return tower_type_floors_map
 
     world_groups: list[WorldGroup] = MBEntityList('WorldGroup')
 

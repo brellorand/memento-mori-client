@@ -29,6 +29,20 @@ class ConfigFile:
         else:
             self.path = get_config_dir().joinpath('config.json')
 
+    def __eq__(self, other: ConfigFile | PathLike) -> bool:
+        if isinstance(other, ConfigFile):
+            return self.path == other.path
+
+        if isinstance(other, str):
+            other = Path(other).expanduser().resolve()
+        if isinstance(other, Path):
+            return self.path == other.expanduser().resolve()
+
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self.__class__) ^ hash(self.path)
+
     @cached_property
     def data(self) -> dict[str, Any]:
         try:

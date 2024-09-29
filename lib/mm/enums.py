@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from enum import CONFORM, IntEnum, IntFlag, StrEnum
+from functools import cached_property
 from math import log as _log
 
 __all__ = ['Region', 'Locale', 'LOCALES']
@@ -1809,6 +1810,9 @@ class QuestQuickExecuteType(IntEnum):
 # region Trials
 
 
+_TOWER_TYPE_NAMES = ('', 'Infinity', 'Azure', 'Crimson', 'Emerald', 'Amber')
+
+
 class TowerType(IntEnum):
     NONE = 0
     Infinite = 1
@@ -1816,6 +1820,10 @@ class TowerType(IntEnum):
     Red = 3
     Green = 4
     Yellow = 5
+
+    @cached_property
+    def tower_name(self) -> str:
+        return f'Tower of {_TOWER_TYPE_NAMES[self]}'
 
 
 class TowerBattleRewardsType(IntEnum):

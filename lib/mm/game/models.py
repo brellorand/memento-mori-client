@@ -9,7 +9,7 @@ from functools import cached_property
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
-from mm.enums import CharacterRarity, ItemType
+from mm.enums import CharacterRarity, ItemType, TowerType
 from mm.mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipment
 from mm.properties import ClearableCachedPropertyMixin, DataProperty
 
@@ -137,6 +137,10 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
     player_info: t.UserStatusDtoInfo = DataProperty('UserStatusDtoInfo')  # name, comment, rank, vip level, exp, etc
     quest_status: t.UserBattleBossDtoInfo = DataProperty('UserBattleBossDtoInfo')
     tower_status: list[t.UserTowerBattleDtoInfo] = DataProperty('UserTowerBattleDtoInfos')
+
+    @cached_property
+    def tower_type_status_map(self) -> dict[TowerType, t.UserTowerBattleDtoInfo]:
+        return {TowerType(row['TowerType']): row for row in self.tower_status}
 
     # region Items & Equipment
 
@@ -314,12 +318,11 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
                 # log.debug(f'UserSyncData: updating {key}(dict) from {len(current)} with {len(value)} items')
                 self.data[key].update(value)
             elif cmp_keys := cmp_key_lists.get(key):
-                combined, included = [], set()
-                for v in chain(current, value):
-                    if (cmp_value := tuple(v[k] for k in cmp_keys)) not in included:
-                        combined.append(v)
-                        included.add(cmp_value)
-
+                # log.debug(f'UserSyncData: updating {key}(cmp list) - {current=}')
+                # log.debug(f'UserSyncData: updating {key}(cmp list) - {value=}')
+                combined = {tuple(v[k] for k in cmp_keys): v for v in current}
+                combined |= {tuple(v[k] for k in cmp_keys): v for v in value}
+                combined = list(combined.values())
                 # log.debug(f'UserSyncData: updating {key}(cmp list) from {len(current)} to {len(combined)} items')
                 self.data[key] = combined
             elif alt_key := rm_guid_map.get(key):

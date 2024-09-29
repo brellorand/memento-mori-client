@@ -7,33 +7,30 @@ from __future__ import annotations
 import logging
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, ParamSpec, TypeVar
 
-from ..enums import BaseParameterType, BattleType, EquipmentRarityFlags, EquipmentSlotType, Locale
+from ..enums import BattleType
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
+from .battle import TowerBattleResult
 from .models import Character, Equipment, ItemAndCount, UserSyncData
 from .utils import load_cached_data
 
 if TYPE_CHECKING:
-    from mm import typing as t
+    from mm import enums, typing as t
     from ..config import ConfigFile
     from ..grpc_client import MagicOnionClient
     from ..session import MementoMoriSession
-    from ..typing import (
-        EquipmentChangeInfo,
-        ErrorLogInfo,
-        GetMypageResponse,
-        GetServerHostResponse,
-        GetUserDataResponse,
-        LoginPlayerResponse,
-        PlayerDataInfo,
-        UserEquipment,
-    )
     from .account import PlayerAccount
 
 __all__ = ['WorldSession']
 log = logging.getLogger(__name__)
+
+CharGuid = str  # A 32-character UserCharacterGuid
+P = ParamSpec('P')
+T = TypeVar('T')
+
+# TODO: Context manager for UI page, to make the request for visiting that page before making a request within it?
 
 
 # region API Request Decorator
@@ -78,8 +75,10 @@ class ApiRequestMethod:
         return partial(self._request_wrapper, instance)
 
 
-def api_request(*, requires_login: bool = True, maintenance_ok: bool = False):
-    return lambda method: ApiRequestMethod(method, requires_login, maintenance_ok)
+def api_request(
+    *, requires_login: bool = True, maintenance_ok: bool = False
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    return lambda method: ApiRequestMethod(method, requires_login, maintenance_ok)  # type: ignore
 
 
 # endregion
@@ -90,7 +89,7 @@ class WorldSession(ClearableCachedPropertyMixin):
 
     config: ConfigFile
     session: MementoMoriSession
-    player_data: PlayerDataInfo
+    player_data: t.PlayerDataInfo
     user_sync_data: UserSyncData = None
 
     # region Initialization & Tear Down
@@ -141,7 +140,7 @@ class WorldSession(ClearableCachedPropertyMixin):
     # region Client Properties
 
     @cached_property
-    def _server_host_info(self) -> GetServerHostResponse:
+    def _server_host_info(self) -> t.GetServerHostResponse:
         return self.session.auth_client.get_server_host(self._world_id)
 
     @cached_property
@@ -166,18 +165,18 @@ class WorldSession(ClearableCachedPropertyMixin):
     def is_logged_in(self) -> bool:
         return self._is_logged_in
 
-    def login(self) -> LoginPlayerResponse:
+    def login(self) -> t.LoginPlayerResponse:
         return self._login_resp
 
     @api_request(requires_login=False, maintenance_ok=True)
-    def _login(self, error_log_info: list[ErrorLogInfo] = None) -> LoginPlayerResponse:
+    def _login(self, error_log_info: list[t.ErrorLogInfo] = None) -> t.LoginPlayerResponse:
         log.log(19, f'Logging player_id={self.player_id} into world={self.world_id}')
         resp = self._api_client.login_player(self.player_id, self.player_data['Password'], error_log_info)
         self._is_logged_in = True
         return resp
 
     @cached_property
-    def _login_resp(self) -> LoginPlayerResponse:
+    def _login_resp(self) -> t.LoginPlayerResponse:
         return self._login()
 
     # endregion
@@ -185,7 +184,7 @@ class WorldSession(ClearableCachedPropertyMixin):
     # region User Data Sync / My Page
 
     @api_request()
-    def get_user_data(self) -> GetUserDataResponse:
+    def get_user_data(self) -> t.GetUserDataResponse:
         return self._api_client.post_msg('user/getUserData', {})
 
     def get_user_sync_data(self) -> UserSyncData:
@@ -193,7 +192,7 @@ class WorldSession(ClearableCachedPropertyMixin):
         return self.user_sync_data
 
     @api_request()
-    def get_my_page(self) -> GetMypageResponse:
+    def get_my_page(self) -> t.GetMypageResponse:
         if self.user_sync_data is None:
             self.get_user_data()
         return self._api_client.post_msg('user/getMypage', {'LanguageType': self.config.auth.locale.num})
@@ -232,6 +231,19 @@ class WorldSession(ClearableCachedPropertyMixin):
     def inventory(self) -> list[ItemAndCount]:
         return [ItemAndCount(self, row) for row in self.user_sync_data.inventory]
 
+    @api_request()
+    def save_party(self, duc_type: enums.DeckUseContentType, members: list[CharGuid], deck_num: int = 0):
+        if not 1 <= len(members) <= 5 or not all(isinstance(m, str) for m in members):
+            raise ValueError('Expected 1~5 party member guids')
+
+        data = {
+            'CopyPlayerId': 0,
+            'DeckUseContentType': duc_type,
+            'UserCharacterGuids': members,
+            'DeckNo': deck_num,
+        }
+        return self._api_client.post_msg('user/saveUsedDeck', data)
+
     # endregion
 
     # region Dailies
@@ -245,7 +257,7 @@ class WorldSession(ClearableCachedPropertyMixin):
     # region Equipment
 
     @api_request()
-    def smelt_gear(self, guid: str | None, user_equipment: UserEquipment | None = None):
+    def smelt_gear(self, guid: str | None, user_equipment: t.UserEquipment | None = None):
         return self._api_client.post_msg('equipment/cast', {'Guid': guid, 'UserEquipment': user_equipment})
 
     def smelt_never_equipped_gear(self, item_and_count: ItemAndCount, count: int = None):
@@ -275,7 +287,7 @@ class WorldSession(ClearableCachedPropertyMixin):
         return self.smelt_gear(None, user_equipment)
 
     @api_request()
-    def smelt_all_gear(self, rarity: EquipmentRarityFlags | int):
+    def smelt_all_gear(self, rarity: enums.EquipmentRarityFlags | int):
         return self._api_client.post_msg('equipment/castMany', {'RarityFlags': getattr(rarity, 'value', rarity)})
 
     @api_request()
@@ -288,7 +300,8 @@ class WorldSession(ClearableCachedPropertyMixin):
         return self._api_client.post_msg('equipment/reinforcement', {'EquipmentGuid': guid, 'NumberOfTimes': num_times})
 
     @api_request()
-    def reforge_gear(self, guid: str, locked_params: list[BaseParameterType | int] = None):
+    def reforge_gear(self, guid: str, locked_params: list[enums.BaseParameterType | int] = None):
+        # Human req interval ranges from 0.3s~0.8s, with ~0.6s appearing to be most frequent; 0.3s is definitely valid
         params = [getattr(v, 'value', v) for v in locked_params] if locked_params else []
         return self._api_client.post_msg('equipment/training', {'EquipmentGuid': guid, 'ParameterLockedList': params})
 
@@ -299,14 +312,14 @@ class WorldSession(ClearableCachedPropertyMixin):
         )
 
     @api_request()
-    def remove_gear(self, char_guid: str, slots: list[EquipmentSlotType | int]):
+    def remove_gear(self, char_guid: str, slots: list[enums.EquipmentSlotType | int]):
         slots = [getattr(v, 'value', v) for v in slots] if slots else []
         return self._api_client.post_msg(
             'equipment/removeEquipment', {'UserCharacterGuid': char_guid, 'EquipmentSlotTypes': slots}
         )
 
     @api_request()
-    def change_gear(self, char_guid: str, changes: list[EquipmentChangeInfo]):
+    def change_gear(self, char_guid: str, changes: list[t.EquipmentChangeInfo]):
         return self._api_client.post_msg(
             'equipment/changeEquipment', {'UserCharacterGuid': char_guid, 'EquipmentChangeInfos': changes}
         )
@@ -398,6 +411,21 @@ class WorldSession(ClearableCachedPropertyMixin):
     @api_request()
     def get_temple_of_illusions_info(self):
         return self._api_client.post_msg('localRaid/getLocalRaidInfo', {})
+
+    # endregion
+
+    # region Tower of Infinity
+
+    @api_request()
+    def get_tower_reward_info(self, tower_type: enums.TowerType):
+        # This is called upon clicking a given tower (infinite or mono-soul), and after wins (NOT after losses)
+        return self._api_client.post_msg('towerBattle/getLotteryRewardInfo', {'TowerType': tower_type})
+
+    @api_request()
+    def start_tower_battle(self, tower_type: enums.TowerType, floor: int) -> TowerBattleResult:
+        data = {'TargetTowerType': tower_type, 'TowerBattleQuestId': floor}
+        resp: t.TowerBattleResponse = self._api_client.post_msg('towerBattle/start', data)
+        return TowerBattleResult(resp)
 
     # endregion
 
