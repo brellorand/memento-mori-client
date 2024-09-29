@@ -30,7 +30,7 @@ class GameCLI(Command, description='Memento Mori Game Manager', option_name_mode
     action = SubCommand()
     verbose = Counter('-v', help='Increase logging verbosity (can specify multiple times)')
     config_file = Option(
-        '-cf', type=IPath(type='file'), help='Config file path (default: ~/.config/memento-mori-client)'
+        '-cf', type=IPath(type='file'), help='Config file path (default: in ~/.config/memento-mori-client/)'
     )
     http_save_dir = Option('-hsd', type=IPath(type='dir'), help='Save HTTP requests and responses to files in this dir')
 
@@ -42,6 +42,12 @@ class GameCLI(Command, description='Memento Mori Game Manager', option_name_mode
     @cached_property
     def mm_session(self) -> MementoMoriSession:
         return MementoMoriSession(self.config_file, use_auth_cache=False, http_save_dir=self.http_save_dir)
+
+
+class ListAccounts(GameCLI, help='List account names/ids that have been configured for use'):
+    def main(self):
+        for account in self.mm_session.config.accounts.values():
+            print(f' - {account.name}: {account.user_id}')
 
 
 class Login(GameCLI, help='Log in for the first time'):
