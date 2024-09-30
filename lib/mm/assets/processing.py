@@ -174,7 +174,7 @@ class AssetExtractor:
     def executor(self) -> ProcessPoolExecutor:
         return ProcessPoolExecutor(
             max_workers=self.parallel,
-            initializer=log_initializer(self.verbose) if self.debug else None,
+            initializer=log_initializer(self.verbose if self.debug else -1),
         )
 
     def extract_assets(self, force: bool, allow_raw: bool):
@@ -187,7 +187,7 @@ class AssetExtractor:
             #     for name in group.bundle_names
             # ]
             futures = [
-                executor.submit(bundle.extract, dst_dir, force, allow_raw, exts)
+                executor.submit(bundle.extract, dst_dir, force, allow_raw, exts, debug=self.debug)
                 for bundle in self.finder.find_bundles()
             ]
             log.info(f'Extracting assets from {len(futures):,d} bundles...')

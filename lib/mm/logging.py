@@ -3,7 +3,7 @@ Logging helpers
 """
 
 from functools import partial
-from logging import DEBUG, INFO, Formatter, LogRecord, basicConfig, getLogger
+from logging import DEBUG, INFO, WARNING, Formatter, LogRecord, basicConfig, getLogger
 
 from colored import fg, stylize
 
@@ -13,10 +13,12 @@ ENTRY_FMT_DETAILED = '%(asctime)s %(levelname)s %(threadName)s %(name)s %(lineno
 
 
 def init_logging(verbose: int, *, entry_fmt: str = None):
-    if entry_fmt is None:
-        entry_fmt = ENTRY_FMT_DETAILED if verbose > 1 else '%(message)s'
+    if verbose > 1:
+        entry_fmt = ENTRY_FMT_DETAILED
+    elif entry_fmt is None:
+        entry_fmt = '%(message)s'
 
-    basicConfig(level=DEBUG if verbose else INFO, format=entry_fmt)
+    basicConfig(level=WARNING if verbose < 0 else DEBUG if verbose else INFO, format=entry_fmt)
 
     formatter = ColorLogFormatter(entry_fmt)
     for handler in getLogger().handlers:

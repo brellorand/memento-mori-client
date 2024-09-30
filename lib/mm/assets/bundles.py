@@ -58,9 +58,14 @@ class Bundle(ABC):
         return list(self.env.container)
 
     def extract(
-        self, dst_dir: Path, force: bool = False, unknown_as_raw: bool = False, include_exts: tuple[str] = None
+        self,
+        dst_dir: Path,
+        force: bool = False,
+        unknown_as_raw: bool = False,
+        include_exts: tuple[str, ...] = None,
+        debug: bool = False,
     ):
-        BundleExtractor(dst_dir, force, unknown_as_raw, include_exts=include_exts).extract_bundle(self)
+        BundleExtractor(dst_dir, force, unknown_as_raw, include_exts=include_exts, debug=debug).extract_bundle(self)
 
     def __len__(self) -> int:
         return len(self.env.container)

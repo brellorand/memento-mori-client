@@ -183,6 +183,7 @@ class FutureWaiter:
             yield from as_completed(self.futures)
 
     def init_tqdm(self, **kwargs):
+        kwargs.setdefault('smoothing', 0.8)
         self.tqdm = bar = tqdm(**kwargs)
         self._close_tqdm = True
         return bar

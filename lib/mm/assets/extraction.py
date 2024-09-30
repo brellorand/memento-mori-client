@@ -5,7 +5,6 @@ Based on: https://github.com/K0lb3/UnityPy/blob/master/UnityPy/tools/extractor.p
 
 Unhandled types (not a comprehensive list):
 No exporter is configured for obj=<PPtr <ObjectReader Material>> with obj.type=<ClassIDType.Material: 21>
-No exporter is configured for obj=<PPtr <ObjectReader SpriteAtlas>> with obj.type=<ClassIDType.SpriteAtlas: 687078895>
 No exporter is configured for obj=<PPtr <ObjectReader AnimationClip>> with obj.type=<ClassIDType.AnimationClip: 74>
 """
 
@@ -22,6 +21,7 @@ from UnityPy.classes import (
     AudioClip,
     Font,
     GameObject,
+    Material,
     Mesh,
     MonoBehaviour,
     Object,
@@ -45,13 +45,19 @@ __all__ = ['BundleExtractor', 'AssetExporter']
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
+_WARNED_IDS = set()
 
 
 class BundleExtractor:
-    __slots__ = ('dst_dir', 'force', 'exported', '_exporters', 'unknown_as_raw', 'include_exts')
+    __slots__ = ('dst_dir', 'force', 'exported', '_exporters', 'unknown_as_raw', 'include_exts', 'debug')
 
     def __init__(
-        self, dst_dir: Path, force: bool = False, unknown_as_raw: bool = False, include_exts: tuple[str] = None
+        self,
+        dst_dir: Path,
+        force: bool = False,
+        unknown_as_raw: bool = False,
+        include_exts: tuple[str, ...] = None,
+        debug: bool = False,
     ):
         self.dst_dir = dst_dir
         self.force = force
@@ -59,8 +65,9 @@ class BundleExtractor:
         self._exporters = {}
         self.unknown_as_raw = unknown_as_raw
         self.include_exts = include_exts
+        self.debug = debug
 
-    def _get_exporter(self, id_type: ClassIDType) -> AssetExporter:
+    def _get_exporter(self, obj: ObjectReader, id_type: ClassIDType, nested: bool = False) -> AssetExporter:
         if exporter := self._exporters.get(id_type):
             return exporter
         try:
@@ -69,7 +76,7 @@ class BundleExtractor:
             if self.unknown_as_raw:
                 exp_cls = RawExporter
             else:
-                raise MissingExporter from e
+                raise MissingExporter(obj, id_type, nested) from e
         self._exporters[id_type] = exporter = exp_cls(self)
         return exporter
 
@@ -82,13 +89,7 @@ class BundleExtractor:
                 log.debug(f'Skipping {obj_path} from {bundle_name}')
                 continue
 
-            try:
-                self.save_asset(obj_path, obj)
-            except MissingExporter:
-                log.warning(
-                    f'No exporter is configured for {obj_path} in {obj=} with {obj.type=} from {bundle_name}',
-                    extra={'color': 'yellow'},
-                )
+            self.save_asset(obj_path, obj, bundle_name)
 
     def extract_bundle(self, bundle: Bundle):
         log.debug(f'Loaded {len(bundle)} asset file(s) from {bundle}')
@@ -97,16 +98,23 @@ class BundleExtractor:
                 log.debug(f'Skipping {obj_path} from {bundle}')
                 continue
 
-            try:
-                self.save_asset(obj_path, obj)
-            except MissingExporter:
-                log.warning(
-                    f'No exporter is configured for {obj_path} in {obj=} with {obj.type=} from {bundle}',
-                    extra={'color': 'yellow'},
-                )
+            self.save_asset(obj_path, obj, bundle)
 
-    def save_asset(self, obj_path: str, obj: ObjectReader, nested: bool = False):
-        exporter = self._get_exporter(obj.type)
+    def save_asset(self, obj_path: str, obj: ObjectReader, source, nested: bool = False):
+        try:
+            self._save_asset(obj_path, obj, nested=nested)
+        except MissingExporter as e:
+            if self.debug or e.id_type not in _WARNED_IDS:
+                if not self.debug:
+                    suffix = ' (only reported on the first occurrence per object type in each worker process)'
+                else:
+                    suffix = ''
+
+                log.warning(f'{e} @ {obj_path} from {source}{suffix}', extra={'color': 'yellow'})
+                _WARNED_IDS.add(e.id_type)
+
+    def _save_asset(self, obj_path: str, obj: ObjectReader, nested: bool = False):
+        exporter = self._get_exporter(obj, obj.type, nested)
         log.debug(f'{exporter.__class__.__name__}: Exporting all from {obj} for {obj_path}')
         exporter.export_all(obj.read(), self.dst_dir.joinpath(obj_path), nested)
 
@@ -175,7 +183,151 @@ class AssetExporter(ABC, Generic[T]):
         self._register(obj)
 
 
+class MultiAssetExporter(AssetExporter[T]):
+    __slots__ = ()
+
+    def export_bytes(self, obj: T) -> bytes:
+        # This method is not actually used since export_all is defined here
+        return b''
+
+    @abstractmethod
+    def export_all(self, obj: T, dst_path: Path, nested: bool = False):
+        raise NotImplementedError
+
+
+# region Audio Exporters
+
+
+class AudioClipExporter(MultiAssetExporter[AudioClip], id_type=ClassIDType.AudioClip, ext='.wav'):
+    """
+    Exporter for audio clips.
+
+    The raw / original data is accessible via the :attr:`AudioClip.m_AudioData` property.
+
+    The raw data for some audio files in bundles that have a ``.ogg`` extension begins with ``FSB5``, which apparently
+    indicates that it is using an optimized format that is primarily used by Unity.  This format is apparently missing
+    some parts that general OggVorbis players expect to exist, so such files are converted (by UnityPy) to WAV for
+    compatibility.
+    """
+
+    __slots__ = ()
+
+    def maybe_update_dst_path(self, obj: T, dst_path: Path, sample_name: str = None) -> Path:
+        if dst_path.suffix:
+            if not sample_name or sample_name.endswith(dst_path.suffix) or '.' not in sample_name:
+                return dst_path
+            ext = '.' + sample_name.rsplit('.', 1)[1]
+            name = dst_path.stem
+        else:
+            ext = self.default_ext
+            name = dst_path.name
+
+        return dst_path.parent.joinpath(f'{name}{ext}')
+
+    def export_all(self, obj: AudioClip, dst_path: Path, nested: bool = False):
+        log.debug(f'{self.__class__.__name__}: Exporting all from {nested=} {obj}')
+        self._register(obj)
+        samples: dict[str, bytes] = obj.samples  # This is a plain property - stored here to avoid re-computation
+        if not samples:
+            log.info(f'No audio samples found for {path_repr(dst_path)}', extra={'color': 'yellow'})
+        elif len(samples) == 1:
+            name, clip_data = samples.popitem()
+            dst_path = self.maybe_update_dst_path(obj, dst_path, name)
+            log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            dst_path.write_bytes(clip_data)
+        else:
+            # TODO: Handling for this case could probably use some improvement
+            dst_path.mkdir(parents=True, exist_ok=True)
+            for name, clip_data in samples.items():
+                clip_path = self.maybe_update_dst_path(obj, dst_path.joinpath(name), name)
+                log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
+                clip_path.parent.mkdir(parents=True, exist_ok=True)
+                clip_path.write_bytes(clip_data)
+
+
+# endregion
+
+
+# region Image Exporters
+
+
+class SpriteExporter(AssetExporter[Sprite], id_type=ClassIDType.Sprite, ext='.png'):
+    __slots__ = ()
+
+    def export_bytes(self, obj: Sprite) -> bytes:
+        self.exported.add((obj.assets_file, obj.path_id))
+        self.exported.add((obj.m_RD.texture.assets_file, obj.m_RD.texture.path_id))
+
+        alpha_assets_file = getattr(obj.m_RD.alphaTexture, 'assets_file', None)
+        alpha_path_id = getattr(obj.m_RD.alphaTexture, 'path_id', None)
+        if alpha_path_id and alpha_assets_file:
+            self.exported.add((alpha_assets_file, alpha_path_id))
+
+        bio = BytesIO()
+        obj.image.save(bio, 'png')
+        return bio.getvalue()
+
+
+class SpriteAtlasExporter(MultiAssetExporter[SpriteAtlas], id_type=ClassIDType.SpriteAtlas, ext='.png'):
+    __slots__ = ()
+
+    def export_all(self, obj: SpriteAtlas, dst_path: Path, nested: bool = False):
+        log.debug(f'{self.__class__.__name__}: Exporting {len(obj.m_PackedSprites)} from {nested=} {obj}')
+        dst_dir = dst_path.relative_to(self.extractor.dst_dir).with_suffix('')
+        # dst_dir = self.extractor.dst_dir.joinpath(dst_dir)  # This would be necessary to obtain the absolute path
+        for i, sprite_ref in enumerate(obj.m_PackedSprites):
+            if not (name := sprite_ref.read().name):
+                name = f'{sprite_ref.type.name}_{i}'
+
+            self.extractor.save_asset(dst_dir.joinpath(name).as_posix(), sprite_ref, obj, nested=True)
+
+        # TODO: Every value in m_RenderDataMap results in the same large image that contains all of the packed
+        #  sprites - maybe only need to save once, though probably don't need to save it at all
+        for i, sprite_atlas_data in enumerate(obj.m_RenderDataMap.values()):
+            texture_ref = sprite_atlas_data.texture
+            if not (name := texture_ref.read().name):
+                name = f'{texture_ref.type.name}_{i}'
+
+            self.extractor.save_asset(dst_dir.joinpath(name).as_posix(), texture_ref, obj, nested=True)
+            # if secondary := getattr(sprite_atlas_data, 'secondaryTextures', None):
+            #     for st_num, st in enumerate(secondary):
+            #         name = st.name or f'{st.texture.type.name}_{st_num}'
+            #         self.extractor.save_asset(dst_dir.joinpath(name).as_posix(), st.texture, obj, nested=True)
+
+
+class MaterialExporter(MultiAssetExporter[Material], id_type=ClassIDType.Material, ext='.png'):
+    __slots__ = ()
+
+    def export_all(self, obj: Material, dst_path: Path, nested: bool = False):
+        textures = obj.m_SavedProperties.m_TexEnvs
+        log.info(f'{self.__class__.__name__}: Exporting {len(textures)} from {nested=} {obj}', extra={'color': 13})
+        dst_dir = dst_path.relative_to(self.extractor.dst_dir).with_suffix('')
+        for name, texture in textures.items():
+            self.extractor.save_asset(dst_dir.joinpath(name).as_posix(), texture.m_Texture, obj, nested=True)
+
+
+class Texture2DExporter(AssetExporter[Texture2D], id_type=ClassIDType.Texture2D, ext='.png'):
+    __slots__ = ()
+
+    def export_bytes(self, obj: Texture2D) -> bytes:
+        if not obj.m_Width:
+            raise SkipExport
+
+        bio = BytesIO()
+        obj.image.save(bio, 'png')
+        return bio.getvalue()
+
+
+# endregion
+
+
+# region Other Exporters
+
+
 class RawExporter(AssetExporter[Object]):
+    __slots__ = ()
+
     def export_bytes(self, obj: Object) -> bytes:
         return obj.get_raw_data()
 
@@ -187,11 +339,15 @@ class RawExporter(AssetExporter[Object]):
 
 
 class TextExporter(AssetExporter[TextAsset], id_type=ClassIDType.TextAsset, ext='.txt'):
+    __slots__ = ()
+
     def export_bytes(self, obj: TextAsset) -> bytes:
         return obj.script
 
 
 class FontExporter(AssetExporter[Font], id_type=ClassIDType.Font, ext='.ttf'):
+    __slots__ = ()
+
     def maybe_update_dst_path(self, obj: Font, dst_path: Path) -> Path:
         if not dst_path.suffix:
             if obj.m_FontData[0:4] == b'OTTO':
@@ -206,11 +362,15 @@ class FontExporter(AssetExporter[Font], id_type=ClassIDType.Font, ext='.ttf'):
 
 
 class MeshExporter(AssetExporter[Mesh], id_type=ClassIDType.Mesh, ext='.obj'):
+    __slots__ = ()
+
     def export_bytes(self, obj: Mesh) -> bytes:
         return obj.export().encode('utf-8')
 
 
 class ShaderExporter(AssetExporter[Shader], id_type=ClassIDType.Shader, ext='.txt'):
+    __slots__ = ()
+
     def export_bytes(self, obj: Shader) -> bytes:
         try:
             return obj.export().encode('utf-8')
@@ -225,6 +385,8 @@ class MonoBehaviorExporter(AssetExporter[MonoBehaviour | Object], id_type=ClassI
     can be used to read the whole data, but if it doesn't exist, then it is usually necessary to investigate the
     class that loads the specific MonoBehaviour to extract the data.
     """
+
+    __slots__ = ()
 
     def maybe_update_dst_path(self, obj: Font, dst_path: Path) -> Path:
         use_json = obj.serialized_type and obj.serialized_type.nodes
@@ -255,102 +417,8 @@ class MonoBehaviorExporter(AssetExporter[MonoBehaviour | Object], id_type=ClassI
             return obj.raw_data
 
 
-class AudioClipExporter(AssetExporter[AudioClip], id_type=ClassIDType.AudioClip, ext='.wav'):
-    """
-    Exporter for audio clips.
-
-    The raw / original data is accessible via the :attr:`AudioClip.m_AudioData` property.
-
-    The raw data for some audio files in bundles that have a ``.ogg`` extension begins with ``FSB5``, which apparently
-    indicates that it is using an optimized format that is primarily used by Unity.  This format is apparently missing
-    some parts that general OggVorbis players expect to exist, so such files are converted (by UnityPy) to WAV for
-    compatibility.
-    """
-
-    def maybe_update_dst_path(self, obj: T, dst_path: Path, sample_name: str = None) -> Path:
-        if dst_path.suffix:
-            if not sample_name or sample_name.endswith(dst_path.suffix) or '.' not in sample_name:
-                return dst_path
-            ext = '.' + sample_name.rsplit('.', 1)[1]
-            name = dst_path.stem
-        else:
-            ext = self.default_ext
-            name = dst_path.name
-
-        return dst_path.parent.joinpath(f'{name}{ext}')
-
-    def export_bytes(self, obj: AudioClip) -> bytes:
-        # This method is not actually used since export_all is defined here
-        # return obj.m_AudioData
-        return b''
-
-    def export_all(self, obj: AudioClip, dst_path: Path, nested: bool = False):
-        log.debug(f'{self.__class__.__name__}: Exporting all from {nested=} {obj}')
-        self._register(obj)
-        samples: dict[str, bytes] = obj.samples  # This is a plain property - stored here to avoid re-computation
-        if not samples:
-            log.info(f'No audio samples found for {path_repr(dst_path)}', extra={'color': 'yellow'})
-        elif len(samples) == 1:
-            name, clip_data = samples.popitem()
-            dst_path = self.maybe_update_dst_path(obj, dst_path, name)
-            log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            dst_path.write_bytes(clip_data)
-        else:
-            # TODO: Handling for this case could probably use some improvement
-            dst_path.mkdir(parents=True, exist_ok=True)
-            for name, clip_data in samples.items():
-                clip_path = self.maybe_update_dst_path(obj, dst_path.joinpath(name), name)
-                log.info(f'Saving {obj.__class__.__name__} object to {path_repr(dst_path)}')
-                clip_path.parent.mkdir(parents=True, exist_ok=True)
-                clip_path.write_bytes(clip_data)
-
-
-class SpriteExporter(AssetExporter[Sprite], id_type=ClassIDType.Sprite, ext='.png'):
-    def export_bytes(self, obj: Sprite) -> bytes:
-        self.exported.add((obj.assets_file, obj.path_id))
-        self.exported.add((obj.m_RD.texture.assets_file, obj.m_RD.texture.path_id))
-
-        alpha_assets_file = getattr(obj.m_RD.alphaTexture, 'assets_file', None)
-        alpha_path_id = getattr(obj.m_RD.alphaTexture, 'path_id', None)
-        if alpha_path_id and alpha_assets_file:
-            self.exported.add((alpha_assets_file, alpha_path_id))
-
-        bio = BytesIO()
-        obj.image.save(bio, 'png')
-        return bio.getvalue()
-
-
-class SpriteAtlasExporter(AssetExporter[SpriteAtlas], id_type=ClassIDType.SpriteAtlas, ext='.png'):
-    def export_bytes(self, obj: SpriteAtlas) -> bytes:
-        return b''
-
-    def export_all(self, obj: SpriteAtlas, dst_path: Path, nested: bool = False):
-        log.debug(f'{self.__class__.__name__}: Exporting {len(obj.m_PackedSprites)} from {nested=} {obj}')
-        dst_dir = dst_path.relative_to(self.extractor.dst_dir).with_suffix('')
-        for i, sprite_ref in enumerate(obj.m_PackedSprites):
-            if name := sprite_ref.read().name:
-                if dst_dir.joinpath(name + self.default_ext).exists():
-                    name += f'__{i}'
-            else:
-                name = f'{sprite_ref.type.name}_{i}'
-
-            self.extractor.save_asset(dst_dir.joinpath(name).as_posix(), sprite_ref, nested=True)
-
-
-class Texture2DExporter(AssetExporter[Texture2D], id_type=ClassIDType.Texture2D, ext='.png'):
-    def export_bytes(self, obj: Texture2D) -> bytes:
-        if not obj.m_Width:
-            raise SkipExport
-
-        bio = BytesIO()
-        obj.image.save(bio, 'png')
-        return bio.getvalue()
-
-
-class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObject):
-    def export_bytes(self, obj: GameObject) -> bytes:
-        return b''
+class GameObjectExporter(MultiAssetExporter[GameObject], id_type=ClassIDType.GameObject):
+    __slots__ = ()
 
     @classmethod
     def _crawl(cls, obj: Object, found: dict = None):
@@ -409,7 +477,10 @@ class GameObjectExporter(AssetExporter[GameObject], id_type=ClassIDType.GameObje
                 continue
 
             ref_path = dst_dir.joinpath(ref.name if ref.name else ref.type.name)
-            self.extractor.save_asset(ref_path.as_posix(), ref, nested=True)
+            self.extractor.save_asset(ref_path.as_posix(), ref, obj, nested=True)
+
+
+# endregion
 
 
 class SkipExport(Exception):
@@ -418,3 +489,11 @@ class SkipExport(Exception):
 
 class MissingExporter(Exception):
     """Used internally to indicate no exporter is configured for a given ClassIDType"""
+
+    def __init__(self, obj: ObjectReader, id_type: ClassIDType, nested: bool = False):
+        self.obj = obj
+        self.id_type = id_type
+        self.nested = nested
+
+    def __str__(self) -> str:
+        return f'No exporter is configured for obj={self.obj} with type={self.id_type} (nested={self.nested!s})'
