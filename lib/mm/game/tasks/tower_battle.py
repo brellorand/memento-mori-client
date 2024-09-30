@@ -89,7 +89,6 @@ class ClimbTower(Task):
         max_floor = self.max_floor or self._absolute_max_floor
         while self._next_floor < max_floor:
             self._challenge_until_win()
-            # self.tower_info['MaxTowerBattleId'] += 1
             wait(self.config)
 
         log.info(self.cannot_perform_msg)

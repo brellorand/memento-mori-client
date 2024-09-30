@@ -2,7 +2,7 @@
     "IsNotClearDungeonBattleMap": false,
     "GachaSelectListCharacterIds": [],
     "UserSyncData": {
-        "BlockPlayerIdList": [],
+        "BlockPlayerIdList": [1, 2],
         "CanJoinTodayLegendLeague": null,
         "ClearedTutorialIdList": [
             1,

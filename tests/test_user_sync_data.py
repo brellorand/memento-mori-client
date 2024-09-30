@@ -97,9 +97,14 @@ class TestUserSyncData(TestCase):
             world.login()
             world.get_user_sync_data()
 
-        self.assertEqual(4, world.user_sync_data.tower_type_status_map[TowerType.Yellow]['MaxTowerBattleId'])
-        world.start_tower_battle(TowerType.Yellow, 4)
-        self.assertEqual(5, world.user_sync_data.tower_type_status_map[TowerType.Yellow]['MaxTowerBattleId'])
+        with self.subTest('update unique list'):
+            self.assertEqual(4, world.user_sync_data.tower_type_status_map[TowerType.Yellow]['MaxTowerBattleId'])
+            world.start_tower_battle(TowerType.Yellow, 4)
+            self.assertEqual(5, world.user_sync_data.tower_type_status_map[TowerType.Yellow]['MaxTowerBattleId'])
+
+        with self.subTest('update simple list'):
+            # Note: the blocked player ids were artificially added to simulate this type of update for testing purposes
+            self.assertEqual(4, len(world.user_sync_data.blocked_player_ids))
 
 
 def mocked_player_account() -> PlayerAccount:

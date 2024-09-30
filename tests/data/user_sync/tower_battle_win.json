@@ -21,7 +21,7 @@
         "RankUp": 0
     },
     "UserSyncData": {
-        "BlockPlayerIdList": null,
+        "BlockPlayerIdList": [3, 4],
         "CanJoinTodayLegendLeague": null,
         "ClearedTutorialIdList": null,
         "CreateUserIdTimestamp": null,

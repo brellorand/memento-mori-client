@@ -6,8 +6,7 @@ from __future__ import annotations
 
 import logging
 from functools import cached_property
-from itertools import chain
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterable, TypeVar
 
 from mm.enums import CharacterRarity, ItemType, TowerType
 from mm.mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipment
@@ -20,6 +19,8 @@ if TYPE_CHECKING:
 
 __all__ = ['WorldEntity', 'Equipment', 'Character']
 log = logging.getLogger(__name__)
+
+T = TypeVar('T')
 
 
 class WorldEntity:
@@ -132,6 +133,37 @@ class MyPage(WorldEntity):
     latest_chat_announcement_registered: int = DataProperty('LatestAnnounceChatRegistrationLocalTimestamp')
 
 
+# region User Sync Data
+
+
+USD_SIMPLE_LISTS = {
+    'BlockPlayerIdList',
+    'ClearedTutorialIdList',
+    'ReceivedGuildTowerFloorRewardIdList',
+    'ReceivedAchieveRankingRewardIdList',
+}
+USD_SIMPLE_DICTS = {
+    'DataLinkageMap',
+    'TreasureChestCeilingCountMap',
+    'LeadLockEquipmentDialogInfoMap',
+    'LockedEquipmentCharacterGuidListMap',
+    'LockedUserEquipmentDtoInfoListMap',
+    'ReleaseLockEquipmentCooldownTimeStampMap',
+}
+USD_UNIQUE_LISTS = {
+    'UserCharacterDtoInfos': ('Guid',),
+    'UserEquipmentDtoInfos': ('Guid',),
+    'UserItemDtoInfo': ('ItemType', 'ItemId'),
+    'UserTowerBattleDtoInfos': ('TowerType',),
+    'ShopProductGuerrillaPackList': ('ShopGuerrillaPackId',),
+}
+USD_STORE_NEW = USD_SIMPLE_LISTS.union(USD_SIMPLE_DICTS).union(USD_UNIQUE_LISTS)
+USD_RM_GUID_MAP = {
+    'DeletedCharacterGuidList': 'UserCharacterDtoInfos',
+    'DeletedEquipmentGuidList': 'UserEquipmentDtoInfos',
+}
+
+
 class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
     # fmt: off
     player_info: t.UserStatusDtoInfo = DataProperty('UserStatusDtoInfo')  # name, comment, rank, vip level, exp, etc
@@ -147,9 +179,6 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
     equipment: list[t.UserEquipmentDtoInfo] = DataProperty('UserEquipmentDtoInfos')
     inventory: list[t.UserItemDtoInfo] = DataProperty('UserItemDtoInfo')
 
-    deleted_equipment_guids: list[str] = DataProperty('DeletedEquipmentGuidList')
-    item_counts: list[t.UserItem] = DataProperty('GivenItemCountInfoList')
-
     # endregion
 
     # region Characters & Level Link
@@ -158,8 +187,6 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
     parties: list[t.UserDeckDtoInfo] = DataProperty('UserDeckDtoInfos')
     character_index_info: list[t.UserCharacterBookDtoInfo] = DataProperty('UserCharacterBookDtoInfos')
     character_collection: list[t.UserCharacterCollectionDtoInfo] = DataProperty('UserCharacterCollectionDtoInfos')
-
-    deleted_character_guids: list[str] = DataProperty('DeletedCharacterGuidList')
 
     level_link_status: t.UserLevelLinkDtoInfo = DataProperty('UserLevelLinkDtoInfo')
     level_link_characters: list[t.UserLevelLinkMemberDtoInfo] = DataProperty('UserLevelLinkMemberDtoInfos')
@@ -259,6 +286,14 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
     mission_history: t.UserMissionOccurrenceHistoryDtoInfo = DataProperty('UserMissionOccurrenceHistoryDtoInfo')
     friend_missions: list[t.UserFriendMissionDtoInfo] = DataProperty('UserFriendMissionDtoInfoList')
 
+    # region Keys Interpreted by Update
+
+    # deleted_equipment_guids: list[str] = DataProperty('DeletedEquipmentGuidList')
+    # item_counts: list[t.UserItem] = DataProperty('GivenItemCountInfoList')
+    # deleted_character_guids: list[str] = DataProperty('DeletedCharacterGuidList')
+
+    # endregion
+
     # fmt: on
 
     def update(self, data: t.UserSyncData):
@@ -268,33 +303,6 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
 
         self.clear_cached_properties()
 
-        simple_lists = {
-            'BlockPlayerIdList',
-            'ClearedTutorialIdList',
-            'ReceivedGuildTowerFloorRewardIdList',
-            'ReceivedAchieveRankingRewardIdList',
-        }
-        simple_dicts = {
-            'DataLinkageMap',
-            'TreasureChestCeilingCountMap',
-            'LeadLockEquipmentDialogInfoMap',
-            'LockedEquipmentCharacterGuidListMap',
-            'LockedUserEquipmentDtoInfoListMap',
-            'ReleaseLockEquipmentCooldownTimeStampMap',
-        }
-        cmp_key_lists = {
-            'UserCharacterDtoInfos': ('Guid',),
-            'UserEquipmentDtoInfos': ('Guid',),
-            'UserItemDtoInfo': ('ItemType', 'ItemId'),
-            'UserTowerBattleDtoInfos': ('TowerType',),
-            'ShopProductGuerrillaPackList': ('ShopGuerrillaPackId',),
-        }
-        store_new = simple_lists.union(simple_dicts).union(cmp_key_lists)
-        rm_guid_map = {
-            'DeletedCharacterGuidList': 'UserCharacterDtoInfos',
-            'DeletedEquipmentGuidList': 'UserEquipmentDtoInfos',
-        }
-
         for key, value in data.items():
             if value is False or value is True:
                 # log.debug(f'UserSyncData: storing {key} => {value!r}')
@@ -303,29 +311,21 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
                 continue
 
             current = self.data[key]
-            if key in store_new and not current:
+            if key in USD_STORE_NEW and not current:
                 # log.debug(f'UserSyncData: storing {key} => {value!r}')
                 self.data[key] = value
                 continue
 
-            if key in simple_lists:
-                self.data[key] = combined = []
-                for v in chain(current, value):
-                    if v not in combined:
-                        combined.append(v)
-                # log.debug(f'UserSyncData: updating {key}(list) from {len(current)} to {len(combined)} items')
-            elif key in simple_dicts:
+            if key in USD_SIMPLE_LISTS:
+                # log.debug(f'UserSyncData: updating {key}(list) from {len(current)} with {len(value)} items')
+                current.extend(v for v in value if v not in current)
+            elif key in USD_SIMPLE_DICTS:
                 # log.debug(f'UserSyncData: updating {key}(dict) from {len(current)} with {len(value)} items')
                 self.data[key].update(value)
-            elif cmp_keys := cmp_key_lists.get(key):
-                # log.debug(f'UserSyncData: updating {key}(cmp list) - {current=}')
-                # log.debug(f'UserSyncData: updating {key}(cmp list) - {value=}')
-                combined = {tuple(v[k] for k in cmp_keys): v for v in current}
-                combined |= {tuple(v[k] for k in cmp_keys): v for v in value}
-                combined = list(combined.values())
+            elif keys := USD_UNIQUE_LISTS.get(key):
                 # log.debug(f'UserSyncData: updating {key}(cmp list) from {len(current)} to {len(combined)} items')
-                self.data[key] = combined
-            elif alt_key := rm_guid_map.get(key):
+                self.data[key] = _merge_lists(current, value, keys)
+            elif alt_key := USD_RM_GUID_MAP.get(key):
                 if current := self.data[alt_key]:
                     to_rm = set(value)
                     # log.debug(f'UserSyncData: removing {len(to_rm)} items from {key} that had {len(current)} items')
@@ -342,3 +342,11 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
             else:
                 # log.debug(f'UserSyncData: storing {key} => {value!r}')
                 self.data[key] = value
+
+
+def _merge_lists(a: list[dict[str, T]], b: list[dict[str, T]], keys: Iterable[str]) -> list[dict[str, T]]:
+    combined = {tuple(v[k] for k in keys): v for v in a} | {tuple(v[k] for k in keys): v for v in b}
+    return list(combined.values())
+
+
+# endregion
