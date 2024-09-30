@@ -23,10 +23,18 @@ from mm.fs import get_user_cache_dir, path_repr
 from .bundles import BundleGroup, DataBundle
 from .catalog import AssetCatalog
 
-__all__ = ['ApkArchive', 'AssetPackApk', 'ApkType', 'get_apk_or_latest_path', 'load_apk_or_latest']
+__all__ = [
+    'ApkArchive',
+    'AssetPackApk',
+    'ApkType',
+    'get_apk_or_latest_path',
+    'load_apk_or_latest',
+    'get_any_cached_apk',
+]
 log = logging.getLogger(__name__)
 
 ASSET_PACK_NAME = 'UnityDataAssetPack.apk'
+_LATEST_APK: ApkArchive | None = None
 
 
 class ApkArchive:
@@ -131,6 +139,11 @@ class AssetPackApk(ApkArchive):
         for name in names:
             yield DataBundle(name, self._zip_file.read(f'assets/aa/Android/{name}'))
 
+    def find_bundle(self, asset_path: str) -> DataBundle:
+        if name := self.catalog.find_bundle(asset_path):
+            return self.get_bundle(name)
+        raise KeyError(f'Unable to find a bundle for {asset_path=}')
+
 
 class ApkType(Enum):
     XAPK = 'xapk'
@@ -230,7 +243,7 @@ def _get_version(content_disposition: str | None) -> str | None:
     return None
 
 
-def get_apk_or_latest_path(apk_path: Path | None, download_reason: str = None) -> Path:
+def get_apk_or_latest_path(apk_path: Path | None = None, download_reason: str = None) -> Path:
     if apk_path:
         log.debug(f'Using provided APK: {path_repr(apk_path)}')
         return apk_path
@@ -245,5 +258,28 @@ def get_apk_or_latest_path(apk_path: Path | None, download_reason: str = None) -
         return downloader.download_latest(None)[0]
 
 
-def load_apk_or_latest(apk_path: Path | None, download_reason: str = None) -> ApkArchive:
-    return ApkArchive(get_apk_or_latest_path(apk_path, download_reason))
+def load_apk_or_latest(apk_path: Path | None = None, download_reason: str = None) -> ApkArchive:
+    global _LATEST_APK
+    if _LATEST_APK is None:
+        _LATEST_APK = ApkArchive(get_apk_or_latest_path(apk_path, download_reason))
+    return _LATEST_APK
+
+
+def get_any_cached_apk(download_reason: str = None) -> ApkArchive:
+    """
+    Load any available APK, even if it's not the latest.  Useful for cases where content that is always available
+    is needed.
+    """
+    if _LATEST_APK is not None:
+        return _LATEST_APK
+
+    apk_dir = get_user_cache_dir('apk')
+    try:
+        version_dirs = sorted((d for d in apk_dir.iterdir() if d.is_dir()), reverse=True, key=lambda d: d.name)
+        for version_dir in version_dirs:
+            for apk_path in version_dir.glob('*.xapk'):
+                return ApkArchive(apk_path)
+    except OSError:
+        pass
+
+    return load_apk_or_latest(download_reason=download_reason)
