@@ -86,16 +86,25 @@ class ClimbTower(Task):
             log.info(f'[DRY RUN] Would challenge the {self.tower_type.tower_name} floor {self._next_floor}')
             return
 
-        max_floor = self.max_floor or self._absolute_max_floor
-        while self._next_floor < max_floor:
+        while self.can_perform():
             self._challenge_until_win()
             wait(self.config)
 
-        log.info(self.cannot_perform_msg)
+        return self.cannot_perform_msg
+
+    def _get_log_prefix(self, floor: int) -> str:
+        if self.tower_type == TowerType.Infinite:
+            limit = ''
+        else:
+            limit = f' [{self.tower_info["TodayClearNewFloorCount"]}/10]'
+
+        ws = self.world_session
+        return f'[W{ws.world_num}:{ws.player_name}] Challenged {self.tower_type.tower_name}{limit} {floor=}'
 
     def _challenge_until_win(self):
         self.world_session.get_tower_reward_info(self.tower_type)
         floor = self._next_floor
+        log_prefix = self._get_log_prefix(floor)
         attempts = 0
         while True:
             attempts += 1
@@ -106,7 +115,7 @@ class ClimbTower(Task):
                 if result.is_winner:
                     self.successes += 1
             except Exception as e:
-                log.error(f'Challenged {self.tower_type.tower_name} {floor=}; error: {e}', exc_info=True)
+                log.error(f'{log_prefix}; error: {e}', exc_info=True)
                 self.errors += 1
                 if self.errors >= self.max_errors:
                     raise RuntimeError(
@@ -114,8 +123,8 @@ class ClimbTower(Task):
                     ) from e
             else:
                 log.info(
-                    f'Challenged {self.tower_type.tower_name} {floor=}: {result.result_message};'
-                    f' floor {attempts=}, total={self.total}, successes={self.successes}, errors={self.errors}'
+                    f'{log_prefix}: {result.result_message}; floor {attempts=},'
+                    f' total={self.total}, successes={self.successes}, errors={self.errors}'
                 )
                 if result.is_winner:
                     return

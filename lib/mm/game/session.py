@@ -9,7 +9,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, ParamSpec, TypeVar
 
-from ..enums import BattleType
+from ..enums import BattleType, Region
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
 from .battle import TowerBattleResult
@@ -128,12 +128,24 @@ class WorldSession(ClearableCachedPropertyMixin):
     # region General Properties
 
     @cached_property
-    def player_id(self) -> int:
-        return self.player_data['PlayerId']
+    def region(self) -> Region:
+        return Region.for_world(self.world_id)
 
     @property
     def world_id(self) -> int:
         return self._world_id
+
+    @cached_property
+    def world_num(self) -> int:
+        return self.world_id - (self.region * 1000)
+
+    @cached_property
+    def player_id(self) -> int:
+        return self.player_data['PlayerId']
+
+    @cached_property
+    def player_name(self) -> str:
+        return self.player_data['Name']
 
     # endregion
 
