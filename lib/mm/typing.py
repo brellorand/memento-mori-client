@@ -711,6 +711,12 @@ class TransientEffectResult(TypedDict):
     RemainHp: int
 
 
+class BossResponse(TypedDict):
+    BattleResult: BattleResult
+    BattleRewardResult: BattleRewardResult
+    UserSyncData: UserSyncData
+
+
 # endregion
 
 

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable, ParamSpec, TypeVar
 from ..enums import BattleType, Region
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
-from .battle import TowerBattleResult
+from .battle import QuestBattleResult, TowerBattleResult
 from .models import Character, Equipment, ItemAndCount, UserSyncData
 from .utils import load_cached_data
 
@@ -378,10 +378,10 @@ class WorldSession(ClearableCachedPropertyMixin):
         return self._api_client.post_msg('battle/nextQuest', {})
 
     @api_request()
-    def battle_quest_boss(self, quest_id: int):
+    def battle_quest_boss(self, quest_id: int) -> QuestBattleResult:
         # Win/loss info in the response is in ``BattleResult.SimulationResult.BattleEndInfo``
         # After a win, :meth:`.get_next_quest_info` should be called to determine the next quest that is available
-        return self._api_client.post_msg('battle/boss', {'QuestId': quest_id})
+        return QuestBattleResult(self._api_client.post_msg('battle/boss', {'QuestId': quest_id}))
 
     @api_request()
     def __get_boss_reward_info(self):

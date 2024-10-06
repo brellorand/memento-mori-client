@@ -16,7 +16,7 @@ from mm.session import mm_session
 if TYPE_CHECKING:
     from mm import typing as t
 
-__all__ = ['BattleResult', 'TowerBattleResult', 'get_available_tower_types']
+__all__ = ['BattleResult', 'QuestBattleResult', 'TowerBattleResult', 'get_available_tower_types']
 log = logging.getLogger(__name__)
 
 MM_TZ = timezone(timedelta(hours=-7))
@@ -49,6 +49,13 @@ class BattleResult:
     def result_message(self) -> str:
         key = '[LocalRaidBattleWinMessage]' if self.is_winner else '[LocalRaidBattleLoseMessage]'
         return mm_session.mb.text_resource_map[key]
+
+
+class QuestBattleResult:
+    battle_result: BattleResult = DataProperty('BattleResult', BattleResult)
+
+    def __init__(self, data: t.BossResponse):
+        self.data = data
 
 
 class TowerBattleResult:
