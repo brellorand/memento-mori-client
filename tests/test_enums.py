@@ -54,6 +54,15 @@ class TestEnums(TestCase):
         data = {3: 'a', 4: 'b', 5: 'c'}
         self.assertEqual('b', data[TowerType.Green])
 
+    def test_tower_type_equality(self):
+        self.assertEqual(TowerType.Infinite, TowerType.Infinite)
+        self.assertEqual(TowerType.Infinite, 1)
+        self.assertEqual(1, TowerType.Infinite)
+        self.assertNotEqual(TowerType.Infinite, TowerType.NONE)
+        self.assertNotEqual(TowerType.NONE, TowerType.Infinite)
+        self.assertNotEqual(TowerType.Green, TowerType.Infinite)
+        self.assertNotEqual(TowerType.Green, TowerType.Red)
+
 
 if __name__ == '__main__':
     main(verbosity=2)

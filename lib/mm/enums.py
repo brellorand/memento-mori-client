@@ -1814,34 +1814,22 @@ _TOWER_TYPE_NAMES = ('', 'Infinity', 'Azure', 'Crimson', 'Emerald', 'Amber')
 
 
 class TowerType(IntEnum):
-    alias: str | None
-
-    def __new__(cls, value, alias: str = None):
-        obj = int.__new__(cls)
-        obj._value_ = value
-        obj.alias = alias
-        return obj
-
     NONE = 0
     Infinite = 1
-    Blue = 2, 'Azure'
-    Red = 3, 'Crimson'
-    Green = 4, 'Emerald'
-    Yellow = 5, 'Amber'
+    Blue = 2
+    Red = 3
+    Green = 4
+    Yellow = 5
 
     @cached_property
     def tower_name(self) -> str:
         return f'Tower of {_TOWER_TYPE_NAMES[self]}'
 
-    def __hash__(self) -> int:
-        # Note: hash/hq/lt need to be defined here due to the use of __new__ to store aliases
-        return int.__hash__(self.value)
-
-    def __eq__(self, other: TowerType | int) -> bool:
-        return self.value == (other.value if isinstance(other, TowerType) else other)
-
-    def __lt__(self, other: TowerType | int):
-        return self.value < (other.value if isinstance(other, TowerType) else other)
+    @cached_property
+    def alias(self) -> str | None:
+        if self.value < 2:
+            return None
+        return _TOWER_TYPE_NAMES[self]
 
     @classmethod
     def _missing_(cls, value):
