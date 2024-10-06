@@ -396,7 +396,7 @@ class Quest(TaskCommand, help='Challenge the main quest'):
 
 
 class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul tower)'):
-    _types = {t.name: t for t in enums.TowerType if t != enums.TowerType.NONE}
+    _types = enums.TowerType.get_choice_map()
 
     with ParamGroup('Tower'):
         tower_type = Option(

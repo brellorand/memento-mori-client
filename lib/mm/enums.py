@@ -1814,16 +1814,56 @@ _TOWER_TYPE_NAMES = ('', 'Infinity', 'Azure', 'Crimson', 'Emerald', 'Amber')
 
 
 class TowerType(IntEnum):
+    alias: str | None
+
+    def __new__(cls, value, alias: str = None):
+        obj = int.__new__(cls)
+        obj._value_ = value
+        obj.alias = alias
+        return obj
+
     NONE = 0
     Infinite = 1
-    Blue = 2
-    Red = 3
-    Green = 4
-    Yellow = 5
+    Blue = 2, 'Azure'
+    Red = 3, 'Crimson'
+    Green = 4, 'Emerald'
+    Yellow = 5, 'Amber'
 
     @cached_property
     def tower_name(self) -> str:
         return f'Tower of {_TOWER_TYPE_NAMES[self]}'
+
+    def __hash__(self) -> int:
+        # Note: hash/hq/lt need to be defined here due to the use of __new__ to store aliases
+        return int.__hash__(self.value)
+
+    def __eq__(self, other: TowerType | int) -> bool:
+        return self.value == (other.value if isinstance(other, TowerType) else other)
+
+    def __lt__(self, other: TowerType | int):
+        return self.value < (other.value if isinstance(other, TowerType) else other)
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lc_value = value.lower()
+            for key, member in cls._member_map_.items():
+                if lc_value == key.lower() or ((alias := member.alias) and alias.lower() == lc_value):  # noqa
+                    return member
+
+        return super()._missing_(value)
+
+    @classmethod
+    def get_choice_map(cls) -> dict[str, TowerType]:
+        choice_map = {}
+        for key, member in cls._member_map_.items():
+            if member is cls.NONE:
+                continue
+            choice_map[key] = member
+            if member.alias:  # noqa
+                choice_map[member.alias] = member  # noqa
+
+        return choice_map  # type: ignore
 
 
 class TowerBattleRewardsType(IntEnum):
