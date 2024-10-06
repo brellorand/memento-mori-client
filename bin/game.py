@@ -10,7 +10,7 @@ from operator import itemgetter
 from typing import TYPE_CHECKING, Iterable, Iterator
 
 from cli_command_parser import Action, Command, Counter, Flag, Option, ParamGroup, SubCommand, main
-from cli_command_parser.exceptions import UsageError
+from cli_command_parser.exceptions import ParamUsageError, UsageError
 from cli_command_parser.inputs import ChoiceMap, NumRange, Path as IPath
 
 from mm import enums
@@ -347,6 +347,52 @@ class Smelt(TaskCommand, help='Smelt equipment'):
         yield SmeltUnequippedGear(
             self.world_session, self.task_config, min_level=self.min_level, max_level=self.max_level
         )
+
+
+class Quest(TaskCommand, help='Challenge the main quest'):
+    with ParamGroup('Quest', mutually_exclusive=True):
+        max_quest = Option(metavar='CHAPTER-NUM', help='The maximum quest to challenge (inclusive) (e.g., 12-5)')
+        stop_after: int = Option(type=NumRange(min=1), help='Stop after the specified number of wins')
+
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
+    max_wait: float = Option(type=NumRange(min=0.4), default=1.0, help='Maximum wait between battle attempts')
+
+    def _init_command_(self):
+        from mm.logging import init_logging
+
+        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s')
+
+    def main(self):
+        max_quest = self._get_max_quest()
+        self._run_task(max_quest)
+
+    def _get_max_quest(self) -> tuple[int, int] | None:
+        if not self.max_quest:
+            return None
+
+        try:
+            chapter, num = self.max_quest.split('-')
+            return (int(chapter), int(num))
+        except Exception as e:
+            raise ParamUsageError(
+                self.__class__.max_quest, 'invalid value - expected a quest number in the form of "chapter-num"'
+            ) from e
+
+    def _run_task(self, max_quest: tuple[int, int] | None):
+        from mm.game.tasks.quest_battle import QuestBattles
+
+        self.mm_session.mb.populate_cache()
+        self.world_session.get_user_sync_data()
+        self.world_session.get_my_page()
+
+        task = QuestBattles(
+            self.world_session,
+            self.task_config,
+            max_quest=max_quest,
+            stop_after=self.stop_after,
+        )
+        self.task_runner.add_task(task)
+        self.task_runner.run_tasks()
 
 
 class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul tower)'):
