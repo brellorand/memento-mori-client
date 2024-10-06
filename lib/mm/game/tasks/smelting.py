@@ -49,7 +49,8 @@ class SmeltAll(DailyTask):
             return
 
         log.info(f'Smelting all rarity={self.rarity} never-equipped equipment')
-        return self.world_session.smelt_all_gear(self.rarity)
+        resp = self.world_session.smelt_all_gear(self.rarity)
+        return None
 
 
 class SmeltNeverEquippedSGear(Task):

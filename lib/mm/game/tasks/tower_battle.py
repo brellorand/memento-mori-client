@@ -104,7 +104,6 @@ class ClimbTower(Task):
     def _challenge_until_win(self):
         self.world_session.get_tower_reward_info(self.tower_type)
         floor = self._next_floor
-        log_prefix = self._get_log_prefix(floor)
         attempts = 0
         while True:
             attempts += 1
@@ -115,7 +114,7 @@ class ClimbTower(Task):
                 if result.is_winner:
                     self.successes += 1
             except Exception as e:
-                log.error(f'{log_prefix}; error: {e}', exc_info=True)
+                log.error(f'{self._get_log_prefix(floor)}; error: {e}', exc_info=True)
                 self.errors += 1
                 if self.errors >= self.max_errors:
                     raise RuntimeError(
@@ -123,7 +122,7 @@ class ClimbTower(Task):
                     ) from e
             else:
                 log.info(
-                    f'{log_prefix}: {result.result_message}; floor {attempts=},'
+                    f'{self._get_log_prefix(floor)}: {result.result_message}; floor {attempts=},'
                     f' total={self.total}, successes={self.successes}, errors={self.errors}'
                 )
                 if result.is_winner:
