@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         TreasureChest,
     )
     from .player import PlayerRank, VipLevel
+    from .quest import Quest
     from .tower import TowerBattleQuest
     from .world_group import WorldGroup
 
@@ -234,6 +235,7 @@ class MB:
 
     # endregion
 
+    quests: dict[int, Quest] = MBEntityMap('Quest')
     tower_floors: dict[int, TowerBattleQuest] = MBEntityMap('TowerBattleQuest')
 
     @cached_property
