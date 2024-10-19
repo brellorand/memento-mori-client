@@ -381,8 +381,8 @@ class Reforge(TaskCommand, help='Reforge equipment'):
 
     slots = Option(type=EquipmentSlotType, nargs='+', help='The equipment slots to reforge (default: all)')
 
-    min_wait: float = Option(type=NumRange(min=0.3), default=0.4, help='Minimum wait between reforge requests')
-    max_wait: float = Option(type=NumRange(min=0.4), default=0.9, help='Maximum wait between reforge requests')
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.35, help='Minimum wait between reforge requests')
+    max_wait: float = Option(type=NumRange(min=0.4), default=0.65, help='Maximum wait between reforge requests')
 
     def main(self):
         from mm.game.tasks.reforge import ReforgeGear

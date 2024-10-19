@@ -64,6 +64,14 @@ class ReforgeGear(Task):
             return False
         return True
 
+    def _get_target_value(self, equipment: Equipment) -> int:
+        targets = []
+        if self.target_value:
+            targets.append(self.target_value)
+        if self.target_pct:
+            targets.append(int(equipment.equipment.additional_param_total * self.target_pct))
+        return min(targets)
+
     @property
     def to_reforge(self) -> list[Equipment]:
         return [e for e in self.all_equipment if self._should_reforge(e)]
@@ -98,6 +106,8 @@ class ReforgeGear(Task):
             log.info(f'[DRY RUN] Would reforge {item}')
             return
 
+        target = self._get_target_value(item)
+
         attempts = 0
         while self._should_reforge(item):
             attempts += 1
@@ -111,6 +121,7 @@ class ReforgeGear(Task):
                     raise RuntimeError(f'Exceeded allowed error count while reforging {item.basic_info}') from e
             else:
                 item = self.world_session.equipment[guid]  # Refresh the item based on the latest request
-                log.info(f'{prefix}#{attempts} Reforged {item.reforge_summary(self.stat, 11)}')
+                color = 10 if item.reforged_stat_value(self.stat) >= target else 11
+                log.info(f'{prefix}#{attempts} Reforged {item.reforge_summary(self.stat, color)}')
 
             wait(self.config)
