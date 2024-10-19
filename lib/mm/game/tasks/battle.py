@@ -1,5 +1,5 @@
 """
-Tasks related to main quest battles
+Tasks related to main quest and tower battles
 """
 
 from __future__ import annotations
@@ -136,7 +136,8 @@ class QuestBattles(BattleTask):
                 )
                 if result.is_winner:
                     return
-                wait(self.config)
+
+            wait(self.config)
 
     def _challenge_once(self, quest: Quest) -> BattleResult:
         self.total += 1
@@ -251,7 +252,8 @@ class ClimbTower(BattleTask):
                 )
                 if result.is_winner:
                     return
-                wait(self.config)
+
+            wait(self.config)
 
     def _challenge_once(self, floor: int) -> BattleResult:
         self.total += 1
