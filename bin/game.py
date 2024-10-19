@@ -353,13 +353,10 @@ class Smelt(TaskCommand, help='Smelt equipment'):
         )
 
 
-class Quest(TaskCommand, help='Challenge the main quest'):
-    with ParamGroup('Quest', mutually_exclusive=True):
-        max_quest = Option(metavar='CHAPTER-NUM', help='The maximum quest to challenge (inclusive) (e.g., 12-5)')
-        stop_after: int = Option(type=NumRange(min=1), help='Stop after the specified number of wins')
-
-    min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
-    max_wait: float = Option(type=NumRange(min=0.4), default=1.0, help='Maximum wait between battle attempts')
+class BattleTaskCommand(TaskCommand, ABC):
+    with ParamGroup('Delay'):
+        min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
+        max_wait: float = Option(type=NumRange(min=0.4), default=1.0, help='Maximum wait between battle attempts')
 
     with ParamGroup('Battle results', mutually_exclusive=True):
         battle_results_dir = Option('-brd', type=IPath(type='dir'), help='Save battle results to files in this dir')
@@ -371,6 +368,20 @@ class Quest(TaskCommand, help='Challenge the main quest'):
         from mm.logging import init_logging
 
         init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
+
+    def _get_results_dir(self, result_type: str):
+        if self.no_save:
+            return None
+        elif self.battle_results_dir:
+            return self.battle_results_dir
+        else:
+            return get_user_cache_dir(f'{result_type}_results')
+
+
+class Quest(BattleTaskCommand, help='Challenge the main quest'):
+    with ParamGroup('Quest', mutually_exclusive=True):
+        max_quest = Option(metavar='CHAPTER-NUM', help='The maximum quest to challenge (inclusive) (e.g., 12-5)')
+        stop_after: int = Option(type=NumRange(min=1), help='Stop after the specified number of wins')
 
     def main(self):
         max_quest = self._get_max_quest()
@@ -388,16 +399,8 @@ class Quest(TaskCommand, help='Challenge the main quest'):
                 self.__class__.max_quest, 'invalid value - expected a quest number in the form of "chapter-num"'
             ) from e
 
-    def _get_results_dir(self):
-        if self.no_save:
-            return None
-        elif self.battle_results_dir:
-            return self.battle_results_dir
-        else:
-            return get_user_cache_dir('battle_results')
-
     def _run_task(self, max_quest: tuple[int, int] | None):
-        from mm.game.tasks.quest_battle import QuestBattles
+        from mm.game.tasks.battle import QuestBattles
 
         self.mm_session.mb.populate_cache()
         self.world_session.get_user_sync_data()
@@ -408,13 +411,13 @@ class Quest(TaskCommand, help='Challenge the main quest'):
             self.task_config,
             max_quest=max_quest,
             stop_after=self.stop_after,
-            battle_results_dir=self._get_results_dir(),
+            battle_results_dir=self._get_results_dir('quest'),
         )
         self.task_runner.add_task(task)
         self.task_runner.run_tasks()
 
 
-class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul tower)'):
+class Tower(BattleTaskCommand, help='Challenge the Tower of Infinity (or a mono-soul tower)'):
     _types = enums.TowerType.get_choice_map()
 
     with ParamGroup('Tower'):
@@ -423,16 +426,8 @@ class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul t
         )
         max_floor: int = Option(type=NumRange(min=1), help='The maximum floor to challenge (inclusive)')
 
-    min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
-    max_wait: float = Option(type=NumRange(min=0.4), default=1.0, help='Maximum wait between battle attempts')
-
-    def _init_command_(self):
-        from mm.logging import init_logging
-
-        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
-
     def main(self):
-        from mm.game.tasks.tower_battle import ClimbTower
+        from mm.game.tasks.battle import ClimbTower
 
         self.mm_session.mb.populate_cache()
         self.world_session.get_user_sync_data()
@@ -443,6 +438,7 @@ class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul t
             self.task_config,
             tower_type=self.tower_type,
             max_floor=(self.max_floor + 1) if self.max_floor else None,
+            battle_results_dir=self._get_results_dir('tower'),
         )
         self.task_runner.add_task(task)
         self.task_runner.run_tasks()

@@ -1827,6 +1827,10 @@ class TowerType(IntEnum):
         return f'Tower of {_TOWER_TYPE_NAMES[self]}'
 
     @cached_property
+    def snake_case(self) -> str:
+        return f'{_TOWER_TYPE_NAMES[self].lower()}_tower'
+
+    @cached_property
     def alias(self) -> str | None:
         if self.value < 2:
             return None
