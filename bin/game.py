@@ -15,7 +15,15 @@ from cli_command_parser.inputs import ChoiceMap, NumRange, Path as IPath
 
 from mm import enums
 from mm.__version__ import __author_email__, __version__  # noqa
-from mm.enums import ITEM_PAGE_TYPE_MAP, EquipmentRarityFlags, EquipmentType, ItemRarityFlags, SmeltEquipmentRarity
+from mm.enums import (
+    ITEM_PAGE_TYPE_MAP,
+    BaseParameterType,
+    EquipmentRarityFlags,
+    EquipmentSlotType,
+    EquipmentType,
+    ItemRarityFlags,
+    SmeltEquipmentRarity,
+)
 from mm.fs import get_user_cache_dir
 from mm.game import DailyTask, PlayerAccount, TaskConfig, TaskRunner, WorldSession
 from mm.output import CompactJSONEncoder
@@ -73,7 +81,7 @@ class WorldCommand(GameCLI, ABC):
             user_sync_path = Option('-US', type=IPath(type='file', exists=True), help='Cached user sync data response')
 
     world: int
-    sort_keys = Flag('-s', help='Sort keys in dictionaries during serialization')
+    sort_keys = Flag(help='Sort keys in dictionaries during serialization')
 
     # region Account Properties
 
@@ -307,6 +315,11 @@ class TaskCommand(WorldCommand, ABC):
     def task_runner(self) -> TaskRunner:
         return TaskRunner(self.world_session, config=self.task_config)
 
+    def _init_command_(self):
+        from mm.logging import init_logging
+
+        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
+
 
 class Smelt(TaskCommand, help='Smelt equipment'):
     min_level: int = Option(type=NumRange(min=1), default=1, help='Minimum level of S equipment to smelt')
@@ -353,6 +366,46 @@ class Smelt(TaskCommand, help='Smelt equipment'):
         )
 
 
+class Reforge(TaskCommand, help='Reforge equipment'):
+    character = Option(
+        '-c', metavar='ID|NAME', nargs='+', required=True, help='The character(s) whose gear should be reforged'
+    )
+    stat = Option('-s', type=BaseParameterType, required=True, help='The stat to target while reforging')
+    with ParamGroup('Target', required=True):
+        target_value = Option('-t', type=NumRange(min=1), help='Target reforged value for the specified stat')
+        target_pct = Option(
+            '-p',
+            type=NumRange(min=0.01, max=0.6),
+            help='Target reforged value as a percentage of the total available points for the specified stat',
+        )
+
+    slots = Option(type=EquipmentSlotType, nargs='+', help='The equipment slots to reforge (default: all)')
+
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.4, help='Minimum wait between reforge requests')
+    max_wait: float = Option(type=NumRange(min=0.4), default=0.9, help='Maximum wait between reforge requests')
+
+    def main(self):
+        from mm.game.tasks.reforge import ReforgeGear
+
+        self.mm_session.mb.populate_cache()
+        self.world_session.get_user_sync_data()
+        self.world_session.get_my_page()
+
+        for char in self.character:
+            task = ReforgeGear(
+                self.world_session,
+                self.task_config,
+                character=char,
+                stat=self.stat,
+                slots=self.slots,
+                target_value=self.target_value,
+                target_pct=self.target_pct,
+            )
+            self.task_runner.add_task(task)
+
+        self.task_runner.run_tasks()
+
+
 class BattleTaskCommand(TaskCommand, ABC):
     with ParamGroup('Delay'):
         min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
@@ -363,11 +416,6 @@ class BattleTaskCommand(TaskCommand, ABC):
         no_save = Flag(
             '-S', help='Do NOT save battle results (default: save to a temp directory if an alt dir is not specified)'
         )
-
-    def _init_command_(self):
-        from mm.logging import init_logging
-
-        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
 
     def _get_results_dir(self, result_type: str):
         if self.no_save:

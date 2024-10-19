@@ -8,7 +8,9 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Iterable, TypeVar
 
-from mm.enums import CharacterRarity, ItemType, TowerType
+from colored import fg, stylize
+
+from mm.enums import BaseParameterType, CharacterRarity, ItemType, TowerType
 from mm.mb_models import AnyItem, Character as MBCharacter, Equipment as MBEquipment
 from mm.properties import ClearableCachedPropertyMixin, DataProperty
 
@@ -79,6 +81,33 @@ class Equipment(WorldEntity):
             return NotImplemented
         return self.equipment < other.equipment
 
+    @cached_property
+    def basic_info(self) -> str:
+        return f'[{self.equipment.slot_type.name}] {self.equipment.name} [Lv{self.equipment.level}]'
+
+    def reforged_stat_value(self, stat: BaseParameterType) -> int:
+        return self.data[f'AdditionalParameter{stat.original_name}']
+
+    def reforged_stat_percent(self, stat: BaseParameterType) -> float:
+        return self.reforged_stat_value(stat) / self.equipment.additional_param_total
+
+    def reforge_summary(self, highlight: BaseParameterType | None = None, color: int | str | None = None) -> str:
+        stats = ' | '.join(self._reforged_stats(highlight, color))
+        return f'{self.basic_info}: {stats}'
+
+    def _reforged_stats(self, highlight: BaseParameterType | None = None, color: int | str | None = None):
+        total = self.equipment.additional_param_total
+        for stat in BaseParameterType:
+            value_str = _stat_and_pct(stat.name, self.data[f'AdditionalParameter{stat.original_name}'], total)
+            if stat == highlight:
+                yield stylize(value_str, fg(color))
+            else:
+                yield value_str
+
+
+def _stat_and_pct(name: str, value: int, total: int) -> str:
+    return f'{name}: {value:>7,d} ({value / total:>6.2%})'
+
 
 class ItemAndCount(WorldEntity):
     item_type: ItemType = DataProperty('ItemType', ItemType)
@@ -98,9 +127,16 @@ class ItemAndCount(WorldEntity):
 class Character(WorldEntity):
     guid: str = DataProperty('Guid')
     char_id: int = DataProperty('CharacterId')
-    level: int = DataProperty('Level')
+    _level: int = DataProperty('Level')
     experience: int = DataProperty('Exp')
     rarity: CharacterRarity = DataProperty('RarityFlags', type=CharacterRarity)
+
+    @cached_property
+    def level(self) -> int:
+        sync_data = self.world.user_sync_data
+        if sync_data.level_link_status['IsPartyMode'] or self.guid in sync_data.level_link_char_guids:
+            return sync_data.level_link_status['PartyLevel']
+        return self._level
 
     @cached_property
     def equipment(self) -> list[Equipment]:
@@ -113,6 +149,28 @@ class Character(WorldEntity):
     def __repr__(self) -> str:
         rarity, level, exp, guid = self.rarity.name, self.level, self.experience, self.guid
         return f'<{self.__class__.__name__}[{self.character.full_name}, {rarity=}, {level=}, {exp=}, {guid=}]>'
+
+    def __hash__(self) -> int:
+        return hash(self.__class__) ^ hash(self.guid)
+
+    def __eq__(self, other: Character) -> bool:
+        if not isinstance(other, Character):
+            return False
+        return self.guid == other.guid
+
+    def __lt__(self, other: Character) -> bool:
+        if not isinstance(other, Character):
+            return NotImplemented
+        if self.character.full_name != other.character.full_name:
+            return self.character.full_name < other.character.full_name
+        return self.level > other.level
+
+    def __gt__(self, other: Character) -> bool:
+        if not isinstance(other, Character):
+            return NotImplemented
+        if self.character.full_name != other.character.full_name:
+            return self.character.full_name > other.character.full_name
+        return self.level < other.level
 
 
 class MyPage(WorldEntity):
@@ -190,6 +248,10 @@ class UserSyncData(ClearableCachedPropertyMixin, WorldEntity):
 
     level_link_status: t.UserLevelLinkDtoInfo = DataProperty('UserLevelLinkDtoInfo')
     level_link_characters: list[t.UserLevelLinkMemberDtoInfo] = DataProperty('UserLevelLinkMemberDtoInfos')
+
+    @cached_property
+    def level_link_char_guids(self) -> set[str]:
+        return {guid for row in self.level_link_characters if (guid := row.get('UserCharacterGuid'))}
 
     # endregion
 

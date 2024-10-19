@@ -207,7 +207,7 @@ class Equipment(TypedItem, NamedEntity, file_name_fmt='EquipmentMB', item_type=I
     rarity_flags: EquipmentRarityFlags = DataProperty('RarityFlags', EquipmentRarityFlags)
     quality_level: int = DataProperty('QualityLv')  # 0 for normal, 1 for S+ (with the additional icon in the corner)
 
-    additional_param_total: int = DataProperty('AdditionalParameterTotal')
+    additional_param_total: int = DataProperty('AdditionalParameterTotal')  # Total points available for reforging
     performance_point: int = DataProperty('PerformancePoint')
     first_rune_slot_cost: int = DataProperty('GoldRequiredToOpeningFirstSphereSlot')
     subsequent_rune_slot_cost: int = DataProperty('GoldRequiredToTraining')  # This name is a guess

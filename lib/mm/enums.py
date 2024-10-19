@@ -1261,11 +1261,18 @@ class EquipmentCategory(IntEnum):
     Exclusive = 3
 
 
+_PARAM_TYPE_ORIG_NAMES = ('', 'Muscle', 'Energy', 'Intelligence', 'Health')
+
+
 class BaseParameterType(IntEnum):
     STR = 1  # Renamed from `Muscle`
     DEX = 2  # Renamed from `Energy`
     MAG = 3  # Renamed from `Intelligence`
     STA = 4  # Renamed from `Health`
+
+    @cached_property
+    def original_name(self) -> str:
+        return _PARAM_TYPE_ORIG_NAMES[self]
 
 
 class ChangeParameterType(IntEnum):
