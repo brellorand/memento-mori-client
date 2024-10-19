@@ -5,13 +5,15 @@ Tasks related to main quest battles
 from __future__ import annotations
 
 import logging
-from time import sleep
 from typing import TYPE_CHECKING
 
 from ..utils import wait
 from .task import Task, TaskConfig
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from mm.game.battle import BattleResult, QuestBattleResult
     from mm.mb_models.quest import Quest
     from mm.typing import UserBattleBossDtoInfo
     from ..session import WorldSession
@@ -30,6 +32,7 @@ class QuestBattles(Task):
         stop_after: int = None,
         # max_errors: int = 5,
         max_errors: int = 1,
+        battle_results_dir: Path | None = None,
     ):
         super().__init__(world_session, config)
         self.max_quest = max_quest
@@ -38,6 +41,7 @@ class QuestBattles(Task):
         self.total = 0
         self.successes = 0
         self.errors = 0
+        self.battle_results_dir = battle_results_dir
         self._map_info_included_others = False
 
     @property
@@ -101,12 +105,8 @@ class QuestBattles(Task):
         attempts = 0
         while True:
             attempts += 1
-            self.total += 1
             try:
-                result = self.world_session.battle_quest_boss(quest.id).battle_result
-                # TODO: Save the battle logs
-                if result.is_winner:
-                    self.successes += 1
+                result = self._challenge_once(quest)
             except Exception as e:
                 log.error(f'{log_prefix}; error: {e}', exc_info=True)
                 self.errors += 1
@@ -120,3 +120,19 @@ class QuestBattles(Task):
                 if result.is_winner:
                     return
                 wait(self.config)
+
+    def _challenge_once(self, quest: Quest) -> BattleResult:
+        self.total += 1
+
+        quest_result: QuestBattleResult = self.world_session.battle_quest_boss(quest.id)
+        if self.battle_results_dir:
+            quest_result.save(
+                self.battle_results_dir,
+                f'W{self.world_session.world_num}_{self.world_session.player_name}__quest_{quest}',
+            )
+
+        result = quest_result.battle_result
+        if result.is_winner:
+            self.successes += 1
+
+        return result

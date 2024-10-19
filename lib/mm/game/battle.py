@@ -4,6 +4,7 @@ Helpers for battle-related requests and processing of their responses
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from functools import cached_property
@@ -14,6 +15,8 @@ from mm.properties import DataProperty
 from mm.session import mm_session
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from mm import typing as t
 
 __all__ = ['BattleResult', 'QuestBattleResult', 'TowerBattleResult', 'get_available_tower_types']
@@ -51,18 +54,30 @@ class BattleResult:
         return mm_session.mb.text_resource_map[key]
 
 
-class QuestBattleResult:
+class BattleResultWrapper:
     battle_result: BattleResult = DataProperty('BattleResult', BattleResult)
 
-    def __init__(self, data: t.BossResponse):
+    def __init__(self, data):
         self.data = data
 
+    def save(self, out_dir: Path, battle_identifier: str):
+        if not out_dir.exists():
+            out_dir.mkdir(parents=True, exist_ok=True)
 
-class TowerBattleResult:
-    battle_result: BattleResult = DataProperty('BattleResult', BattleResult)
+        dt_str = datetime.now().strftime('%Y-%m-%d_%H.%M.%S.%f')
+        result_str = 'win' if self.battle_result.is_winner else 'fail'
+        path = out_dir.joinpath(f'{dt_str}__{battle_identifier}__{result_str}.json')
+        log.debug(f'Saving battle results: {path.as_posix()}')
+        with path.open('w', encoding='utf-8', newline='\n') as f:
+            json.dump(self.data, f, indent=4)
 
-    def __init__(self, data: t.TowerBattleResponse):
-        self.data = data
+
+class QuestBattleResult(BattleResultWrapper):
+    data: t.BossResponse
+
+
+class TowerBattleResult(BattleResultWrapper):
+    data: t.TowerBattleResponse
 
 
 def get_available_tower_types() -> tuple[TowerType, ...]:

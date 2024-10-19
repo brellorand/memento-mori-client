@@ -1115,6 +1115,7 @@ class ItemType(IntEnum):
     UNKNOWN_37 = 37  # TODO: Fix these
     UNKNOWN_38 = 38
     UNKNOWN_39 = 39
+    UNKNOWN_40 = 40
     EventExchangePlaceItem = 50
     StripeCoupon = 1_001
 

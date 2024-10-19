@@ -16,6 +16,7 @@ from cli_command_parser.inputs import ChoiceMap, NumRange, Path as IPath
 from mm import enums
 from mm.__version__ import __author_email__, __version__  # noqa
 from mm.enums import ITEM_PAGE_TYPE_MAP, EquipmentRarityFlags, EquipmentType, ItemRarityFlags, SmeltEquipmentRarity
+from mm.fs import get_user_cache_dir
 from mm.game import DailyTask, PlayerAccount, TaskConfig, TaskRunner, WorldSession
 from mm.output import CompactJSONEncoder
 from mm.session import MementoMoriSession
@@ -38,7 +39,7 @@ class GameCLI(Command, description='Memento Mori Game Manager', option_name_mode
     def _init_command_(self):
         from mm.logging import init_logging
 
-        init_logging(self.verbose)
+        init_logging(self.verbose, file_name=f'game_{self.action}.log')
 
     @cached_property
     def mm_session(self) -> MementoMoriSession:
@@ -285,6 +286,9 @@ class Inventory(WorldCommand, choices=('inventory', 'inv'), help='Show inventory
     # endregion
 
 
+# region Tasks
+
+
 class TaskCommand(WorldCommand, ABC):
     world: int = Option('-w', help='The world to log in to')
     dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
@@ -357,10 +361,16 @@ class Quest(TaskCommand, help='Challenge the main quest'):
     min_wait: float = Option(type=NumRange(min=0.3), default=0.65, help='Minimum wait between battle attempts')
     max_wait: float = Option(type=NumRange(min=0.4), default=1.0, help='Maximum wait between battle attempts')
 
+    with ParamGroup('Battle results', mutually_exclusive=True):
+        battle_results_dir = Option('-brd', type=IPath(type='dir'), help='Save battle results to files in this dir')
+        no_save = Flag(
+            '-S', help='Do NOT save battle results (default: save to a temp directory if an alt dir is not specified)'
+        )
+
     def _init_command_(self):
         from mm.logging import init_logging
 
-        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s')
+        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
 
     def main(self):
         max_quest = self._get_max_quest()
@@ -378,6 +388,14 @@ class Quest(TaskCommand, help='Challenge the main quest'):
                 self.__class__.max_quest, 'invalid value - expected a quest number in the form of "chapter-num"'
             ) from e
 
+    def _get_results_dir(self):
+        if self.no_save:
+            return None
+        elif self.battle_results_dir:
+            return self.battle_results_dir
+        else:
+            return get_user_cache_dir('battle_results')
+
     def _run_task(self, max_quest: tuple[int, int] | None):
         from mm.game.tasks.quest_battle import QuestBattles
 
@@ -390,6 +408,7 @@ class Quest(TaskCommand, help='Challenge the main quest'):
             self.task_config,
             max_quest=max_quest,
             stop_after=self.stop_after,
+            battle_results_dir=self._get_results_dir(),
         )
         self.task_runner.add_task(task)
         self.task_runner.run_tasks()
@@ -410,7 +429,7 @@ class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul t
     def _init_command_(self):
         from mm.logging import init_logging
 
-        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s')
+        init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
 
     def main(self):
         from mm.game.tasks.tower_battle import ClimbTower
@@ -427,6 +446,9 @@ class Tower(TaskCommand, help='Challenge the Tower of Infinity (or a mono-soul t
         )
         self.task_runner.add_task(task)
         self.task_runner.run_tasks()
+
+
+# endregion
 
 
 class Show(WorldCommand, help='Show info'):
