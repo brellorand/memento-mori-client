@@ -46,6 +46,13 @@ class BattleTask(Task, ABC):
     def can_perform(self) -> bool:
         return not self.cannot_perform_msg
 
+    def _log_result(self, prefix: str, result: BattleResult, attempts: int, what: str):
+        message = (
+            f'{prefix}: {result.result_message}; {what} {attempts=},'
+            f' total={self.total}, successes={self.successes}, errors={self.errors}'
+        )
+        log.info(message, extra={'color': 10 if result.is_winner else None})
+
 
 class QuestBattles(BattleTask):
     def __init__(
@@ -130,10 +137,7 @@ class QuestBattles(BattleTask):
                 if self.errors >= self.max_errors:
                     raise RuntimeError(f'Exceeded allowed error count while challenging quest {quest}') from e
             else:
-                log.info(
-                    f'{log_prefix}: {result.result_message}; quest {attempts=},'
-                    f' total={self.total}, successes={self.successes}, errors={self.errors}'
-                )
+                self._log_result(log_prefix, result, attempts, 'quest')
                 if result.is_winner:
                     return
 
@@ -246,10 +250,7 @@ class ClimbTower(BattleTask):
                         f'Exceeded allowed error count while challenging {self.tower_type.tower_name} {floor=}'
                     ) from e
             else:
-                log.info(
-                    f'{self._get_log_prefix(floor)}: {result.result_message}; floor {attempts=},'
-                    f' total={self.total}, successes={self.successes}, errors={self.errors}'
-                )
+                self._log_result(self._get_log_prefix(floor), result, attempts, 'floor')
                 if result.is_winner:
                     return
 
