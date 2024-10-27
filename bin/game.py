@@ -490,6 +490,17 @@ class Tower(BattleTaskCommand, help='Challenge the Tower of Infinity (or a mono-
             )
 
 
+class Memories(TaskCommand, help='View character memories to obtain 20 diamonds per memory'):
+    limit: int = Option('-L', type=NumRange(min=1), help='The maximum number of memories to view')
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.4, help='Minimum wait between view requests')
+    max_wait: float = Option(type=NumRange(min=0.4), default=0.9, help='Maximum wait between view requests')
+
+    def get_tasks(self) -> Iterable[Task]:
+        from mm.game.tasks.memories import ViewMemories
+
+        yield ViewMemories(self.world_session, self.task_config, limit=self.limit)
+
+
 # endregion
 
 

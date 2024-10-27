@@ -256,6 +256,11 @@ class WorldSession(ClearableCachedPropertyMixin):
         }
         return self._api_client.post_msg('user/saveUsedDeck', data)
 
+    @api_request()
+    def view_character_story(self, story_id: int, is_skip: bool = True):
+        data = {'IsSkip': is_skip, 'CharacterStoryIdList': [story_id]}
+        return self._api_client.post_msg('character/getCharacterStoryReward', data)
+
     # endregion
 
     # region Dailies
