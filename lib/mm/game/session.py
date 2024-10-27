@@ -381,7 +381,7 @@ class WorldSession(ClearableCachedPropertyMixin):
     def battle_quest_boss(self, quest_id: int) -> QuestBattleResult:
         # Win/loss info in the response is in ``BattleResult.SimulationResult.BattleEndInfo``
         # After a win, :meth:`.get_next_quest_info` should be called to determine the next quest that is available
-        return QuestBattleResult(self._api_client.post_msg('battle/boss', {'QuestId': quest_id}))
+        return QuestBattleResult(self, self._api_client.post_msg('battle/boss', {'QuestId': quest_id}))
 
     @api_request()
     def __get_boss_reward_info(self):
@@ -437,7 +437,7 @@ class WorldSession(ClearableCachedPropertyMixin):
     def start_tower_battle(self, tower_type: enums.TowerType, floor: int) -> TowerBattleResult:
         data = {'TargetTowerType': tower_type, 'TowerBattleQuestId': floor}
         resp: t.TowerBattleResponse = self._api_client.post_msg('towerBattle/start', data)
-        return TowerBattleResult(resp)
+        return TowerBattleResult(self, resp)
 
     # endregion
 
