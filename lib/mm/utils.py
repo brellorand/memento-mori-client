@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import partial, wraps
 from json.encoder import JSONEncoder, encode_basestring, encode_basestring_ascii  # noqa
 from operator import attrgetter
@@ -19,8 +19,10 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from .http_client import RequestsClient
 
-__all__ = ['rate_limited', 'format_path_prefix', 'parse_ms_epoch_ts', 'FutureWaiter']
+__all__ = ['MM_TZ', 'rate_limited', 'format_path_prefix', 'parse_ms_epoch_ts', 'FutureWaiter', 'get_mm_time']
 log = logging.getLogger(__name__)
+
+MM_TZ: timezone = timezone(timedelta(hours=-7))
 
 _NotSet = object()
 
@@ -192,3 +194,7 @@ class FutureWaiter:
         self(futures, prog_bar, **kwargs)
         for future in self:
             future.result()
+
+
+def get_mm_time() -> datetime:
+    return datetime.now(MM_TZ) - timedelta(hours=4)  # daily reset is at 4 AM UTC-7

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from mm.enums import Locale
 from mm.properties import DictAttrFieldNotFoundError
+from mm.utils import MM_TZ
 
 if TYPE_CHECKING:
     from .base import MB, MBEntity
@@ -142,4 +143,4 @@ class MBEntityMap(MBEntityContainer):
 
 
 def parse_dt(dt_str: str) -> datetime:
-    return datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+    return datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=MM_TZ)

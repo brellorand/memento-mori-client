@@ -32,6 +32,12 @@ if TYPE_CHECKING:
         Rune,
         TreasureChest,
     )
+    from .login_bonus import (
+        LimitedLoginBonus,
+        LimitedLoginBonusRewardList,
+        MonthlyLoginBonus,
+        MonthlyLoginBonusRewardList,
+    )
     from .player import PlayerRank, VipLevel
     from .quest import Quest, QuestEnemy
     from .tower import TowerBattleQuest, TowerEnemy
@@ -307,6 +313,15 @@ class MB:
         for i, story in self.character_stories.items():
             character_id_stories_map[story.character_id][i] = story
         return character_id_stories_map
+
+    # endregion
+
+    # region Login Bonuses
+
+    monthly_login_bonuses: dict[int, MonthlyLoginBonus] = MBEntityMap('MonthlyLoginBonus')
+    monthly_login_bonus_rewards: dict[int, MonthlyLoginBonusRewardList] = MBEntityMap('MonthlyLoginBonusRewardList')
+    limited_login_bonuses: dict[int, LimitedLoginBonus] = MBEntityMap('LimitedLoginBonus')
+    limited_login_bonus_rewards: dict[int, LimitedLoginBonusRewardList] = MBEntityMap('LimitedLoginBonusRewardList')
 
     # endregion
 
