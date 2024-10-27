@@ -109,6 +109,7 @@ class QuestBattles(BattleTask):
 
         while self.can_perform():
             self._challenge_until_win()
+            # TODO: If the completed quest was the last in the chapter, wait slightly longer
             wait(self.config)
             self._get_map_info()
             self.world_session.get_next_quest_info()

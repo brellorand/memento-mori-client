@@ -27,7 +27,7 @@ def load_cached_data(path: Path):
         return data
 
 
-def wait(config: TaskConfig):
-    wait_ms = config.get_wait_ms()
+def wait(config: TaskConfig, between_tasks: bool = False):
+    wait_ms = config.get_wait_ms(between_tasks)
     log.debug(f'Waiting {wait_ms} ms')
     sleep(wait_ms / 1000)

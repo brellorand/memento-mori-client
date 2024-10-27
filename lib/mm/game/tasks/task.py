@@ -27,9 +27,14 @@ class TaskConfig:
     dry_run: bool = False
     min_wait_ms: int = 300
     max_wait_ms: int = 600
+    between_tasks_min_wait_ms: int = 1000
+    between_tasks_max_wait_ms: int = 3000
 
-    def get_wait_ms(self) -> int:
-        return randint(self.min_wait_ms, self.max_wait_ms)
+    def get_wait_ms(self, between_tasks: bool = False) -> int:
+        if between_tasks:
+            return randint(self.between_tasks_min_wait_ms, self.between_tasks_max_wait_ms)
+        else:
+            return randint(self.min_wait_ms, self.max_wait_ms)
 
 
 class Task(ABC):
@@ -105,4 +110,4 @@ class TaskRunner:
         if not self.completed:
             return
 
-        wait(self.config)
+        wait(self.config, between_tasks=True)
