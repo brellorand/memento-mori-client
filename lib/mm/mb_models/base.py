@@ -18,7 +18,7 @@ from .utils import LocalizedString, MBEntityList, MBEntityMap
 
 if TYPE_CHECKING:
     from mm.session import MementoMoriSession
-    from .characters import Character, CharacterProfile
+    from .characters import Character, CharacterProfile, CharacterStory
     from .items import (
         AnyItem,
         ChangeItem,
@@ -272,6 +272,7 @@ class MB:
 
     characters: dict[int, Character] = MBEntityMap('Character')
     character_profiles: dict[int, CharacterProfile] = MBEntityMap('CharacterProfile')
+    character_stories: dict[int, CharacterStory] = MBEntityMap('CharacterStory')
 
     @cached_property
     def _char_map(self) -> dict[str, Character]:
@@ -299,6 +300,13 @@ class MB:
                 f'Unknown character name={id_or_name!r} - use `mb.py show character names`'
                 ' to find the correct ID to use here'
             ) from e
+
+    @cached_property
+    def character_id_stories_map(self) -> dict[int, dict[int, CharacterStory]]:
+        character_id_stories_map = {i: {} for i in self.characters}
+        for i, story in self.character_stories.items():
+            character_id_stories_map[story.character_id][i] = story
+        return character_id_stories_map
 
     # endregion
 

@@ -10,7 +10,7 @@ from functools import cached_property
 from mm.enums import TowerType
 from mm.properties import DataProperty
 from .base import BattleEnemy, MBEntity
-from .items import ItemAndCount
+from .items import ItemAndCount, ItemAndCountList
 
 __all__ = ['TowerBattleQuest', 'TowerEnemy']
 log = logging.getLogger(__name__)
@@ -40,15 +40,11 @@ class TowerBattleQuest(MBEntity, file_name_fmt='TowerBattleQuestMB'):
     floor: int = DataProperty('Floor')
     enemy_ids: list[int] = DataProperty('EnemyIds')  # Len will always be 5  # TODO: perform lookup
 
-    @cached_property
-    def rewards_first_try(self) -> list[ItemAndCount]:
-        """List of rewards available on the first win, and their quantities"""
-        return [ItemAndCount(self.mb, row) for row in self.data['BattleRewardsFirst']]
+    # List of rewards available on the first win, and their quantities
+    rewards_first_try: list[ItemAndCount] = ItemAndCountList('BattleRewardsFirst')
 
-    @cached_property
-    def other_rewards(self) -> list[ItemAndCount]:
-        """List of rewards available on the first and subsequent wins, and their quantities"""
-        return [ItemAndCount(self.mb, row) for row in self.data['BattleRewardsConfirmed']]
+    # List of rewards available on the first and subsequent wins, and their quantities
+    other_rewards: list[ItemAndCount] = ItemAndCountList('BattleRewardsConfirmed')
 
     @cached_property
     def enemies(self) -> list[TowerEnemy]:

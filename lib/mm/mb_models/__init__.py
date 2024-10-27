@@ -1,5 +1,5 @@
 from .base import MB, MBEntity
-from .characters import Character, CharacterProfile
+from .characters import Character, CharacterProfile, CharacterStory
 from .constants import RANK_BONUS_STATS
 from .items import (
     AnyItem,

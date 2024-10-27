@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     'Item',
+    'ItemAndCount',
+    'ItemAndCountList',
     'EquipmentSetMaterial',
     'ChangeItem',
     'EquipmentPart',
@@ -353,3 +355,41 @@ class CharacterFragment(TypedItem, MBEntity, item_type=ItemType.CharacterFragmen
 
 
 AnyItem = Item | Equipment | EquipmentPart | EquipmentSetMaterial | Rune | TreasureChest | CharacterFragment
+
+
+class ItemAndCountList:
+    __slots__ = ('path', 'path_repr', 'name')
+
+    def __init__(self, path: str, *, delim: str = '.'):
+        # noinspection PyUnresolvedReferences
+        """
+        Descriptor that facilitates access to lists of :class:`~.ItemAndCount` objects referenced by the specified
+        data key.
+
+        To un-cache a value (causes the descriptor to take over again)::\n
+            >>> del instance.__dict__[attr_name]
+
+        :param path: The nested key location in the dict attribute of the value that this ItemAndCountList
+          represents; dict keys should be separated by ``.``, otherwise the delimiter should be provided via ``delim``
+        :param delim: Separator that was used between keys in the provided path (default: ``.``)
+        """
+        self.path = [p for p in path.split(delim) if p]
+        self.path_repr = delim.join(self.path)
+
+    def __set_name__(self, owner: type, name: str):
+        self.name = name
+
+    def __get__(self, obj: MBEntity, cls):
+        try:
+            data = obj.data
+        except AttributeError:  # obj is None / this descriptor is being accessed as a class attribute
+            return self
+
+        try:
+            for key in self.path:
+                data = data[key]
+        except KeyError:
+            return []
+
+        obj.__dict__[self.name] = items_and_counts = [ItemAndCount(obj.mb, row) for row in data]
+        return items_and_counts

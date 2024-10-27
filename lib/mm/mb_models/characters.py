@@ -12,9 +12,10 @@ from typing import Any
 from mm.enums import CharacterRarity, CharacterType, Element, ItemRarityFlags, Job, Locale
 from mm.properties import DataProperty
 from .base import MBEntity, NamedEntity
+from .items import ItemAndCount, ItemAndCountList
 from .utils import LocalizedString
 
-__all__ = ['Character', 'CharacterProfile']
+__all__ = ['Character', 'CharacterProfile', 'CharacterStory']
 log = logging.getLogger(__name__)
 
 
@@ -90,6 +91,10 @@ class Character(NamedEntity, file_name_fmt='CharacterMB'):
     def profile(self) -> CharacterProfile:
         return self.mb.character_profiles[self.id]
 
+    @cached_property
+    def stories(self) -> dict[int, CharacterStory]:
+        return self.mb.character_id_stories_map[self.id]
+
     def get_summary(self, *, show_lament: bool = False) -> dict[str, Any]:
         summary = {
             'id': self.full_id,
@@ -135,3 +140,34 @@ class CharacterProfile(MBEntity, file_name_fmt='CharacterProfileMB'):
     def lament_lyrics_text_en(self) -> str:
         html = self._size_pat.sub('', self.lament_lyrics_html_en)  # Remove the title from the beginning of the string
         return html.replace('<br>', '\n').strip()
+
+
+class CharacterStory(MBEntity, file_name_fmt='CharacterStoryMB'):
+    """
+    Example:
+        "Id": 1,
+        "IsIgnore": null,
+        "Memo": "モニカ1",
+        "CharacterId": 1,
+        "EpisodeId": 1,
+        "Level": 0,
+        "RarityFlags": 1,
+        "RewardItemList": [{"ItemCount": 20, "ItemId": 1, "ItemType": 1}],
+        "TextKey": "[CharacterStoryText101]",
+        "TitleKey": "[CharacterStoryTitle1]"
+    """
+
+    title: str = LocalizedString('TitleKey')
+    text: str = LocalizedString('TextKey')
+    level: int = DataProperty('Level')
+    character_id: int = DataProperty('CharacterId')
+    episode_id: int = DataProperty('EpisodeId')
+    rarity: CharacterRarity = DataProperty('RarityFlags', CharacterRarity)
+    rewards: list[ItemAndCount] = ItemAndCountList('RewardItemList')
+
+    @cached_property
+    def character(self) -> Character:
+        return self.mb.characters[self.character_id]
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__}[{self.character.full_name} - episode {self.episode_id}]>'
