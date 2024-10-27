@@ -80,6 +80,27 @@ class LoginPlayerResponse(TypedDict):
 # endregion
 
 
+# region Login Bonus
+
+
+class GetMonthlyLoginBonusInfoResponse(TypedDict):
+    MonthlyLoginBonusId: int
+    PastReceivedCount: int
+    ReceivedDailyRewardDayList: list[int]
+    ReceivedLoginCountRewardDayList: list[int]
+
+
+class GetLimitedLoginBonusInfoResponse(TypedDict):
+    EndLocalTimeStamp: int
+    IsReceivedSpecialReward: bool
+    ReceivedDateList: list[int]
+    TotalLoginCount: int
+    ReceivedSwitchingDailyRewardIdList: list[int]
+
+
+# endregion
+
+
 # region Refresh Data
 
 

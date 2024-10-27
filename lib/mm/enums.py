@@ -199,6 +199,7 @@ class BadgeType(IntEnum):
 
 class TransferSpotType(IntEnum):
     NONE = 0
+    Friend = 4
     AutoBattle = 10
     BountyQuest = 20
     DungeonBattle = 30
@@ -231,7 +232,12 @@ class TransferSpotType(IntEnum):
     GuildMemberRecruit = 200
     IndividualNotification = 210
     StarsGuidanceTradeShop = 220
-    Friend = 4
+    TitleWorld = 230
+    LuckyChance = 240
+    LuckyChanceInputForm = 250
+    WeeklyTopics = 260
+    PopularityVote = 270
+    EventPortal = 280
 
 
 # endregion
@@ -1112,10 +1118,10 @@ class ItemType(IntEnum):
     SpecialIcon = 34
     IconFragment = 35
     GuildTowerJobReinforcementMaterial = 36
-    UNKNOWN_37 = 37  # TODO: Fix these
-    UNKNOWN_38 = 38
-    UNKNOWN_39 = 39
-    UNKNOWN_40 = 40
+    RealPrizeGoods = 37
+    RealPrizeDigital = 38
+    PopularityVote = 39
+    LuckyChanceGachaTicket = 40
     EventExchangePlaceItem = 50
     StripeCoupon = 1_001
 
