@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from functools import cached_property
 from operator import itemgetter
 from typing import TYPE_CHECKING, Iterable, Iterator
@@ -25,7 +25,7 @@ from mm.enums import (
     SmeltEquipmentRarity,
 )
 from mm.fs import get_user_cache_dir
-from mm.game import DailyTask, PlayerAccount, TaskConfig, TaskRunner, WorldSession
+from mm.game import DailyTask, PlayerAccount, Task, TaskConfig, TaskRunner, WorldSession
 from mm.output import CompactJSONEncoder
 from mm.session import MementoMoriSession
 
@@ -320,6 +320,24 @@ class TaskCommand(WorldCommand, ABC):
 
         init_logging(self.verbose, entry_fmt='%(asctime)s %(message)s', file_name=f'game_{self.action}.log')
 
+    def main(self):
+        self.before_init_tasks()
+
+        self.mm_session.mb.populate_cache()
+        self.world_session.get_user_sync_data()
+        self.world_session.get_my_page()
+
+        self.task_runner.add_tasks(self.get_tasks())
+        self.task_runner.run_tasks()
+
+    def before_init_tasks(self):
+        # This method may be implemented by subclasses to validate input before interacting with the game
+        pass
+
+    @abstractmethod
+    def get_tasks(self) -> Iterable[Task]:
+        raise NotImplementedError
+
 
 class Smelt(TaskCommand, help='Smelt equipment'):
     min_level: int = Option(type=NumRange(min=1), default=1, help='Minimum level of S equipment to smelt')
@@ -337,18 +355,11 @@ class Smelt(TaskCommand, help='Smelt equipment'):
     min_wait: float = Option(type=NumRange(min=0.3), default=0.4, help='Minimum wait between smelt requests')
     max_wait: float = Option(type=NumRange(min=0.4), default=0.9, help='Maximum wait between smelt requests')
 
-    def main(self):
+    def before_init_tasks(self):
         if self.min_level and self.max_level and self.min_level > self.max_level:
             raise UsageError('Invalid min/max levels - the min level must be less than the max level')
 
-        self.mm_session.mb.populate_cache()
-        self.world_session.get_user_sync_data()
-        self.world_session.get_my_page()
-
-        self.task_runner.add_tasks(self.iter_smelt_tasks())
-        self.task_runner.run_tasks()
-
-    def iter_smelt_tasks(self):
+    def get_tasks(self):
         from mm.game.tasks import SmeltAll, SmeltNeverEquippedSGear, SmeltUnequippedGear
 
         min_rarity, max_rarity = self.min_rarity.as_flag(), self.max_rarity.as_flag()
@@ -384,15 +395,11 @@ class Reforge(TaskCommand, help='Reforge equipment'):
     min_wait: float = Option(type=NumRange(min=0.3), default=0.35, help='Minimum wait between reforge requests')
     max_wait: float = Option(type=NumRange(min=0.4), default=0.65, help='Maximum wait between reforge requests')
 
-    def main(self):
+    def get_tasks(self):
         from mm.game.tasks.reforge import ReforgeGear
 
-        self.mm_session.mb.populate_cache()
-        self.world_session.get_user_sync_data()
-        self.world_session.get_my_page()
-
         for char in self.character:
-            task = ReforgeGear(
+            yield ReforgeGear(
                 self.world_session,
                 self.task_config,
                 character=char,
@@ -401,9 +408,6 @@ class Reforge(TaskCommand, help='Reforge equipment'):
                 target_value=self.target_value,
                 target_pct=self.target_pct,
             )
-            self.task_runner.add_task(task)
-
-        self.task_runner.run_tasks()
 
 
 class BattleTaskCommand(TaskCommand, ABC):
@@ -427,13 +431,14 @@ class BattleTaskCommand(TaskCommand, ABC):
 
 
 class Quest(BattleTaskCommand, help='Challenge the main quest'):
+    _max_quest: tuple[int, int] | None
+
     with ParamGroup('Quest', mutually_exclusive=True):
         max_quest = Option(metavar='CHAPTER-NUM', help='The maximum quest to challenge (inclusive) (e.g., 12-5)')
         stop_after: int = Option(type=NumRange(min=1), help='Stop after the specified number of wins')
 
-    def main(self):
-        max_quest = self._get_max_quest()
-        self._run_task(max_quest)
+    def before_init_tasks(self):
+        self._max_quest = self._get_max_quest()
 
     def _get_max_quest(self) -> tuple[int, int] | None:
         if not self.max_quest:
@@ -447,22 +452,16 @@ class Quest(BattleTaskCommand, help='Challenge the main quest'):
                 self.__class__.max_quest, 'invalid value - expected a quest number in the form of "chapter-num"'
             ) from e
 
-    def _run_task(self, max_quest: tuple[int, int] | None):
+    def get_tasks(self):
         from mm.game.tasks.battle import QuestBattles
 
-        self.mm_session.mb.populate_cache()
-        self.world_session.get_user_sync_data()
-        self.world_session.get_my_page()
-
-        task = QuestBattles(
+        yield QuestBattles(
             self.world_session,
             self.task_config,
-            max_quest=max_quest,
+            max_quest=self._max_quest,
             stop_after=self.stop_after,
             battle_results_dir=self._get_results_dir('quest'),
         )
-        self.task_runner.add_task(task)
-        self.task_runner.run_tasks()
 
 
 class Tower(BattleTaskCommand, help='Challenge the Tower of Infinity (or a mono-soul tower)'):
@@ -470,26 +469,25 @@ class Tower(BattleTaskCommand, help='Challenge the Tower of Infinity (or a mono-
 
     with ParamGroup('Tower'):
         tower_type = Option(
-            '-t', type=ChoiceMap(_types), default=enums.TowerType.Infinite, help='Which tower to challenge'
+            '-t',
+            nargs='+',
+            type=ChoiceMap(_types, case_sensitive=False),
+            help='Which tower to challenge (default: Tower of Infinity)',
         )
         max_floor: int = Option(type=NumRange(min=1), help='The maximum floor to challenge (inclusive)')
 
-    def main(self):
+    def get_tasks(self):
         from mm.game.tasks.battle import ClimbTower
 
-        self.mm_session.mb.populate_cache()
-        self.world_session.get_user_sync_data()
-        self.world_session.get_my_page()
-
-        task = ClimbTower(
-            self.world_session,
-            self.task_config,
-            tower_type=self.tower_type,
-            max_floor=(self.max_floor + 1) if self.max_floor else None,
-            battle_results_dir=self._get_results_dir('tower'),
-        )
-        self.task_runner.add_task(task)
-        self.task_runner.run_tasks()
+        tower_types = self.tower_type or [enums.TowerType.Infinite]
+        for tower_type in tower_types:
+            yield ClimbTower(
+                self.world_session,
+                self.task_config,
+                tower_type=tower_type,
+                max_floor=(self.max_floor + 1) if self.max_floor else None,
+                battle_results_dir=self._get_results_dir('tower'),
+            )
 
 
 # endregion
