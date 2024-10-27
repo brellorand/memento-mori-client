@@ -84,6 +84,7 @@ class ReforgeGear(Task):
             return f'Could not identify a character matching {self._character!r}'
         elif not self.to_reforge:
             return f'No matching equipment was found on {self.character}'
+        # TODO: Validate target value is <= 60% of max
 
         return None
 

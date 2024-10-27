@@ -134,7 +134,8 @@ class Character(WorldEntity):
     @cached_property
     def level(self) -> int:
         sync_data = self.world.user_sync_data
-        if sync_data.level_link_status['IsPartyMode'] or self.guid in sync_data.level_link_char_guids:
+        # if sync_data.level_link_status['IsPartyMode'] or self.guid in sync_data.level_link_char_guids:
+        if self.guid in sync_data.level_link_char_guids:
             return sync_data.level_link_status['PartyLevel']
         return self._level
 
