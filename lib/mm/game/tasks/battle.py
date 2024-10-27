@@ -32,12 +32,9 @@ class BattleTask(Task, ABC):
         world_session: WorldSession,
         config: TaskConfig = None,
         *,
-        # max_errors: int = 5,
-        max_errors: int = 1,
         battle_results_dir: Path | None = None,
     ):
         super().__init__(world_session, config)
-        self.max_errors = max_errors
         self.total = 0
         self.successes = 0
         self.errors = 0
@@ -62,11 +59,9 @@ class QuestBattles(BattleTask):
         *,
         max_quest: tuple[int, int] = None,
         stop_after: int = None,
-        # max_errors: int = 5,
-        max_errors: int = 1,
         battle_results_dir: Path | None = None,
     ):
-        super().__init__(world_session, config, max_errors=max_errors, battle_results_dir=battle_results_dir)
+        super().__init__(world_session, config, battle_results_dir=battle_results_dir)
         self.max_quest = max_quest
         self.stop_after = stop_after
         self._map_info_included_others = False
@@ -109,11 +104,12 @@ class QuestBattles(BattleTask):
 
         while self.can_perform():
             self._challenge_until_win()
-            # TODO: If the completed quest was the last in the chapter, wait slightly longer
             wait(self.config)
             self._get_map_info()
             self.world_session.get_next_quest_info()
-            wait(self.config)
+            # If the next quest is the first in a chapter, use the between_tasks delay to better simulate needing
+            # to click `Next Chapter` and waiting for the longer animation
+            wait(self.config, between_tasks=self._next_quest.number[1] == 1)
 
         return self.cannot_perform_msg
 
@@ -135,7 +131,7 @@ class QuestBattles(BattleTask):
             except Exception as e:
                 log.error(f'{log_prefix}; error: {e}', exc_info=True)
                 self.errors += 1
-                if self.errors >= self.max_errors:
+                if self.errors >= self.config.max_errors:
                     raise RuntimeError(f'Exceeded allowed error count while challenging quest {quest}') from e
             else:
                 self._log_result(log_prefix, result, attempts, 'quest')
@@ -169,11 +165,9 @@ class ClimbTower(BattleTask):
         *,
         tower_type: TowerType = TowerType.Infinite,
         max_floor: int = None,
-        # max_errors: int = 5,
-        max_errors: int = 1,
         battle_results_dir: Path | None = None,
     ):
-        super().__init__(world_session, config, max_errors=max_errors, battle_results_dir=battle_results_dir)
+        super().__init__(world_session, config, battle_results_dir=battle_results_dir)
         self.tower_type = tower_type
         self.max_floor = max_floor
 
@@ -246,7 +240,7 @@ class ClimbTower(BattleTask):
             except Exception as e:
                 log.error(f'{self._get_log_prefix(floor)}; error: {e}', exc_info=True)
                 self.errors += 1
-                if self.errors >= self.max_errors:
+                if self.errors >= self.config.max_errors:
                     raise RuntimeError(
                         f'Exceeded allowed error count while challenging {self.tower_type.tower_name} {floor=}'
                     ) from e

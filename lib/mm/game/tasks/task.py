@@ -25,6 +25,7 @@ class TaskConfig:
     """Common configurable options for Tasks"""
 
     dry_run: bool = False
+    max_errors: int = 1
     min_wait_ms: int = 300
     max_wait_ms: int = 600
     between_tasks_min_wait_ms: int = 1000

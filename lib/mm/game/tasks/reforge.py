@@ -31,7 +31,6 @@ class ReforgeGear(Task):
         slots: Collection[EquipmentSlotType] = (),
         target_value: int = None,
         target_pct: float = None,
-        max_errors: int = 1,
     ):
         super().__init__(world_session, config)
         self._character = character
@@ -39,7 +38,6 @@ class ReforgeGear(Task):
         self.slots = slots
         self.target_value = target_value
         self.target_pct = target_pct
-        self.max_errors = max_errors
         self.total = 0
         self.errors = 0
 
@@ -118,7 +116,7 @@ class ReforgeGear(Task):
             except Exception as e:
                 log.error(f'{prefix}#{attempts} Reforged {item.basic_info}; error: {e}', exc_info=True)
                 self.errors += 1
-                if self.errors >= self.max_errors:
+                if self.errors >= self.config.max_errors:
                     raise RuntimeError(f'Exceeded allowed error count while reforging {item.basic_info}') from e
             else:
                 item = self.world_session.equipment[guid]  # Refresh the item based on the latest request
