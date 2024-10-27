@@ -8,6 +8,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
+from functools import cached_property
 from random import randint
 from typing import TYPE_CHECKING, Iterable, Self, Type
 
@@ -77,6 +78,10 @@ class Task(ABC):
     @classmethod
     def get_all(cls) -> list[Type[Self]]:
         return cls.__subclasses__()
+
+    @cached_property
+    def world_player(self) -> str:
+        return f'[W{self.world_session.world_num}:{self.world_session.player_name}]'
 
 
 class DailyTask(Task, ABC):

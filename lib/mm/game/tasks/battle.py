@@ -49,10 +49,6 @@ class BattleTask(Task, ABC):
         self.battle_results_dir = battle_results_dir
         self.show_enemies = show_enemies
 
-    @cached_property
-    def world_player(self) -> str:
-        return f'[W{self.world_session.world_num}:{self.world_session.player_name}]'
-
     def can_perform(self) -> bool:
         return not self.cannot_perform_msg
 
