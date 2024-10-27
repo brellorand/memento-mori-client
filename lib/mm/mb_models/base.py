@@ -11,7 +11,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, Iterator, Type, TypeVar
 
 from mm.data import DictWrapper
-from mm.enums import ItemType, Locale, TowerType
+from mm.enums import CharacterRarity, Element, ItemType, Job, Locale, TowerType
 from mm.fs import CacheMiss, MBFileCache, path_repr
 from mm.properties import DataProperty
 from .utils import LocalizedString, MBEntityList, MBEntityMap
@@ -33,8 +33,8 @@ if TYPE_CHECKING:
         TreasureChest,
     )
     from .player import PlayerRank, VipLevel
-    from .quest import Quest
-    from .tower import TowerBattleQuest
+    from .quest import Quest, QuestEnemy
+    from .tower import TowerBattleQuest, TowerEnemy
     from .world_group import WorldGroup
 
 __all__ = ['MB', 'MBEntity']
@@ -235,15 +235,29 @@ class MB:
 
     # endregion
 
+    # region Quests & Towers
+
     quests: dict[int, Quest] = MBEntityMap('Quest')
-    tower_floors: dict[int, TowerBattleQuest] = MBEntityMap('TowerBattleQuest')
+    quest_enemies: dict[int, QuestEnemy] = MBEntityMap('QuestEnemy')
 
     @cached_property
-    def tower_type_floors_map(self) -> dict[TowerType, list[TowerBattleQuest]]:
-        tower_type_floors_map = {t: [] for t in TowerType if t != TowerType.NONE}
+    def quest_id_enemies_map(self) -> dict[int, list[QuestEnemy]]:
+        quest_id_enemies_map = {i: [] for i in self.quests}
+        for enemy in self.quest_enemies.values():
+            quest_id_enemies_map[enemy.quest_id].append(enemy)
+        return quest_id_enemies_map
+
+    tower_floors: dict[int, TowerBattleQuest] = MBEntityMap('TowerBattleQuest')
+    tower_enemies: dict[int, TowerEnemy] = MBEntityMap('TowerEnemy')
+
+    @cached_property
+    def tower_type_floors_map(self) -> dict[TowerType, dict[int, TowerBattleQuest]]:
+        tower_type_floors_map = {t: {} for t in TowerType if t != TowerType.NONE}
         for floor in self.tower_floors.values():
-            tower_type_floors_map[floor.type].append(floor)
+            tower_type_floors_map[floor.type][floor.floor] = floor
         return tower_type_floors_map
+
+    # endregion
 
     world_groups: list[WorldGroup] = MBEntityList('WorldGroup')
 
@@ -340,13 +354,57 @@ class TextResource(MBEntity, file_name_fmt='TextResource{locale}MB'):
 
 
 class NamedEntity(MBEntity):
+    _name_key: str = DataProperty('NameKey')
     name: str = LocalizedString('NameKey', default_to_key=True)
+    name_en: str | None = LocalizedString('NameKey', locale=Locale.EnUs)
 
 
 class FullyNamedEntity(NamedEntity):
     icon_id: int = DataProperty('IconId')
     description: str = LocalizedString('DescriptionKey', default_to_key=True)
     display_name: str = LocalizedString('DisplayName', default_to_key=True)
+
+
+class BattleEnemy(NamedEntity):
+    level: int = DataProperty('EnemyRank')
+    element: Element = DataProperty('ElementType', Element)
+    job: Job = DataProperty('JobFlags', Job)
+    rarity: CharacterRarity = DataProperty('CharacterRarityFlags', CharacterRarity)
+
+    normal_skill_id: int = DataProperty('NormalSkillId')
+    active_skill_ids: list[int] = DataProperty('ActiveSkillIds')
+    passive_skill_ids: list[int] = DataProperty('PassiveSkillIds')
+
+    speed: int = DataProperty('BattleParameter.Speed')
+
+    def __repr__(self) -> str:
+        name, element, job = self.name, self.element.name.title(), self.job.name.title()
+        return f'<{self.__class__.__name__}[id={self.full_id!r}, {name=}, {element=}, {job=}]>'
+
+    @cached_property
+    def is_playable(self) -> bool:
+        return not self._name_key.startswith('[EnemyCharacterName')
+
+    @cached_property
+    def _char_id(self) -> int:
+        return int(self._name_key[:-1].split('Name', 1)[1])
+
+    @cached_property
+    def full_id(self) -> str:
+        prefix = 'CHR' if self.is_playable else 'ENE'
+        return f'{prefix}_{self._char_id:06d}'
+
+    def get_summary(self, *, speed: bool = False, rarity: bool = True) -> str:
+        parts = []
+        if rarity:
+            parts.append(self.rarity.display_name)
+
+        parts.append(f'Lv{self.level}')
+
+        if speed:
+            parts.append(f'SPD={self.speed}')
+
+        return f'[{self.name}: {", ".join(parts)}]'
 
 
 # endregion

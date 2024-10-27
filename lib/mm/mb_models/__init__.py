@@ -13,6 +13,6 @@ from .items import (
     Item,
 )
 from .player import PlayerRank, VipLevel
-from .quest import Quest
-from .tower import TowerBattleQuest
+from .quest import Quest, QuestEnemy
+from .tower import TowerBattleQuest, TowerEnemy
 from .world_group import WorldGroup

@@ -1341,6 +1341,10 @@ class CharacterRarity(IntFlag, boundary=CONFORM):
     LRPlus9 = 262_144
     LRPlus10 = 524_288
 
+    @cached_property
+    def display_name(self) -> str:
+        return self._name_.replace('Plus', '+')  # noqa
+
 
 class CharacterType(IntEnum):
     Normal = 0
