@@ -46,7 +46,14 @@ class Task(ABC):
         self.world_session = world_session
         self.config = TaskConfig() if config is None else config
 
+    def before_run(self):
+        # This method may be implemented by subclasses to make any necessary preparations
+        # before being able to determine if this task can be performed
+        pass
+
     def run(self):
+        self.before_run()
+
         if not self.can_perform():
             log.info(self.cannot_perform_msg)
             return

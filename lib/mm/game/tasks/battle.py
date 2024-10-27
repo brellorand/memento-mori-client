@@ -93,9 +93,8 @@ class QuestBattles(BattleTask):
         else:
             return None
 
-    def run(self):
+    def before_run(self):
         self._get_map_info()
-        super().run()
 
     def perform_task(self):
         if self.config.dry_run:
