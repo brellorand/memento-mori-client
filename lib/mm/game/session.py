@@ -13,7 +13,7 @@ from ..enums import BattleType, Region
 from ..http_client import ApiClient
 from ..properties import ClearableCachedPropertyMixin
 from .battle import QuestBattleResult, TowerBattleResult
-from .models import Character, Equipment, ItemAndCount, UserSyncData
+from .models import Character, Equipment, ItemAndCount, MyPage, UserSyncData
 from .utils import load_cached_data
 
 if TYPE_CHECKING:
@@ -204,10 +204,10 @@ class WorldSession(ClearableCachedPropertyMixin):
         return self.user_sync_data
 
     @api_request()
-    def get_my_page(self) -> t.GetMypageResponse:
+    def get_my_page(self) -> MyPage:
         if self.user_sync_data is None:
             self.get_user_data()
-        return self._api_client.post_msg('user/getMypage', {'LanguageType': self.config.auth.locale.num})
+        return MyPage(self, self._api_client.post_msg('user/getMypage', {'LanguageType': self.config.auth.locale.num}))
 
     # endregion
 
@@ -268,6 +268,33 @@ class WorldSession(ClearableCachedPropertyMixin):
     @api_request()
     def get_daily_vip_gift(self):
         return self._api_client.post_msg('vip/getDailyGift', {})
+
+    @api_request()
+    def get_monthly_login_bonus_info(self) -> t.GetMonthlyLoginBonusInfoResponse:
+        return self._api_client.post_msg('loginBonus/getMonthlyLoginBonusInfo', {})
+
+    @api_request()
+    def get_limited_login_bonus_info(self, limited_login_bonus_id: int) -> t.GetLimitedLoginBonusInfoResponse:
+        data = {'LimitedLoginBonusId': limited_login_bonus_id}
+        return self._api_client.post_msg('loginBonus/getLimitedLoginBonusInfo', data)
+
+    @api_request()
+    def claim_daily_login_bonus(self, day: int):
+        return self._api_client.post_msg('loginBonus/receiveDailyLoginBonus', {'ReceiveDay': day})
+
+    @api_request()
+    def claim_login_count_bonus(self, day_count: int):
+        return self._api_client.post_msg('loginBonus/receiveLoginCountBonus', {'ReceiveDayCount': day_count})
+
+    @api_request()
+    def claim_limited_daily_login_bonus(self, bonus_id: int, date: int):
+        data = {'LimitedLoginBonusId': bonus_id, 'ReceiveDate': date}
+        return self._api_client.post_msg('loginBonus/receiveDailyLimitedLoginBonus', data)
+
+    @api_request()
+    def claim_special_limited_login_bonus(self, bonus_id: int):
+        data = {'LimitedLoginBonusId': bonus_id}
+        return self._api_client.post_msg('loginBonus/receiveSpecialLimitedLoginBonus', data)
 
     # endregion
 

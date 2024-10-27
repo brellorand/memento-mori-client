@@ -12,9 +12,13 @@ from functools import cached_property
 from random import randint
 from typing import TYPE_CHECKING, Iterable, Self, Type
 
+from mm.utils import get_mm_time
 from ..utils import wait
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
+    from mm.mb_models import MB
     from ..session import WorldSession
 
 __all__ = ['TaskConfig', 'Task', 'DailyTask', 'TaskRunner']
@@ -80,8 +84,16 @@ class Task(ABC):
         return cls.__subclasses__()
 
     @cached_property
+    def mb(self) -> MB:
+        return self.world_session.session.mb
+
+    @cached_property
     def world_player(self) -> str:
         return f'[W{self.world_session.world_num}:{self.world_session.player_name}]'
+
+    @cached_property
+    def mm_time(self) -> datetime:
+        return get_mm_time()
 
 
 class DailyTask(Task, ABC):

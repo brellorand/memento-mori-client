@@ -175,6 +175,8 @@ class Character(WorldEntity):
 
 
 class MyPage(WorldEntity):
+    data: t.GetMypageResponse
+
     has_pending_friend_point_transfers: bool = DataProperty('ExistNewFriendPointTransfer')
     has_unread_private_chat: bool = DataProperty('ExistNewPrivateChat')
 

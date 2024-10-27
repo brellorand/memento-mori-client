@@ -339,6 +339,19 @@ class TaskCommand(WorldCommand, ABC):
         raise NotImplementedError
 
 
+class Dailies(TaskCommand, help='Perform daily tasks'):
+    actions = Option('-a', choices=DailyTask.get_cli_name_map(), help='The actions to take (default: all)')
+    min_wait: float = Option(type=NumRange(min=0.3), default=0.6, help='Minimum wait between requests')
+    max_wait: float = Option(type=NumRange(min=0.4), default=1.2, help='Maximum wait between requests')
+
+    def get_tasks(self) -> Iterable[Task]:
+        if self.actions:
+            cli_name_map = DailyTask.get_cli_name_map()
+            yield from (cli_name_map[name] for name in self.actions)
+        else:
+            yield from DailyTask.get_all()
+
+
 class Smelt(TaskCommand, help='Smelt equipment'):
     min_level: int = Option(type=NumRange(min=1), default=1, help='Minimum level of S equipment to smelt')
     max_level: int = Option(type=NumRange(min=1), help='Maximum level of S equipment to smelt')
@@ -530,7 +543,7 @@ class Show(WorldCommand, help='Show info'):
 
     @item
     def my_page(self):
-        self.print(self.world_session.get_my_page())
+        self.print(self.world_session.get_my_page().data)
 
     @item
     def characters(self):
@@ -578,32 +591,6 @@ class BattleLeague(WorldCommand, choices=('battle_league', 'BL'), help='Show PvP
         self.world_session.get_pvp_info()
         self.world_session.get_pvp_battle_logs()
         self.print(self.world_session.get_pvp_battle_details(battle_token))
-
-
-class Dailies(WorldCommand, help='Perform daily tasks'):
-    world: int = Option('-w', required=True, help='The world to log in to')
-    actions = Option('-a', choices=DailyTask.get_cli_name_map(), help='The actions to take')
-    dry_run = Flag('-D', help='Perform a dry run by printing the actions that would be taken instead of taking them')
-
-    def main(self):
-        self.mm_session.mb.populate_cache()
-        self.world_session.get_user_sync_data()
-        self.world_session.get_my_page()
-
-        config = TaskConfig(
-            dry_run=self.dry_run,
-            # min_wait_ms=int(self.min_wait * 1000),
-            # max_wait_ms=int(self.max_wait * 1000),
-        )
-
-        task_runner = TaskRunner(self.world_session, config=config)
-        if self.actions:
-            cli_name_map = DailyTask.get_cli_name_map()
-            task_runner.add_tasks(cli_name_map[name] for name in self.actions)
-        else:
-            task_runner.add_tasks(DailyTask.get_all())
-
-        task_runner.run_tasks()
 
 
 if __name__ == '__main__':

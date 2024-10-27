@@ -7,13 +7,14 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from functools import cached_property
 from typing import TYPE_CHECKING
 
 from mm.enums import BattleFieldCharacterGroupType, TowerType
 from mm.properties import DataProperty
 from mm.session import mm_session
+from mm.utils import get_mm_time
 from .models import WorldEntity
 
 if TYPE_CHECKING:
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
 __all__ = ['BattleResult', 'QuestBattleResult', 'TowerBattleResult', 'get_available_tower_types']
 log = logging.getLogger(__name__)
 
-MM_TZ = timezone(timedelta(hours=-7))
 TOWER_TYPES_BY_DAY = (
     (TowerType.Blue,),  # Monday
     (TowerType.Red,),  # Tuesday
@@ -122,5 +122,4 @@ def get_available_tower_types() -> tuple[TowerType, ...]:
     # foreach (var limitedEventMb in LimitedEventTable.GetArray().Where(d => d.LimitedEventType == LimitedEventType.ElementTowerAllRelease)) {
     #    if (NetworkManager.TimeManager.IsInTime(limitedEventMb)) return new[] {TowerType.Infinite, TowerType.Blue, TowerType.Green, TowerType.Red, TowerType.Yellow};
     # }
-    now = datetime.now(MM_TZ) - timedelta(hours=4)  # daily reset is at 4 AM UTC-7
-    return TOWER_TYPES_BY_DAY[now.weekday()]
+    return TOWER_TYPES_BY_DAY[get_mm_time().weekday()]
