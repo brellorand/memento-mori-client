@@ -391,10 +391,15 @@ class Smelt(TaskCommand, help='Smelt equipment'):
 
 
 class Reforge(TaskCommand, help='Reforge equipment'):
-    character = Option(
-        '-c', metavar='ID|NAME', nargs='+', required=True, help='The character(s) whose gear should be reforged'
-    )
-    stat = Option('-s', type=BaseParameterType, required=True, help='The stat to target while reforging')
+    with ParamGroup(mutually_exclusive=True, required=True):
+        with ParamGroup(mutually_dependent=True):
+            character = Option(
+                '-c', metavar='ID|NAME', nargs='+', help='The character(s) whose gear should be reforged'
+            )
+            stat = Option('-s', type=BaseParameterType, help='The stat to target while reforging')
+
+        char_stats = Option('-cs', metavar='{ID|NAME}:{STAT}', nargs='+', help='A list of character:stat to reforge')
+
     with ParamGroup('Target', required=True):
         target_value = Option('-t', type=NumRange(min=1), help='Target reforged value for the specified stat')
         target_pct = Option(
@@ -408,15 +413,27 @@ class Reforge(TaskCommand, help='Reforge equipment'):
     min_wait: float = Option(type=NumRange(min=0.3), default=0.35, help='Minimum wait between reforge requests')
     max_wait: float = Option(type=NumRange(min=0.4), default=0.65, help='Maximum wait between reforge requests')
 
+    _char_stats: list[tuple[str, BaseParameterType]]
+
+    def before_init_tasks(self):
+        # Initialize split char:stats here to validate stat values before making any API calls
+        if self.char_stats:
+            self._char_stats = []
+            for char_stat in self.char_stats:
+                char, stat = char_stat.split(':')
+                self._char_stats.append((char, BaseParameterType(stat.upper())))
+        else:
+            self._char_stats = [(c, self.stat) for c in self.character]
+
     def get_tasks(self):
         from mm.game.tasks.reforge import ReforgeGear
 
-        for char in self.character:
+        for char, stat in self._char_stats:
             yield ReforgeGear(
                 self.world_session,
                 self.task_config,
                 character=char,
-                stat=self.stat,
+                stat=stat,
                 slots=self.slots,
                 target_value=self.target_value,
                 target_pct=self.target_pct,

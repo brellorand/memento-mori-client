@@ -1280,6 +1280,15 @@ class BaseParameterType(IntEnum):
     def original_name(self) -> str:
         return _PARAM_TYPE_ORIG_NAMES[self]
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            try:
+                return cls._member_map_[value.upper()]
+            except KeyError:
+                pass
+        return super()._missing_(value)
+
 
 class ChangeParameterType(IntEnum):
     Addition = 1
