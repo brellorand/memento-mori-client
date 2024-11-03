@@ -78,7 +78,9 @@ class SmeltNeverEquippedSGear(Task):
 
     @cached_property
     def _max_level(self) -> int:
-        return max(ic.item.level for ic in self._all_s_equipment_items) if self._all_s_equipment_items else 9999
+        if self._all_s_equipment_items:
+            return min(180, max(ic.item.level for ic in self._all_s_equipment_items))
+        return 180
 
     @cached_property
     def _to_be_smelted(self) -> list[tuple[ItemAndCount, int]]:
@@ -146,7 +148,9 @@ class SmeltUnequippedGear(Task):
 
     @cached_property
     def _max_level(self) -> int:
-        return max(e.equipment.level for e in self._all_unequipped) if self._all_unequipped else 9999
+        if self._all_unequipped:
+            return min(180, max(e.equipment.level for e in self._all_unequipped))
+        return 180
 
     @cached_property
     def _to_be_smelted(self) -> list[Equipment]:
@@ -183,7 +187,9 @@ class SmeltUnequippedGear(Task):
 
 
 def _should_smelt(equipment: Equipment, min_level: int, max_level: int) -> bool:
-    if not min_level <= equipment.equipment.level <= max_level:
+    if equipment.equipment.rarity_flags >= EquipmentRarityFlags.R:
+        return False
+    elif not min_level <= equipment.equipment.level <= max_level:
         return False
     elif equipment.holy_augment_level or equipment.dark_augment_level:
         return False
