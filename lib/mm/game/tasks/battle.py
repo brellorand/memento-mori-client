@@ -274,7 +274,7 @@ class ClimbTower(BattleTask, battle_type='floor'):
         if self.tower_type == TowerType.Infinite:
             limit = ''
         else:
-            limit = f' [{self.tower_info["TodayClearNewFloorCount"]}/10]'
+            limit = f' [{self.tower_info["TodayClearNewFloorCount"] + 1}/10]'
 
         return f'{self.tower_type.tower_name}{limit} floor={floor.floor}'
 
