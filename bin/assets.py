@@ -9,6 +9,7 @@ from abc import ABC
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 from functools import cached_property
+from multiprocessing import freeze_support
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -430,4 +431,5 @@ class Convert(AssetCLI, help='Convert extracted audio assets to FLAC'):
 
 
 if __name__ == '__main__':
+    freeze_support()  # required by PyInstaller for programs that use multiprocessing
     main()

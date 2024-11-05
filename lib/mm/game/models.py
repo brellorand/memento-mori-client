@@ -148,8 +148,8 @@ class Character(WorldEntity):
         return self.world.session.mb.characters[self.char_id]
 
     def __repr__(self) -> str:
-        rarity, level, exp, guid = self.rarity.name, self.level, self.experience, self.guid
-        return f'<{self.__class__.__name__}[{self.character.full_name}, {rarity=}, {level=}, {exp=}, {guid=}]>'
+        rarity, level, exp, guid = self.rarity.display_name, self.level, self.experience, self.guid
+        return f'<{self.__class__.__name__}[{self.character.full_name}, {rarity=!s}, {level=}, {exp=}, {guid=}]>'
 
     def __hash__(self) -> int:
         return hash(self.__class__) ^ hash(self.guid)

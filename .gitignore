@@ -8,3 +8,4 @@ temp/
 *.egg-info
 .coverage
 coverage.xml
+*.spec

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from abc import ABC
+from multiprocessing import freeze_support
 
 from cli_command_parser import Command, Counter, Positional, SubCommand, main
 
@@ -52,4 +53,5 @@ class Levels(RunesCLI, help='Calculate rune levels to produce the specified stat
 
 
 if __name__ == '__main__':
+    freeze_support()  # required by PyInstaller for programs that use multiprocessing
     main()
